@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ועד הבית — ניהול</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1b2430;--mute:#6b7685;--line:#e3e7ec;--acc:#2563eb;--paid:#2e9d5b;--partial:#e0a100;--unpaid:#d64545;--pending:#f0c14b;--future:#c9d0d9;--pre:#3b82c4}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1b222b;--ink:#e8edf3;--mute:#8d99a8;--line:#2a333f;--future:#3a4452}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,"Segoe UI",Arial,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+header h1{font-size:18px;margin:0}
+nav{display:flex;gap:4px}
+nav button{border:0;background:none;color:var(--mute);font:inherit;padding:6px 12px;border-radius:8px;cursor:pointer}
+nav button.on{background:var(--acc);color:#fff}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto;margin-bottom:14px}
+table{border-collapse:collapse;width:100%}
+th,td{padding:6px 6px;text-align:center;border-bottom:1px solid var(--line);font-size:14px}
+th{color:var(--mute);font-weight:600}
+td.l,th.l{text-align:right}
+button.b,label.b{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:7px 14px;font:inherit;cursor:pointer;display:inline-block}
+button.g{background:none;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:5px 10px;font:inherit;cursor:pointer}
+input,select{font:inherit;padding:5px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.dot{display:inline-block;min-width:34px;padding:2px 4px;border-radius:8px;color:#fff;font-size:12px;cursor:pointer}
+.paid{background:var(--paid)}.partial{background:var(--partial)}.unpaid{background:var(--unpaid)}.pending{background:var(--pending);color:#333}.future{background:var(--future)}.prepaid{background:var(--pre)}.na{background:none}
+.debt{color:var(--unpaid);font-weight:700}.credit{color:var(--paid)}
+.old td{opacity:.75;background:rgba(127,127,127,.07)}
+.mute{color:var(--mute);font-size:13px}
+.warn{background:rgba(224,161,0,.15)}
+.chip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:1px;font-size:12px}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);min-width:300px}
+.hide{display:none}
+#msg{position:fixed;bottom:16px;left:16px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:9}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏢 ועד הבית</h1>
+  <nav id="nav">
+    <button data-t="status" class="on">מצב תשלומים</button>
+    <button data-t="import">ייבוא מהבנק</button>
+    <button data-t="apts">דירות ודיירים</button>
+    <button data-t="share">מה הדיירים רואים</button>
+    <button data-t="users">משתמשים</button>
+  </nav>
+  <select id="bsel" class="hide" style="margin-inline-start:auto"></select><span class="mute" id="me"></span><button class="g" id="logout">יציאה</button>
+</header>
+<main>
+<div id="roBanner" class="card hide" style="padding:10px 14px">מצב צפייה בלבד — אפשר לראות הכל, אבל לא לשנות.</div>
+<section id="status">
+  <div class="row"><label>שנה: <select id="year"></select></label><span class="mute" id="stNote"></span></div>
+  <div class="card"><table id="grid"></table></div>
+  <div class="mute">לחיצה על חודש — פירוט ותשלום ידני (מזומן / שיק).</div>
+</section>
+
+<section id="import" class="hide">
+  <div class="card" style="padding:14px">
+    <div class="row">
+      <label class="b">בחר קובץ עובר ושב (xlsx)<input type="file" id="bankFile" accept=".xlsx,.xls" hidden></label>
+      <label>החל מתאריך: <input type="date" id="fromDate"></label>
+      <button class="g" id="reload">רענן</button>
+    </div>
+    <div class="mute" id="impInfo">הקובץ מנותח בדפדפן שלך ולא נשלח לשום מקום חוץ מהתשלומים שתאשר. שורות שכבר נרשמו באקסל (לפי אסמכתה) מדולגות אוטומטית.</div>
+  </div>
+  <div class="card hide" id="impCard">
+    <table id="impTable"></table>
+  </div>
+  <div class="row hide" id="impActions"><button class="b" id="commit">שמור את הנבחרות</button><span class="mute" id="impCount"></span></div>
+</section>
+
+<section id="apts" class="hide">
+  <div class="card"><table id="aptTable"></table></div>
+</section>
+
+<section id="share" class="hide">
+  <div class="card" style="padding:14px">
+    <h3 style="margin-top:0">מה הדיירים רואים</h3>
+    <div class="row"><label>כותרת: <input id="sTitle"></label></div>
+    <div class="row"><label><input type="checkbox" id="sNames"> הצג שם משפחה ליד מספר הדירה</label></div>
+    <div class="row"><label><input type="checkbox" id="sDebt" checked> הצג סכום חוב לכל דירה</label></div>
+    <div class="mute">דיירים רואים רק מספר דירה, סטטוס חודשי ואופציונלית שם משפחה וסכום חוב. טלפונים, מספרי חשבון ותנועות בנק לעולם לא מגיעים אליהם. המסך שלהם מתעדכן אוטומטית אחרי כל תשלום שנשמר.</div>
+    <div class="row"><button class="b" id="saveShare">שמור</button><span id="pubOut" class="mute"></span></div>
+  </div>
+</section>
+
+<section id="users" class="hide">
+  <div class="card" style="padding:14px">
+    <h3 style="margin-top:0">מי יכול להיכנס</h3>
+    <div class="mute">כל אחד נכנס עם קישור שנשלח לאימייל שלו. רק כתובות שרשומות כאן מקבלות גישה.<br>בעל הבית — הכל · מנהל — צפייה בלבד בכל המידע · דייר — מצב התשלומים בלבד.</div>
+    <div class="row"><input id="uEmail" type="email" placeholder="אימייל" style="width:220px;direction:ltr"><select id="uRole"><option value="tenant">דייר</option><option value="admin">מנהל (צפייה)</option><option value="owner">בעל הבית</option></select><input id="uApt" type="number" placeholder="דירה" style="width:80px"><input id="uName" placeholder="שם (לא חובה)" style="width:140px"><button class="b" id="uAdd">הוסף</button></div>
+  </div>
+  <div class="card"><table id="uTable"></table></div>
+</section>
+</main>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
+<div id="msg"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="vaad-lib.js"></script>
+<script src="common.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const MN=['ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצמ'];
+const fmt=n=>Math.round(n).toLocaleString('he-IL');
+let SVC=null,ME=null,RO=true;
+const api=(m,u,b)=>SVC.call(m,u,b);
+const toast=t=>{const e=$('#msg');e.textContent=t;e.style.display='block';setTimeout(()=>e.style.display='none',3500)};
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hide',s.id!==b.dataset.t));
+  if(b.dataset.t==='apts')loadApts();if(b.dataset.t==='share')loadShare();if(b.dataset.t==='users')loadUsers();
+});
+
+/* ---- status grid ---- */
+async function loadGrid(){
+  const y=$('#year').value||'';
+  const d=await api('GET','/api/grid?year='+y);
+  if(!$('#year').options.length){d.years.forEach(v=>$('#year').add(new Option(v,v)));}
+  $('#year').value=d.year;
+  window.G=d;
+  let h='<tr><th class="l">דירה</th><th class="l">דייר</th>'+MN.map(m=>`<th>${m}</th>`).join('')+'<th>יתרה</th></tr>';
+  for(const r of d.rows){
+    h+=`<tr class="${r.left?'old':''}"><td class="l"><b>${r.apt}</b></td><td class="l">${r.name}${r.left?` <span class="mute">(עזב ${r.to.m}/${r.to.y})</span>`:r.from.y>2022||r.from.m>6?` <span class="mute">(מ-${r.from.m}/${r.from.y})</span>`:''}</td>`+r.months.map(c=>{
+      const t=c.status==='na'?'':c.status==='future'?'':c.status==='paid'||c.status==='prepaid'?'✓':fmt(c.paid)+'/'+fmt(c.due);
+      return `<td><span class="dot ${c.status}" data-key="${r.key}" data-m="${c.m}">${t||'&nbsp;'}</span></td>`}).join('')+
+      `<td class="${r.balance>0?'debt':r.balance<0?'credit':''}">${r.balance>0?'חוב '+fmt(r.balance):r.balance<0?'זכות '+fmt(-r.balance):'—'}</td></tr>`;
+  }
+  $('#grid').innerHTML=h;
+  const tot=d.rows.reduce((s,r)=>s+r.debt,0);
+  $('#stNote').textContent=`סה״כ חובות פתוחים: ${fmt(tot)} ₪ · ${d.rows.filter(r=>r.debt>0).length} דיירים בחוב`;
+}
+$('#year').onchange=loadGrid;
+$('#grid').onclick=async e=>{
+  const s=e.target.closest('.dot');if(!s)return;
+  const key=s.dataset.key,m=+s.dataset.m,y=+$('#year').value;
+  const c=await api('GET',`/api/cell?key=${encodeURIComponent(key)}&y=${y}&m=${m}`);
+  const f=$('#dlgForm');
+  f.innerHTML=`<h3 style="margin-top:0">דירה ${c.apt} — ${MN[m-1]} ${y}</h3><div class="mute">לתשלום: ${fmt(c.due)} ₪</div>
+   <table>${c.payments.map(p=>`<tr><td>${fmt(p.amount)} ₪</td><td>${p.method||''}</td><td class="mute">${p.date||''} ${p.src}</td><td>${RO?'':`<button type="button" class="g" data-del="${p.id}">מחק</button>`}</td></tr>`).join('')||'<tr><td class="mute">אין תשלומים</td></tr>'}</table>
+   ${RO?'':`<div class="row"><input id="pa" type="number" placeholder="סכום ₪" value="${Math.max(0,c.due-c.payments.reduce((s,p)=>s+p.amount,0))||''}" style="width:100px">
+   <select id="pm"><option>מזומן</option><option>שיק</option><option>העברה בנקאית</option><option>הוראת קבע</option></select>
+   <button type="button" class="b" id="padd">הוסף תשלום</button></div>`}<button class="g">סגור</button>`;
+  f.onclick=async ev=>{
+    if(ev.target.dataset.del){await api('DELETE','/api/payment/'+ev.target.dataset.del);$('#dlg').close();loadGrid();}
+    if(ev.target.id==='padd'){await api('POST','/api/payment',{key,y,m,amount:$('#pa').value,method:$('#pm').value,date:new Date().toISOString().slice(0,10)});$('#dlg').close();loadGrid();}
+  };
+  $('#dlg').showModal();
+};
+
+/* ---- bank import ---- */
+let IMP=null,FILE=null;
+$('#bankFile').onchange=e=>{FILE=e.target.files[0];$('#fromDate').value='';preview();};
+$('#reload').onclick=()=>FILE&&preview();
+async function preview(){
+  if(!FILE)return;
+  const buf=await FILE.arrayBuffer();
+  const from=$('#fromDate').value;
+  try{IMP=await api('POST','/api/import/preview?from='+from,buf);}catch(e){return toast(e.message)}
+  if(!from&&IMP.from)$('#fromDate').value=IMP.from;
+  $('#impInfo').textContent=`בקובץ ${IMP.total} תנועות · כבר רשומות: ${IMP.known} · לפני ${IMP.from||'—'} (נחשבות כרשומות): ${IMP.before} · הפקדות חדשות לבדיקה: ${IMP.items.length}`;
+  renderImp();
+}
+const allocText=a=>a.map(x=>`${x.m}/${x.y}:${x.amount}`).join(', ');
+function parseAlloc(t){return t.split(',').map(s=>s.trim()).filter(Boolean).map(s=>{const m=/^(\d{1,2})\/(\d{4}):(\d+(?:\.\d+)?)$/.exec(s);if(!m)throw new Error('פורמט חלוקה: 9/2026:570, 10/2026:570');return{m:+m[1],y:+m[2],amount:+m[3]}})}
+function renderImp(){
+  $('#impCard').classList.toggle('hide',!IMP.items.length);$('#impActions').classList.toggle('hide',!IMP.items.length);
+  $('#impTable').innerHTML='<tr><th>✓</th><th>תאריך</th><th class="l">תיאור</th><th>סכום</th><th>דירה</th><th class="l">חלוקה לחודשים</th><th>זכור</th></tr>'+
+  IMP.items.map((it,i)=>`<tr class="${it.sure?'':'warn'}" data-i="${i}">
+    <td><input type="checkbox" class="sel" ${it.apt?'checked':''}></td>
+    <td>${it.date.split('-').reverse().join('/')}</td>
+    <td class="l">${it.desc.slice(0,70)}<div class="mute">${it.how}${it.sure?'':' — לבדיקה'}</div></td>
+    <td>${fmt(it.amount)}</td>
+    <td><select class="apt"><option value="">—</option><option value="ignore">התעלם</option>${IMP.apartments.map(a=>`<option ${a==it.apt?'selected':''}>${a}</option>`).join('')}</select><div class="mute who">${it.tenant||''}</div></td>
+    <td class="l"><input class="al" style="width:230px" value="${allocText(it.allocations)}"></td>
+    <td><input type="checkbox" class="learn" ${it.apt&&!it.sure?'checked':''} title="זכור את הקישור הזה לפעם הבאה"></td></tr>`).join('');
+}
+$('#impTable').onchange=async e=>{
+  const tr=e.target.closest('tr');if(!tr||!tr.dataset.i)return;const it=IMP.items[tr.dataset.i];
+  if(e.target.classList.contains('apt')){
+    const v=e.target.value;it.apt=v&&v!=='ignore'?+v:null;it.ignore=v==='ignore';
+    if(it.apt){
+      const r=await api('GET',`/api/allocate?apt=${it.apt}&amount=${it.amount}&date=${it.date}`);
+      it.tenancy=r.key;it.tenant=r.tenant;it.allocations=r.allocations;tr.querySelector('.al').value=allocText(it.allocations);
+      tr.querySelector('.who').textContent=r.tenant;
+    } else {tr.querySelector('.al').value='';tr.querySelector('.who').textContent='';}
+    tr.querySelector('.sel').checked=!!it.apt||it.ignore;tr.querySelector('.learn').checked=!!it.apt;
+  }
+};
+$('#commit').onclick=async()=>{
+  const items=[];
+  try{
+    document.querySelectorAll('#impTable tr[data-i]').forEach(tr=>{
+      if(!tr.querySelector('.sel').checked)return;
+      const it=IMP.items[tr.dataset.i];
+      if(it.ignore){items.push({key:it.key,ignore:true});return;}
+      if(!it.apt)return;
+      const alloc=parseAlloc(tr.querySelector('.al').value);
+      items.push({key:it.key,tenancy:it.tenancy,date:it.date,desc:it.desc,amount:it.amount,ref:it.ref,refKey:it.refKey,apt:it.apt,allocations:alloc,payer:it.payer,learn:tr.querySelector('.learn').checked});
+    });
+    const r=await api('POST','/api/import/commit',{items});
+    toast(`נשמרו ${r.added} תשלומים, ${r.ignored} הותעלמו`);
+    await preview();loadGrid();
+  }catch(e){toast(e.message)}
+};
+
+/* ---- apartments ---- */
+async function loadApts(){
+  const d=await api('GET','/api/apartments');
+  let h='<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">דיירים (פעילים)</th><th>טלפון</th><th>חשבון בנק</th></tr>';
+  d.apartments.forEach(a=>{
+    const rs=d.residents.map((r,i)=>({r,i})).filter(x=>x.r.apt===a.apt&&x.r.status!=='עזב');
+    h+=`<tr><td><b>${a.apt}</b></td><td>${a.floor}</td><td>${a.rooms}</td><td>${a.sqm}</td>`+
+    `<td class="l">${rs.map(x=>`${x.r.first} ${x.r.last}${x.r.first2?' ו'+x.r.first2:''} <span class="mute">(${x.r.role})</span>`).join('<br>')}</td>`+
+    `<td>${rs.map(x=>`<input ${RO?'disabled':''} data-i="${x.i}" data-k="phone1" value="${x.r.phone1}" style="width:110px">`).join('<br>')}</td>`+
+    `<td>${rs.map(x=>`<input ${RO?'disabled':''} data-i="${x.i}" data-k="account" value="${x.r.account}" style="width:100px" title="מספר חשבון בנק של הדייר — משמש לזיהוי אוטומטי">`).join('<br>')}</td></tr>`;
+  });
+  $('#aptTable').innerHTML=h;
+}
+$('#aptTable').onchange=async e=>{
+  const i=e.target.dataset.i;if(i===undefined)return;
+  await api('PUT','/api/resident',{index:+i,patch:{[e.target.dataset.k]:e.target.value}});toast('נשמר');
+};
+
+/* ---- share ---- */
+async function loadShare(){const s=await api('GET','/api/settings');$('#sTitle').value=s.title;$('#sNames').checked=s.showNames;$('#sDebt').checked=s.showDebt;}
+$('#saveShare').onclick=async()=>{
+  try{await api('PUT','/api/settings',{title:$('#sTitle').value,showNames:$('#sNames').checked,showDebt:$('#sDebt').checked});$('#pubOut').textContent='נשמר, הדיירים רואים את העדכון.'}catch(e){toast(e.message)}
+};
+
+/* ---- users ---- */
+const ROLE={owner:'בעל הבית',admin:'מנהל (צפייה)',tenant:'דייר'};
+async function loadUsers(){
+  const m=await api('GET','/api/members');
+  $('#uTable').innerHTML='<tr><th class="l">אימייל</th><th>תפקיד</th><th>דירה</th><th class="l">שם</th><th></th></tr>'+
+   m.map(x=>`<tr><td class="l" dir="ltr">${x.email}</td><td>${ROLE[x.role]}</td><td>${x.apt||''}</td><td class="l">${x.name||''}</td><td>${x.email===ME.email?'':`<button class="g" data-rm="${encodeURIComponent(x.email)}">הסר</button>`}</td></tr>`).join('');
+}
+$('#uAdd').onclick=async()=>{
+  try{await api('PUT','/api/member',{email:$('#uEmail').value,role:$('#uRole').value,apt:$('#uApt').value,name:$('#uName').value});
+    ['#uEmail','#uApt','#uName'].forEach(i=>$(i).value='');toast('נוסף');loadUsers()}catch(e){toast(e.message)}
+};
+$('#uTable').onclick=async e=>{const r=e.target.dataset.rm;if(!r)return;if(!confirm('להסיר את הגישה?'))return;await api('DELETE','/api/member/'+r);loadUsers()};
+$('#logout').onclick=()=>Vaad.signOut();
+
+/* ---- start ---- */
+(async()=>{
+  try{
+    ME=await Vaad.whoami();
+    if(!ME||!ME.building||!['owner','admin'].includes(ME.role))return Vaad.go('index.html');
+    RO=ME.role!=='owner';
+    const store=Vaad.store(ME.building.id);
+    const db=await store.load();
+    SVC=VaadLib.service.createService(db,store,ME.role);
+    $('#me').textContent=`${ME.building.name} · ${ME.email} · ${ROLE[ME.role]}`;
+    Vaad.mountSwitcher($('#bsel'),ME);
+    if(RO){
+      $('#roBanner').classList.remove('hide');
+      document.querySelectorAll('nav button').forEach(b=>{if(['import','share','users'].includes(b.dataset.t))b.classList.add('hide')});
+    }
+    await loadGrid();
+  }catch(e){document.querySelector('main').innerHTML=`<div class="card" style="padding:16px">שגיאה בטעינה: ${e.message}</div>`}
+})();
+</script>
+</body>
+</html>

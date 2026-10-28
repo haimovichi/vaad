@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ועד הבית — כניסה</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1b2430;--mute:#6b7685;--line:#e3e7ec;--acc:#2563eb}
+@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1b222b;--ink:#e8edf3;--mute:#8d99a8;--line:#2a333f}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,"Segoe UI",Arial,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px;width:100%;max-width:380px}
+h1{font-size:22px;margin:0 0 4px}
+p{color:var(--mute);margin:6px 0 16px}
+input{width:100%;font:inherit;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);direction:ltr;text-align:left}
+button{width:100%;margin-top:10px;font:inherit;padding:11px;border:0;border-radius:10px;background:var(--acc);color:#fff;cursor:pointer}
+button.g{background:none;color:var(--mute);border:1px solid var(--line)}
+.msg{margin-top:12px;font-size:14px}
+.err{color:#d64545}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🏢 ועד הבית</h1>
+  <div id="loading" class="msg">טוען…</div>
+
+  <form id="login" class="hide">
+    <p>הכניסו את כתובת האימייל שלכם. נשלח אליכם קישור כניסה, בלי סיסמה.</p>
+    <input id="email" type="email" required autocomplete="email" placeholder="name@example.com">
+    <button>שלחו לי קישור כניסה</button>
+  </form>
+  <div id="sent" class="hide"><p>שלחנו קישור לכתובת <b id="sentTo" dir="ltr"></b>. פתחו אותו במכשיר הזה כדי להיכנס.</p><button class="g" id="again">שלחו שוב</button></div>
+
+  <div id="pick" class="hide"><p>לאיזה בניין להיכנס?</p><div id="pickList"></div></div>
+
+  <div id="noaccess" class="hide"><p>הכתובת <b id="naEmail" dir="ltr"></b> עדיין לא רשומה במערכת. בקשו מהוועד להוסיף אתכם, ואז רעננו את הדף.</p><button class="g" id="out">התנתקות</button></div>
+  <div id="error" class="msg err"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const show=id=>{for(const x of ['loading','login','sent','noaccess','pick'])$('#'+x).classList.toggle('hide',x!==id)};
+(async()=>{
+  try{
+    const me=await Vaad.whoami();
+    if(!me){show('login');return}
+    if(me.memberships.length>1&&!me.building){$('#pickList').innerHTML=me.memberships.map(m=>`<button class="g" data-b="${m.id}">${m.name}</button>`).join('');show('pick');return}
+    if(me.role==='owner'||me.role==='admin')return Vaad.go('admin.html');
+    if(me.role==='tenant')return Vaad.go('tenant.html');
+    $('#naEmail').textContent=me.email;show('noaccess');
+  }catch(e){show('login');$('#error').textContent=e.message}
+})();
+$('#login').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';
+  try{await Vaad.signIn($('#email').value.trim());$('#sentTo').textContent=$('#email').value.trim();show('sent')}catch(err){$('#error').textContent=err.message}};
+$('#pickList').onclick=e=>{const b=e.target.dataset.b;if(b){Vaad.choose(b);location.reload()}};
+$('#again').onclick=()=>show('login');
+$('#out').onclick=()=>Vaad.signOut();
+</script>
+</body>
+</html>

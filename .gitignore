@@ -1,0 +1,11 @@
+node_modules/
+# personal data — never commit
+data/
+site/
+supabase/seed.sql
+app/demo-db.json
+*.xlsx
+# generated
+app/vaad-lib.js
+.tmp/
+.claude/

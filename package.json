@@ -1,0 +1,27 @@
+{
+  "name": "vaad",
+  "version": "1.0.0",
+  "description": "ועד הבית — מעקב תשלומים",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "build": "node scripts/build-app.js",
+    "seed:excel": "node lib/seed.js data/source.xlsx",
+    "seed:sql": "node scripts/make-seed.js",
+    "test:rls": "node scripts/test-rls.mjs",
+    "test:seed": "node scripts/test-seed.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14"
+  }
+}
