@@ -101,6 +101,7 @@ let D=null;
 try{D=await Vaad.store(ME.building.id).getSnapshot()}catch(e){document.body.innerHTML='<div class="wrap">שגיאה בטעינה: '+e.message+'</div>';return}
 if(!D){document.body.innerHTML='<div class="wrap">עדיין לא פורסם מידע. נסו שוב מאוחר יותר.</div>';return}
 document.getElementById('who').textContent=ME.email;
+if(ME.role==='owner'||ME.role==='admin'){const a=document.createElement('a');a.href='admin.html'+Vaad.keep;a.textContent='ניהול';a.style.cssText='color:var(--acc);margin-inline-end:10px';document.getElementById('who').before(a)}
 if(ME.memberships.length>1){const sel=document.createElement('select');sel.style.cssText='font:inherit;margin-inline-end:8px';document.getElementById('who').before(sel);Vaad.mountSwitcher(sel,ME)}
 document.getElementById('logout').onclick=e=>{e.preventDefault();Vaad.signOut()};
 const MN=['ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצמ'];

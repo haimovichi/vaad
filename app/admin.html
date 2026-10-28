@@ -46,7 +46,7 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
     <button data-t="share">מה הדיירים רואים</button>
     <button data-t="users">משתמשים</button>
   </nav>
-  <select id="bsel" class="hide" style="margin-inline-start:auto"></select><span class="mute" id="me"></span><button class="g" id="logout">יציאה</button>
+  <a id="toTenant" class="mute" style="color:var(--acc)" href="tenant.html">תצוגת דיירים</a><select id="bsel" class="hide" style="margin-inline-start:auto"></select><span class="mute" id="me"></span><button class="g" id="logout">יציאה</button>
 </header>
 <main>
 <div id="roBanner" class="card hide" style="padding:10px 14px">מצב צפייה בלבד — אפשר לראות הכל, אבל לא לשנות.</div>
@@ -259,6 +259,7 @@ $('#logout').onclick=()=>Vaad.signOut();
     SVC=VaadLib.service.createService(db,store,ME.role);
     $('#me').textContent=`${ME.building.name} · ${ME.email} · ${ROLE[ME.role]}`;
     Vaad.mountSwitcher($('#bsel'),ME);
+    $('#toTenant').href='tenant.html'+Vaad.keep;
     if(RO){
       $('#roBanner').classList.remove('hide');
       document.querySelectorAll('nav button').forEach(b=>{if(['import','share','users'].includes(b.dataset.t))b.classList.add('hide')});
