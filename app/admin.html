@@ -46,7 +46,7 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
     <button data-t="share">מה הדיירים רואים</button>
     <button data-t="users">משתמשים</button>
   </nav>
-  <a id="toTenant" class="mute" style="color:var(--acc)" href="tenant.html">תצוגת דיירים</a><select id="bsel" class="hide" style="margin-inline-start:auto"></select><span class="mute" id="me"></span><button class="g" id="logout">יציאה</button>
+  <a id="toTenant" class="mute" style="color:var(--acc)" href="tenant.html">תצוגה מצומצמת</a><select id="bsel" class="hide" style="margin-inline-start:auto"></select><span class="mute" id="me"></span><button class="g" id="logout">יציאה</button>
 </header>
 <main>
 <div id="roBanner" class="card hide" style="padding:10px 14px">מצב צפייה בלבד — אפשר לראות הכל, אבל לא לשנות.</div>
@@ -265,6 +265,7 @@ $('#logout').onclick=()=>Vaad.signOut();
       document.querySelectorAll('nav button').forEach(b=>{if(['import','share','users'].includes(b.dataset.t))b.classList.add('hide')});
     }
     await loadGrid();
+    const want=location.hash.slice(1);const tb=want&&document.querySelector(`nav button[data-t="${want}"]:not(.hide)`);if(tb)tb.click();
   }catch(e){document.querySelector('main').innerHTML=`<div class="card" style="padding:16px">שגיאה בטעינה: ${e.message}</div>`}
 })();
 </script>

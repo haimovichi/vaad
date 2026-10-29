@@ -44,6 +44,10 @@ insert into members (building_id, email, role) values (<id>, 'owner@email.com', 
 ```
 That owner then manages their own tenants and administrators in "משתמשים". An in-app screen for entering apartments and tenants of an empty building is not built yet.
 
+## The compact view (everyone's home screen)
+Three buttons: **הדירה שלי** (your apartment's card and its payments with dates for the selected year), **חייבים** (who owes), **הכל** (all apartments). Tenants see statuses for everyone and payment details only for their own apartment (served by the `apt_payments` database function, which returns just month, amount, method and date). Owners and the view-only administrator tap any card to see that tenant's payments, and get links to the admin console tabs (table, bank import, apartments, what tenants see, users). Staff without an apartment linked to their login choose "their" apartment once on that phone.
+Payments recorded in the old Excel have no payment date, only the month they were for; payments imported from the bank or added in the app from now on carry the date.
+
 ## Monthly routine
 Log in → "ייבוא מהבנק" → choose the bank `.xlsx` → review yellow rows → save. Tenants see the update immediately.
 

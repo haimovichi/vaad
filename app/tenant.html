@@ -9,21 +9,24 @@
 @media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1b222b;--ink:#e8edf3;--mute:#8d99a8;--line:#2a333f;--future:#323c49;--accbg:#1c2d4a;--acc:#9cc0f5;--badbg:#3a1f22;--okbg:#17321f;--warnbg:#3a3018}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,"Segoe UI",Arial,sans-serif}
-.wrap{max-width:900px;margin:0 auto;padding:12px 14px 28px}
+.wrap{max-width:640px;margin:0 auto;padding:12px 14px 28px}
 .head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 h1{font-size:20px;margin:4px 0}
 .sub{color:var(--mute);font-size:13px}
+.sub a{color:var(--acc);text-decoration:none}
+.tools{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 2px}
+.tools a{font-size:13px;color:var(--acc);border:1px solid var(--line);background:var(--card);border-radius:999px;padding:3px 11px;text-decoration:none}
 .sum{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .sum div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
 .sum small{display:block;color:var(--mute);font-size:12px}
 .sum b{font-size:22px;font-weight:600}
 .bad{color:var(--unpaid)}
 input[type=search],select{font:inherit;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
-input[type=search]{width:100%}
-.chips{display:flex;gap:6px;margin:8px 0;overflow-x:auto;align-items:center}
-.chip{border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:14px;background:var(--card);color:var(--mute);cursor:pointer;white-space:nowrap;font-family:inherit}
-.chip.on{background:var(--accbg);color:var(--acc);border-color:var(--acc)}
-.chips select{padding:4px 10px;font-size:14px;border-radius:999px;margin-inline-start:auto}
+input[type=search]{width:100%;margin-top:8px}
+.tabs{display:flex;gap:6px;margin:8px 0;align-items:center}
+.tab{flex:1;border:1px solid var(--line);border-radius:999px;padding:8px 6px;font:inherit;font-size:15px;background:var(--card);color:var(--mute);cursor:pointer;white-space:nowrap}
+.tab.on{background:var(--accbg);color:var(--acc);border-color:var(--acc);font-weight:600}
+.tabs select{padding:7px 8px;border-radius:999px;font-size:14px}
 .mlabels{display:flex;gap:3px;padding:0 13px;margin-top:6px;font-size:10px;color:var(--mute)}
 .mlabels span{flex:1;text-align:center}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px;cursor:pointer}
@@ -33,56 +36,44 @@ input[type=search]{width:100%}
 .who small{display:block;color:var(--mute);font-size:12px}
 .badge{font-size:13px;padding:3px 9px;border-radius:7px;white-space:nowrap}
 .b-ok{background:var(--okbg);color:var(--paid)}.b-bad{background:var(--badbg);color:var(--unpaid)}.b-warn{background:var(--warnbg);color:#a67700}.b-pre{background:var(--accbg);color:var(--acc)}.b-wait{background:var(--warnbg);color:#a67700}.b-old{background:var(--bg);color:var(--mute)}
-.star{border:0;background:none;font-size:20px;color:var(--mute);cursor:pointer;padding:0 2px;line-height:1}
-.star.on{color:#e0a100}
 .strip{display:flex;gap:3px;margin-top:9px}
 .strip i{flex:1;height:9px;border-radius:3px;background:var(--future)}
 i.paid{background:var(--paid)}i.partial{background:var(--partial)}i.unpaid{background:var(--unpaid)}i.pending{background:var(--pending)}i.prepaid{background:var(--pre)}i.na{background:var(--line);opacity:.5}
-.more{display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:14px;color:var(--mute)}
+.more{display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:14px;color:var(--mute);cursor:default}
 .card.open .more{display:block}
+.pays{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px;font-size:14px}
+.pays h3{font-size:15px;margin:0 0 6px}
+table.p{width:100%;border-collapse:collapse}
+table.p th{color:var(--mute);font-weight:500;font-size:12px;text-align:right;padding:3px 2px}
+table.p td{padding:5px 2px;border-top:1px solid var(--line)}
+table.p td.n{font-variant-numeric:tabular-nums;font-weight:600}
+table.p tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+.foot{color:var(--mute);font-size:12px;margin-top:6px}
 details.old{margin-top:12px}
 details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 2px}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin:16px 0 0}
 .legend span{display:flex;align-items:center;gap:5px}
 .legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
 .empty{color:var(--mute);text-align:center;padding:24px 0}
-/* wide screens: classic table */
-#tableView{display:none}
-.card2{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto}
-table{border-collapse:collapse;width:100%;min-width:560px}
-th,td{padding:6px 4px;text-align:center;border-bottom:1px solid var(--line);font-size:14px}
-th{color:var(--mute);font-weight:600}
-td.apt{font-weight:700;padding-inline:10px;text-align:right;white-space:nowrap}
-td.apt small{color:var(--mute);font-weight:400}
-.dot{display:inline-block;width:22px;height:22px;border-radius:50%;line-height:22px;color:#fff;font-size:13px}
-.dot.paid{background:var(--paid)}.dot.partial{background:var(--partial)}.dot.unpaid{background:var(--unpaid)}.dot.pending{background:var(--pending);color:#333}.dot.future{background:var(--future)}.dot.prepaid{background:var(--pre)}.dot.na{background:none}
-.debt{font-weight:700;color:var(--unpaid)}
-@media(min-width:760px){#cardView{display:none}#tableView{display:block}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="head"><h1 id="title"></h1><span class="sub" id="updated"></span></div>
-  <div class="sub" style="margin-bottom:4px"><span id="who"></span> · <a href="#" id="logout" style="color:var(--acc)">יציאה</a></div>
+  <div class="sub" style="margin-bottom:4px"><span id="who"></span> · <a href="#" id="logout">יציאה</a></div>
+  <div class="tools" id="tools"></div>
   <div class="sum" id="sum"></div>
 
-  <div id="cardView">
-    <input type="search" id="q" placeholder="חפש מספר דירה או שם">
-    <div class="chips">
-      <button class="chip on" data-f="all">הכל</button>
-      <button class="chip" data-f="debt">חייבים</button>
-      <button class="chip" data-f="mine">הדירה שלי</button>
-      <select id="year" aria-label="שנה"></select>
-    </div>
-    <div class="mlabels" id="mlabels"></div>
-    <div id="list"></div>
-    <details class="old" id="oldBox"><summary id="oldSum"></summary><div id="oldList"></div></details>
+  <div class="tabs">
+    <button class="tab" data-t="mine">הדירה שלי</button>
+    <button class="tab" data-t="debt">חייבים</button>
+    <button class="tab" data-t="all">הכל</button>
+    <select id="year" aria-label="שנה"></select>
   </div>
-
-  <div id="tableView">
-    <div style="margin:10px 0"><label>שנה: <select id="year2"></select></label></div>
-    <div class="card2"><table id="t"></table></div>
-  </div>
+  <input type="search" id="q" placeholder="חפש דירה" hidden>
+  <div class="mlabels" id="mlabels"></div>
+  <div id="list"></div>
+  <details class="old" id="oldBox"><summary id="oldSum"></summary><div id="oldList"></div></details>
 
   <div class="legend">
     <span><i style="background:var(--paid)"></i>שולם</span><span><i style="background:var(--partial)"></i>חלקי</span><span><i style="background:var(--unpaid)"></i>לא שולם</span>
@@ -95,92 +86,158 @@ td.apt small{color:var(--mute);font-weight:400}
 <script src="common.js"></script>
 <script>
 (async()=>{
-const ME=await Vaad.whoami();
-if(!ME||!ME.building||!['tenant','owner','admin'].includes(ME.role)){Vaad.go('index.html');return}
-let D=null;
-try{D=await Vaad.store(ME.building.id).getSnapshot()}catch(e){document.body.innerHTML='<div class="wrap">שגיאה בטעינה: '+e.message+'</div>';return}
-if(!D){document.body.innerHTML='<div class="wrap">עדיין לא פורסם מידע. נסו שוב מאוחר יותר.</div>';return}
-document.getElementById('who').textContent=ME.email;
-if(ME.role==='owner'||ME.role==='admin'){const a=document.createElement('a');a.href='admin.html'+Vaad.keep;a.textContent='ניהול';a.style.cssText='color:var(--acc);margin-inline-end:10px';document.getElementById('who').before(a)}
-if(ME.memberships.length>1){const sel=document.createElement('select');sel.style.cssText='font:inherit;margin-inline-end:8px';document.getElementById('who').before(sel);Vaad.mountSwitcher(sel,ME)}
-document.getElementById('logout').onclick=e=>{e.preventDefault();Vaad.signOut()};
+const $=s=>document.querySelector(s);
+const fmt=n=>Math.round(n).toLocaleString('he-IL');
+const fdate=d=>d?d.split('-').reverse().join('/'):'—';
 const MN=['ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצמ'];
 const MF=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-const SYM={paid:'✓',partial:'½',unpaid:'✕',pending:'•',prepaid:'+',future:'',na:''};
-const $=s=>document.querySelector(s);
-const fmt=n=>n.toLocaleString('he-IL');
-let filter='all',year=D.now.y,mine=new Set();
-try{mine=new Set(JSON.parse(localStorage.getItem('vaad-mine')||'[]'))}catch(e){}
-if(ME.apt)mine.add(String(ME.apt));
-const saveMine=()=>{try{localStorage.setItem('vaad-mine',JSON.stringify([...mine]))}catch(e){}};
+const calc=VaadLib.calc;
 
-$('#title').textContent=D.title;
-$('#q').placeholder=D.showNames?'חפש מספר דירה או שם':'חפש מספר דירה';
-$('#updated').textContent='עודכן '+D.updated.split('-').reverse().join('/');
-for(const id of ['#year','#year2']){const s=$(id);D.years.forEach(y=>s.add(new Option(y,y)));s.value=year;s.onchange=e=>{year=+e.target.value;$('#year').value=$('#year2').value=year;render()}}
+const ME=await Vaad.whoami();
+if(!ME||!ME.building||!['tenant','owner','admin'].includes(ME.role)){Vaad.go('index.html');return}
+const STAFF=ME.role==='owner'||ME.role==='admin';
+const store=Vaad.store(ME.building.id);
+let DB=null,SNAP=null;
+try{ if(STAFF)DB=await store.load(); else SNAP=await store.getSnapshot(); }
+catch(e){document.body.innerHTML='<div class="wrap">שגיאה בטעינה: '+e.message+'</div>';return}
+if(!STAFF&&!SNAP){document.body.innerHTML='<div class="wrap">עדיין לא פורסם מידע. נסו שוב מאוחר יותר.</div>';return}
+
+/* ---- header ---- */
+$('#who').textContent=ME.email;
+$('#logout').onclick=e=>{e.preventDefault();Vaad.signOut()};
+$('#title').textContent=STAFF?ME.building.name:SNAP.title;
+$('#updated').textContent=STAFF?'':'עודכן '+SNAP.updated.split('-').reverse().join('/');
+if(ME.memberships.length>1){const sel=document.createElement('select');sel.style.cssText='font:inherit;padding:2px 6px;margin-inline-end:8px';$('#who').before(sel);Vaad.mountSwitcher(sel,ME)}
+if(STAFF){
+  const L=ME.role==='owner'
+    ?[['מצב תשלומים (טבלה)','admin.html'],['ייבוא מהבנק','admin.html#import'],['דירות ודיירים','admin.html#apts'],['מה הדיירים רואים','admin.html#share'],['משתמשים','admin.html#users']]
+    :[['מצב תשלומים (טבלה)','admin.html'],['דירות ודיירים','admin.html#apts']];
+  $('#tools').innerHTML=L.map(([t,h])=>`<a href="${h.replace('.html','.html'+Vaad.keep)}">${t}</a>`).join('');
+}
+
+/* ---- data ---- */
+const now=STAFF?calc.fromMi(calc.nowMi()):SNAP.now;
+const years=STAFF?Array.from({length:now.y-calc.fromMi(calc.START).y+1},(_,i)=>calc.fromMi(calc.START).y+i):SNAP.years;
+let year=now.y,tab='mine',openId=null;
+for(const y of years)$('#year').add(new Option(y,y));$('#year').value=year;
 $('#mlabels').innerHTML=MN.map(m=>`<span>${m[0]}</span>`).join('');
 
+function rowsFor(y){
+  if(STAFF){
+    const g=calc.grid(DB,y);const cnt={};g.forEach(r=>cnt[r.apt]=(cnt[r.apt]||0)+1);
+    return g.map(r=>({apt:r.apt,key:r.key,name:r.name,tag:cnt[r.apt]>1?(r.left?'דייר קודם':'דייר נוכחי'):undefined,left:r.left,debt:r.debt,months:r.months.map(c=>c.status)}));
+  }
+  return SNAP.grids[y].map(r=>({...r,left:r.tag==='דייר קודם'}));
+}
+function staffPayments(row,y){
+  const ts=calc.tenancies(DB);const t=ts.find(x=>x.key===row.key);
+  return DB.payments.filter(p=>p.y===y&&(ts.find(x=>x.key===p.key)||calc.tenancyAt(ts,p.apt,calc.mi(p.y,p.m)))===t)
+    .map(p=>({y:p.y,m:p.m,amount:p.amount,method:p.method,date:p.date})).sort((a,b)=>a.m-b.m||String(a.date).localeCompare(String(b.date)));
+}
+// the apartment shown under "הדירה שלי": the member's own, or for staff without one a locally remembered choice
+let myApt=ME.apt||null;
+if(!myApt&&STAFF){try{myApt=Number(localStorage.getItem('vaad-myapt'))||null}catch(e){}}
+if(!myApt)tab=STAFF?'debt':'all';
+
+/* ---- pieces ---- */
 const isOwing=r=>r.debt>0||(r.debt===undefined&&r.months.some(s=>s==='unpaid'||s==='partial'));
-function badge(r,cur){
-  const nowS=r.months[D.now.m-1];
-  if(r.debt>0)return`<span class="badge ${nowS==='partial'?'b-warn':'b-bad'}">חוב ${fmt(r.debt)} ₪</span>`;
+function badge(r){
+  const cur=r.months[now.m-1];
+  if(r.debt>0)return`<span class="badge ${cur==='partial'?'b-warn':'b-bad'}">חוב ${fmt(r.debt)} ₪</span>`;
   if(r.debt===undefined&&isOwing(r))return`<span class="badge b-bad">חסר תשלום</span>`;
-  if(r.tag==='דייר קודם')return`<span class="badge b-old">שולם</span>`;
-  if(nowS==='pending')return`<span class="badge b-wait">ממתין לחודש זה</span>`;
+  if(r.left)return`<span class="badge b-old">שולם</span>`;
+  if(cur==='pending'&&year===now.y)return`<span class="badge b-wait">ממתין לחודש זה</span>`;
   if(r.months.includes('prepaid'))return`<span class="badge b-pre">שולם מראש</span>`;
   return`<span class="badge b-ok">שולם</span>`;
 }
-function detail(r){
-  const miss=r.months.map((s,i)=>(s==='unpaid'||s==='partial'?MF[i]+(s==='partial'?' (חלקי)':''):null)).filter(Boolean);
-  if(miss.length)return'חסר: '+miss.join(', ')+'.';
+function missing(r){
+  const m=r.months.map((s,i)=>(s==='unpaid'||s==='partial'?MF[i]+(s==='partial'?' (חלקי)':''):null)).filter(Boolean);
+  if(m.length)return'חסר: '+m.join(', ')+'.';
   if(r.debt>0)return'יש חוב מחודשים בשנים קודמות.';
-  if(r.months[D.now.m-1]==='pending'&&+year===D.now.y)return'החודש הנוכחי טרם שולם.';
+  if(r.months[now.m-1]==='pending'&&year===now.y)return'החודש הנוכחי טרם שולם.';
   return'הכל שולם עד היום.';
 }
-function card(r,i){
-  const id=String(r.apt);
-  const star=mine.has(id)?'on':'';
-  return`<div class="card" data-id="${id}"><div class="top"><div class="num">${r.apt}</div>
-    <div class="who">${r.name||'דירה '+r.apt}<small>${r.tag||''}</small></div>
-    ${badge(r)}<button class="star ${star}" data-star="${id}" aria-label="הדירה שלי">${star?'★':'☆'}</button></div>
-    <div class="strip">${r.months.map((s,i)=>`<i class="${s}" title="${MF[i]}"></i>`).join('')}</div>
-    <div class="more">${detail(r)}</div></div>`;
+function payTable(list,title){
+  if(!list.length)return`<div class="pays"><h3>${title}</h3><div class="foot">אין תשלומים רשומים בשנת ${year}.</div></div>`;
+  const total=list.reduce((s,p)=>s+p.amount,0);
+  const undated=list.some(p=>!p.date);
+  return`<div class="pays"><h3>${title}</h3><table class="p"><tr><th>תאריך</th><th>עבור חודש</th><th>סכום</th><th>אמצעי</th></tr>`+
+    list.map(p=>`<tr><td>${fdate(p.date)}</td><td>${MF[p.m-1]}</td><td class="n">${fmt(p.amount)} ₪</td><td>${p.method||''}</td></tr>`).join('')+
+    `<tr class="tot"><td colspan="2">סה״כ שולם</td><td class="n">${fmt(total)} ₪</td><td></td></tr></table>`+
+    (undated?'<div class="foot">תשלומים שנרשמו לפני המעבר לאפליקציה מוצגים בלי תאריך.</div>':'')+`</div>`;
 }
-function render(){
-  const all=D.grids[year];
-  const cur=year==D.now.y;
-  const list=all.filter(r=>r.tag!=='דייר קודם'),old=all.filter(r=>r.tag==='דייר קודם');
-  // summary
-  const idx=D.now.m-1;
-  const paidNow=list.filter(r=>['paid','prepaid'].includes(r.months[idx])).length;
+const idOf=r=>r.key||(r.apt+'|'+(r.tag||''));
+function card(r,withMore){
+  const open=withMore&&openId===idOf(r);
+  let more='';
+  if(withMore)more=`<div class="more">${missing(r)}${STAFF&&open?payTable(staffPayments(r,year),'תשלומים ב-'+year):''}</div>`;
+  return`<div class="card ${open?'open':''}" data-id="${idOf(r)}"><div class="top"><div class="num">${r.apt}</div>
+    <div class="who">${r.name||'דירה '+r.apt}<small>${r.tag||''}</small></div>${badge(r)}</div>
+    <div class="strip">${r.months.map((s,i)=>`<i class="${s}" title="${MF[i]}"></i>`).join('')}</div>${more}</div>`;
+}
+
+/* ---- render ---- */
+let seq=0;
+async function render(){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
+  const all=rowsFor(year);
+  const current=all.filter(r=>!r.left);
+  const idx=now.m-1;
+  const paidNow=current.filter(r=>['paid','prepaid'].includes(r.months[idx])).length;
   const owing=new Set(all.filter(isOwing).map(r=>r.apt)).size;
-  $('#sum').innerHTML=cur?`<div><small>שילמו ${MF[idx]}</small><b>${paidNow} מתוך ${list.length}</b></div><div><small>דירות עם חוב</small><b class="${owing?'bad':''}">${owing}</b></div>`:'';
-  // cards
+  $('#sum').innerHTML=year===now.y?`<div><small>שילמו ${MF[idx]}</small><b>${paidNow} מתוך ${current.length}</b></div><div><small>דירות עם חוב</small><b class="${owing?'bad':''}">${owing}</b></div>`:'';
+  $('#q').hidden=tab!=='all';
+  $('#mlabels').style.display=tab==='mine'&&!myApt?'none':'';
+  const my=++seq;
+  $('#oldBox').style.display='none';
+
+  if(tab==='mine'){
+    if(!myApt){
+      $('#list').innerHTML=STAFF
+        ?`<div class="card" style="cursor:default"><div>בחרו את הדירה שלכם:</div><select id="pickApt" style="margin-top:8px"><option value="">—</option>${[...new Set(all.map(r=>r.apt))].map(a=>`<option>${a}</option>`).join('')}</select></div>`
+        :'<div class="empty">הדירה שלכם עדיין לא מקושרת לחשבון. פנו לוועד הבית.</div>';
+      return;
+    }
+    const mine=current.filter(r=>r.apt===myApt);
+    if(!mine.length){$('#list').innerHTML='<div class="empty">לא נמצאה הדירה.</div>';return}
+    $('#list').innerHTML=mine.map(r=>card(r,false)).join('')+'<div id="pays"><div class="pays foot">טוען תשלומים…</div></div>';
+    try{
+      const list=STAFF?staffPayments(mine[0],year):await store.getAptPayments(myApt,year);
+      if(my!==seq)return;
+      $('#pays').innerHTML=payTable(list,'התשלומים שלי ב-'+year);
+    }catch(e){if(my===seq)$('#pays').innerHTML='<div class="pays foot">לא הצלחנו לטעון תשלומים: '+e.message+'</div>'}
+    return;
+  }
+
+  if(tab==='debt'){
+    const owe=all.filter(isOwing).sort((a,b)=>(b.debt||0)-(a.debt||0)||a.apt-b.apt);
+    $('#list').innerHTML=owe.map(r=>card(r,true)).join('')||'<div class="empty">אין חייבים. כולם שילמו 🎉</div>';
+    return;
+  }
+
   const q=$('#q').value.trim();
   const match=r=>!q||String(r.apt)===q||(r.name||'').includes(q);
-  const pass=r=>match(r)&&(filter==='all'||(filter==='debt'&&isOwing(r))||(filter==='mine'&&mine.has(String(r.apt))));
-  const key=r=>(mine.has(String(r.apt))?0:2)+(isOwing(r)?0:1);
-  const shown=list.filter(pass).sort((a,b)=>key(a)-key(b)||a.apt-b.apt);
-  $('#list').innerHTML=shown.map(card).join('')||`<div class="empty">${filter==='mine'?'סמנו ★ ליד הדירה שלכם כדי למצוא אותה מהר':'לא נמצאו דירות'}</div>`;
-  const oldShown=old.filter(pass);
-  $('#oldBox').style.display=oldShown.length?'':'none';
-  $('#oldSum').textContent=`דיירים קודמים (${oldShown.length})`;
-  $('#oldList').innerHTML=oldShown.map(card).join('');
-  // table (wide screens)
-  let h='<tr><th>דירה</th>'+MN.map(m=>`<th>${m}</th>`).join('')+(D.showDebt?'<th>חוב כולל</th>':'')+'</tr>';
-  for(const r of all)h+=`<tr><td class="apt">${r.apt}${r.name?` <small>${r.name}</small>`:''}${r.tag?` <small>${r.tag}</small>`:''}</td>`+r.months.map(s=>`<td><span class="dot ${s}">${SYM[s]}</span></td>`).join('')+(D.showDebt?`<td class="${r.debt>0?'debt':''}">${r.debt>0?fmt(r.debt)+' ₪':'—'}</td>`:'')+'</tr>';
-  $('#t').innerHTML=h;
+  const cur=current.filter(match).sort((a,b)=>(isOwing(b)?1:0)-(isOwing(a)?1:0)||a.apt-b.apt);
+  $('#list').innerHTML=cur.map(r=>card(r,true)).join('')||'<div class="empty">לא נמצאו דירות</div>';
+  const old=all.filter(r=>r.left&&match(r));
+  $('#oldBox').style.display=old.length?'':'none';
+  $('#oldSum').textContent=`דיירים קודמים (${old.length})`;
+  $('#oldList').innerHTML=old.map(r=>card(r,true)).join('');
 }
-$('#q').oninput=render;
-document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{filter=c.dataset.f;document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===c));render()});
-$('#cardView').onclick=e=>{
-  const st=e.target.closest('[data-star]');
-  if(st){const id=st.dataset.star;mine.has(id)?mine.delete(id):mine.add(id);saveMine();render();return}
-  const c=e.target.closest('.card');if(c)c.classList.toggle('open');
-};
-if(ME.apt||mine.size){filter='mine';document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x.dataset.f==='mine'))}
-render();
 
+/* ---- events ---- */
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{tab=b.dataset.t;openId=null;render()});
+$('#year').onchange=e=>{year=+e.target.value;openId=null;render()};
+$('#q').oninput=render;
+document.body.addEventListener('change',e=>{
+  if(e.target.id==='pickApt'&&e.target.value){myApt=+e.target.value;try{localStorage.setItem('vaad-myapt',String(myApt))}catch(err){}render()}
+});
+document.body.addEventListener('click',e=>{
+  const c=e.target.closest('.card[data-id]');if(!c||e.target.closest('select'))return;
+  if(tab==='mine')return;
+  openId=openId===c.dataset.id?null:c.dataset.id;render();
+});
+render();
 })();
 </script>
 </body>

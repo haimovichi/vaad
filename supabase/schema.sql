@@ -96,6 +96,31 @@ $$;
 revoke all on function public.app_role(bigint) from public, anon;
 grant execute on function public.app_role(bigint) to authenticated;
 
+-- ---------- own-apartment payments (what a tenant may see about their own payments) ----------
+-- Returns only month, amount, method and date. Never notes, bank descriptions, references or other tenants.
+-- tenant: only their own apartment (members.apt) and only the current tenancy; owner/admin: any apartment.
+create or replace function public.apt_payments(b bigint, a int, yr int)
+returns table (y int, m int, amount numeric, method text, paid_on date)
+language sql stable security definer set search_path = public as $$
+  select p.y, p.m, p.amount, p.method, p.paid_on
+  from public.payments p
+  where p.building_id = b and p.apt = a and p.y = yr
+    and (
+      public.app_role(b) in ('owner', 'admin')
+      or (
+        public.app_role(b) = 'tenant'
+        and exists (select 1 from public.members mm
+                    where mm.building_id = b and mm.apt = a
+                      and mm.email = lower(coalesce(auth.jwt() ->> 'email', '')))
+        and exists (select 1 from public.residents r
+                    where r.building_id = b and r.key = p.key and coalesce(r.status, '') <> 'עזב')
+      )
+    )
+  order by p.m, p.paid_on
+$$;
+revoke all on function public.apt_payments(bigint, int, int) from public, anon;
+grant execute on function public.apt_payments(bigint, int, int) to authenticated;
+
 -- ---------- row level security ----------
 alter table public.buildings  enable row level security;
 alter table public.members    enable row level security;

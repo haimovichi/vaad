@@ -94,6 +94,11 @@ window.Vaad = (function () {
       },
       async saveMeta(name, value) { ok(await c.from('meta').upsert({ building_id: B, name, value }, { onConflict: 'building_id,name' })); },
       async saveSnapshot(data) { ok(await c.from('snapshot').upsert({ building_id: B, data, updated_at: new Date().toISOString() }, { onConflict: 'building_id' })); },
+      async getAptPayments(apt, year) {
+        const { data, error } = await c.rpc('apt_payments', { b: B, a: apt, yr: year });
+        if (error) throw new Error(error.message);
+        return data.map((r) => ({ y: r.y, m: r.m, amount: num(r.amount), method: r.method || '', date: r.paid_on }));
+      },
       async getSnapshot() { const d = ok(await c.from('snapshot').select('data').eq('building_id', B).maybeSingle()); return d ? d.data : null; },
       async listMembers() { return ok(await c.from('members').select('*').eq('building_id', B).order('role').order('apt')); },
       async saveMember(m) { ok(await c.from('members').upsert({ ...m, building_id: B }, { onConflict: 'building_id,email' })); return m; },
@@ -109,6 +114,11 @@ window.Vaad = (function () {
       async addPayments(rows) { return rows.map((r) => ({ ...r, id: nextId++ })); },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
       async saveSnapshot(d) { snap = d; },
+      async getAptPayments(apt, year) {
+        const d = await this.load();
+        const live = new Set(d.residents.filter((r) => r.apt === apt && r.status !== 'עזב').map((r) => r.key));
+        return d.payments.filter((p) => p.apt === apt && p.y === year && live.has(p.key)).map((p) => ({ y: p.y, m: p.m, amount: p.amount, method: p.method || '', date: p.date })).sort((a, b) => a.m - b.m);
+      },
       async getSnapshot() { if (snap) return snap; const d = await this.load(); return window.VaadLib.snapshot.snapshot(d); },
       async listMembers() { return members; },
       async saveMember(m) { members = members.filter((x) => x.email !== m.email).concat(m); return m; },
