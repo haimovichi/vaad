@@ -5,15 +5,19 @@
 ## Product in one line
 A phone-first payment tracker for building committees: the owner imports the bank statement, everyone in the building sees who paid, and each person sees only what their role allows.
 
-## Roles (per building)
+## Roles (v3, replaces owner / admin / tenant)
 | Role | Who | Can |
 |---|---|---|
-| owner | building committee treasurer | everything: bank import, payments, tenants, apartment links, what tenants see, users |
-| admin | second building administrator | read-only, sees all data including phones |
-| tenant | each household or landlord | statuses of all apartments; payment details only for the apartment linked to their login |
+| Super user | exactly one person (platform owner) | everything in every building; set only in the SQL editor, never from the app |
+| Buildings manager | looks after several buildings | manages the buildings assigned to them; creates buildings (and becomes their manager); gives out committee, tenant, apartment-owner roles in them |
+| Building committee | the committee of one building | manages that building (bank import, payments, tenants, backup, what tenants see); gives out tenant and apartment-owner roles in it |
+| Tenant | each household | the whole board (statuses); payment details with dates for their own apartment |
+| Apartment owner | a landlord | only their apartments: status, the current tenant's payments with dates, the tenant's name and phones |
 | (none) | unlisted email | nothing |
 
-A person can hold a different role in each building. Only the owner links an apartment to a person.
+A person can hold any mix of roles, in several buildings; the roles combine. The view-only "admin" of v2 no longer exists: the other administrator is a committee member with full rights in that building.
+
+Who gives which role: super user: any role, any building, and buildings managers. Manager: committee / tenant / apartment owner in their buildings. Committee: tenant / apartment owner in their own building.
 
 ## Functional requirements
 **Data and dues**
@@ -33,26 +37,26 @@ A person can hold a different role in each building. Only the owner links an apa
 **Access**
 - FR11 Login by emailed link, no passwords. Only emails listed for a building get access.
 - FR12 Roles and building isolation are enforced by the database (row-level security), not just the UI.
-- FR13 Owner-only management of users, roles and apartment links ("משתמשים" tab); the apartment number is editable inline.
-- FR14 A tenant reads their own apartment's payments (month, amount, method, date) through one narrow database function; never notes, bank descriptions, references, phones or accounts, and never the previous tenant's payments.
+- FR13 Role management in the "משתמשים" tab by whoever may give the role (see the hierarchy above); tenants' and apartment owners' apartment numbers are editable inline. Buildings managers are appointed by the super user only ("מנהלי בניינים" tab). The one super user cannot be added or changed even through the app's database access.
+- FR14 A tenant or apartment owner reads their own apartment's payments (month, amount, method, date) through one narrow database function: current tenancy only, never notes, bank descriptions, references or accounts. An apartment owner additionally reads the current tenant's names and phones, again only for their own apartments.
 
 **Compact view (home screen for everyone)**
 - FR15 Three buttons: **הדירה שלי** (default; your apartment card and your payments with dates for the selected year), **חייבים** (who owes, largest first), **הכל** (all apartments, searchable, former tenants collapsed). Year selector. Summary: paid this month, apartments with debt.
 - FR16 Owner and admin: tap any card to see that tenant's payments for the year with dates; links to the admin console tabs (table, bank import, apartments, what tenants see, users); the console links back.
 - FR17 What tenants see about others is an allow-listed snapshot: apartment number, tag (current/former tenant), monthly status, and optionally last name and debt amount (owner setting). Rewritten after every change.
-- FR18 "הדירה שלי" is decided only by the owner's link; no link means the button says so.
+- FR18 "הדירה שלי / הדירות שלי" comes only from the links set in the users tab (tenant or apartment-owner rows); no link means the button says so. An apartment owner who is not also a tenant sees only their own apartments, enforced by the database (a filtered view of the board), not by the screen.
 
 **Backup**
-- FR20 Owner-only one-click backup of the whole building (every table, as stored) from the admin console, and a restore tool that turns the file into SQL for the Supabase editor (fresh restore, or `--replace` for this building only).
+- FR20 One-click backup for whoever manages a building of the whole building (every table, as stored) from the admin console, and a restore tool that turns the file into SQL for the Supabase editor (fresh restore, or `--replace` for this building only).
 
 **Multi-building**
-- FR19 Every row belongs to a building; one email may belong to several buildings (a building switcher appears). New buildings are created by the platform operator in the SQL editor.
+- FR19 Every row belongs to a building; one email may belong to several buildings (a building switcher appears). The super user and buildings managers create buildings in the app (a new building is empty; entering its apartments and tenants in the app is still backlog).
 
 ## Non-functional
 - Hebrew, right-to-left, usable at 360 px without horizontal scroll; dark mode.
 - Hosting: static app on GitHub Pages, Supabase Postgres (EU region), no custom backend servers.
 - Personal data never committed to the public repository; seeds and demo data are git-ignored.
-- Verification: `npm run test:rls` (162 checks: roles x 2 buildings, escalation, cross-building, own-payments function, apartment linking) and `npm run test:seed`.
+- Verification: `npm test` (401 role checks across 3 buildings and 10 kinds of person incl. multi-role, hierarchy and escalation attempts; the migration from v2; backup round trip) and `npm run test:seed`.
 
 ## Out of scope for now / backlog
 - Onboarding screen to enter apartments and tenants for an empty building (today: load from a workbook).

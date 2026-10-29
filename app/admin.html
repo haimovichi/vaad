@@ -46,11 +46,12 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
     <button data-t="share">מה הדיירים רואים</button>
     <button data-t="users">משתמשים</button>
     <button data-t="backup">גיבוי</button>
+    <button data-t="buildings" class="hide">בניינים</button>
+    <button data-t="managers" class="hide">מנהלי בניינים</button>
   </nav>
   <a id="toTenant" class="mute" style="color:var(--acc)" href="tenant.html">תצוגה מצומצמת</a><select id="bsel" class="hide" style="margin-inline-start:auto"></select><span class="mute" id="me"></span><button class="g" id="logout">יציאה</button>
 </header>
 <main>
-<div id="roBanner" class="card hide" style="padding:10px 14px">מצב צפייה בלבד — אפשר לראות הכל, אבל לא לשנות.</div>
 <section id="status">
   <div class="row"><label>שנה: <select id="year"></select></label><span class="mute" id="stNote"></span></div>
   <div class="card"><table id="grid"></table></div>
@@ -100,10 +101,30 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
 <section id="users" class="hide">
   <div class="card" style="padding:14px">
     <h3 style="margin-top:0">מי יכול להיכנס</h3>
-    <div class="mute">כל אחד נכנס עם קישור שנשלח לאימייל שלו. רק כתובות שרשומות כאן מקבלות גישה.<br>בעל הבית — הכל · מנהל — צפייה בלבד בכל המידע · דייר — מצב התשלומים בלבד.</div>
-    <div class="row"><input id="uEmail" type="email" placeholder="אימייל" style="width:220px;direction:ltr"><select id="uRole"><option value="tenant">דייר</option><option value="admin">מנהל (צפייה)</option><option value="owner">בעל הבית</option></select><input id="uApt" type="number" placeholder="דירה" style="width:80px"><input id="uName" placeholder="שם (לא חובה)" style="width:140px"><button class="b" id="uAdd">הוסף</button></div>
+    <div class="mute">כל אחד נכנס עם קישור שנשלח לאימייל שלו. רק כתובות שרשומות כאן מקבלות גישה. אותה כתובת יכולה לקבל כמה תפקידים, והם מצטברים.<br>
+      <b>ועד הבית</b> — ניהול הבניין · <b>דייר</b> — מצב כל הדירות ופרטי הדירה שלו · <b>בעל דירה</b> — רק הדירות שלו, התשלומים של הדייר הנוכחי, ושם וטלפון של הדייר.<br>
+      <span id="grantNote"></span></div>
+    <div class="row"><input id="uEmail" type="email" placeholder="אימייל" style="width:220px;direction:ltr"><select id="uRole"></select><input id="uApt" type="number" min="1" placeholder="דירה" style="width:80px"><input id="uName" placeholder="שם (לא חובה)" style="width:140px"><button class="b" id="uAdd">הוסף</button></div>
   </div>
   <div class="card"><table id="uTable"></table></div>
+</section>
+
+<section id="buildings" class="hide">
+  <div class="card" style="padding:14px">
+    <h3 style="margin-top:0">בניינים</h3>
+    <div class="mute">בניין חדש נוצר ריק, ומי שיצר אותו (מנהל בניינים) הופך למנהל שלו. הוספת דירות ודיירים לבניין חדש נעשית כרגע בטעינת נתונים (ראו README).</div>
+    <div class="row"><input id="bName" placeholder="שם בניין חדש" style="width:220px"><button class="b" id="bAdd">צור בניין</button></div>
+  </div>
+  <div class="card"><table id="bTable"></table></div>
+</section>
+
+<section id="managers" class="hide">
+  <div class="card" style="padding:14px">
+    <h3 style="margin-top:0">מנהלי בניינים</h3>
+    <div class="mute">רק מנהל העל ממנה מנהלי בניינים. מנהל בניינים מנהל את הבניינים שהוקצו לו, ויכול ליצור בניינים חדשים.</div>
+    <div class="row"><input id="mEmail" type="email" placeholder="אימייל" style="width:220px;direction:ltr"><button class="b" id="mAdd">הוסף מנהל בניינים</button></div>
+  </div>
+  <div class="card"><table id="mTable"></table></div>
 </section>
 </main>
 
@@ -126,7 +147,7 @@ const toast=t=>{const e=$('#msg');e.textContent=t;e.style.display='block';setTim
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hide',s.id!==b.dataset.t));
-  if(b.dataset.t==='apts')loadApts();if(b.dataset.t==='share')loadShare();if(b.dataset.t==='users')loadUsers();if(b.dataset.t==='backup')showLastBackup();
+  if(b.dataset.t==='apts')loadApts();if(b.dataset.t==='share')loadShare();if(b.dataset.t==='users')loadUsers();if(b.dataset.t==='backup')showLastBackup();if(b.dataset.t==='buildings')loadBuildings();if(b.dataset.t==='managers')loadManagers();
 });
 
 /* ---- status grid ---- */
@@ -246,22 +267,68 @@ $('#saveShare').onclick=async()=>{
 };
 
 /* ---- users ---- */
-const ROLE={owner:'בעל הבית',admin:'מנהל (צפייה)',tenant:'דייר'};
+const ROLE={committee:'ועד הבית',tenant:'דייר',apt_owner:'בעל דירה'};
+const enc=encodeURIComponent;
+function syncAptField(){$('#uApt').style.display=$('#uRole').value==='committee'?'none':'';}
+$('#uRole').onchange=syncAptField;
 async function loadUsers(){
+  const g=ME.building.grantable;
+  $('#uRole').innerHTML=g.map(r=>`<option value="${r}">${ROLE[r]}</option>`).join('');
+  syncAptField();
+  $('#grantNote').textContent=g.includes('committee')?'אתם יכולים לתת את כל שלושת התפקידים.':'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.';
   const m=await api('GET','/api/members');
   $('#uTable').innerHTML='<tr><th class="l">אימייל</th><th>תפקיד</th><th>דירה</th><th class="l">שם</th><th></th></tr>'+
-   m.map(x=>`<tr><td class="l" dir="ltr">${x.email}</td><td>${ROLE[x.role]}</td><td><input type="number" min="1" style="width:70px" value="${x.apt||''}" data-em="${encodeURIComponent(x.email)}" data-role="${x.role}" data-name="${encodeURIComponent(x.name||'')}" title="מספר הדירה המקושרת לכתובת הזו. ריק = בלי קישור"></td><td class="l">${x.name||''}</td><td>${x.email===ME.email?'':`<button class="g" data-rm="${encodeURIComponent(x.email)}">הסר</button>`}</td></tr>`).join('');
+   m.map(x=>{const can=g.includes(x.role);
+     const aptCell=x.role==='committee'?'':`<input type="number" min="1" style="width:70px" value="${x.apt||''}" data-id="${x.id}" ${can&&!(x.role==='apt_owner')?'':'disabled'} title="הדירה המקושרת. לבעל דירה — מחיקה והוספה מחדש">`;
+     return`<tr><td class="l" dir="ltr">${x.email}</td><td>${ROLE[x.role]}</td><td>${aptCell}${x.role==='apt_owner'?x.apt:''}</td><td class="l">${x.name||''}</td><td>${can&&x.email!==ME.email?`<button class="g" data-rm="${x.id}">הסר</button>`:''}</td></tr>`}).join('');
 }
 $('#uAdd').onclick=async()=>{
-  try{await api('PUT','/api/member',{email:$('#uEmail').value,role:$('#uRole').value,apt:$('#uApt').value,name:$('#uName').value});
+  try{await api('POST','/api/member',{email:$('#uEmail').value,role:$('#uRole').value,apt:$('#uApt').value,name:$('#uName').value});
     ['#uEmail','#uApt','#uName'].forEach(i=>$(i).value='');toast('נוסף');loadUsers()}catch(e){toast(e.message)}
 };
 $('#uTable').onchange=async e=>{
-  const i=e.target;if(!i.dataset.em)return;
-  try{await api('PUT','/api/member',{email:decodeURIComponent(i.dataset.em),role:i.dataset.role,apt:i.value,name:decodeURIComponent(i.dataset.name)});toast(i.value?`קושרה דירה ${i.value}`:'הקישור הוסר')}
+  const i=e.target;if(!i.dataset.id)return;
+  try{await api('PUT','/api/member',{id:i.dataset.id,apt:i.value});toast(i.value?`קושרה דירה ${i.value}`:'הקישור הוסר')}
   catch(err){toast(err.message);loadUsers()}
 };
-$('#uTable').onclick=async e=>{const r=e.target.dataset.rm;if(!r)return;if(!confirm('להסיר את הגישה?'))return;await api('DELETE','/api/member/'+r);loadUsers()};
+$('#uTable').onclick=async e=>{const r=e.target.dataset.rm;if(!r)return;if(!confirm('להסיר את התפקיד?'))return;
+  try{await api('DELETE','/api/member/'+r);loadUsers()}catch(err){toast(err.message)}};
+
+/* ---- buildings (super user and buildings managers) ---- */
+function loadBuildings(){
+  $('#bTable').innerHTML='<tr><th>#</th><th class="l">שם</th><th class="l">התפקידים שלכם</th><th></th></tr>'+
+   ME.memberships.map(m=>`<tr><td>${m.id}</td><td class="l"><input value="${m.name.replace(/"/g,'&quot;')}" data-rename="${m.id}" ${m.manage?'':'disabled'}></td><td class="l">${m.roles.map(r=>Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${m.id===ME.building.id?'<span class="mute">פתוח עכשיו</span>':`<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
+}
+$('#bAdd').onclick=async()=>{
+  try{const b=await api('POST','/api/building',{name:$('#bName').value});Vaad.choose(b.id);Vaad.go('index.html')}catch(e){toast(e.message)}
+};
+$('#bTable').onchange=async e=>{
+  const id=e.target.dataset.rename;if(!id)return;
+  try{await api('PUT','/api/building',{id,name:e.target.value});const m=ME.memberships.find(x=>String(x.id)===id);if(m)m.name=e.target.value.trim();toast('השם עודכן')}catch(err){toast(err.message);loadBuildings()}
+};
+$('#bTable').onclick=e=>{const id=e.target.dataset.open;if(id){Vaad.choose(id);Vaad.go('index.html')}};
+
+/* ---- buildings managers (super user only) ---- */
+async function loadManagers(){
+  const list=await api('GET','/api/managers');
+  const names=Object.fromEntries(ME.memberships.map(m=>[m.id,m.name]));
+  $('#mTable').innerHTML='<tr><th class="l">אימייל</th><th class="l">הבניינים שלו</th><th>הוסף בניין</th><th></th></tr>'+
+   list.map(x=>`<tr><td class="l" dir="ltr">${x.email}</td><td class="l">${x.buildings.map(b=>`<span class="chip">${names[b]||b} <a href="#" data-mb="${enc(x.email)}~${b}">✕</a></span>`).join('')||'<span class="mute">אין בניינים</span>'}</td>`+
+   `<td><select data-addb="${enc(x.email)}"><option value="">בחרו…</option>${ME.memberships.filter(m=>!x.buildings.includes(m.id)).map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></td>`+
+   `<td><button class="g" data-rmm="${enc(x.email)}">הסר מנהל</button></td></tr>`).join('');
+}
+$('#mAdd').onclick=async()=>{try{await api('POST','/api/manager',{email:$('#mEmail').value});$('#mEmail').value='';toast('נוסף');loadManagers()}catch(e){toast(e.message)}};
+$('#mTable').onchange=async e=>{
+  const em=e.target.dataset.addb;if(!em||!e.target.value)return;
+  try{await api('POST','/api/manager-building',{email:decodeURIComponent(em),building_id:e.target.value});loadManagers()}catch(err){toast(err.message)}
+};
+$('#mTable').onclick=async e=>{
+  e.preventDefault&&e.target.dataset.mb&&e.preventDefault();
+  try{
+    if(e.target.dataset.mb){await api('DELETE','/api/manager-building/'+e.target.dataset.mb);loadManagers()}
+    if(e.target.dataset.rmm&&confirm('להסיר את מנהל הבניינים?')){await api('DELETE','/api/manager/'+e.target.dataset.rmm);loadManagers()}
+  }catch(err){toast(err.message)}
+};
 $('#logout').onclick=()=>Vaad.signOut();
 
 /* ---- backup ---- */
@@ -290,18 +357,16 @@ $('#dlBackup').onclick=async()=>{
 (async()=>{
   try{
     ME=await Vaad.whoami();
-    if(!ME||!ME.building||!['owner','admin'].includes(ME.role))return Vaad.go('index.html');
-    RO=ME.role!=='owner';
-    const store=Vaad.store(ME.building.id);
+    if(!ME||!ME.building||!ME.building.manage)return Vaad.go('index.html');   // the console is for whoever manages the building
+    RO=false;
+    const store=Vaad.store(ME.building.id,ME);
     const db=await store.load();
-    SVC=VaadLib.service.createService(db,store,ME.role);
-    $('#me').textContent=`${ME.building.name} · ${ME.email} · ${ROLE[ME.role]}`;
+    SVC=VaadLib.service.createService(db,store,Vaad.perms(ME));
+    $('#me').textContent=`${ME.building.name} · ${ME.email} · ${ME.building.roles.map(r=>Vaad.ROLE_LABEL[r]).join(', ')}`;
     Vaad.mountSwitcher($('#bsel'),ME);
     $('#toTenant').href='tenant.html'+Vaad.keep;
-    if(RO){
-      $('#roBanner').classList.remove('hide');
-      document.querySelectorAll('nav button').forEach(b=>{if(['import','share','users','backup'].includes(b.dataset.t))b.classList.add('hide')});
-    }
+    if(ME.isSuper||ME.isManager)document.querySelector('nav button[data-t="buildings"]').classList.remove('hide');
+    if(ME.isSuper)document.querySelector('nav button[data-t="managers"]').classList.remove('hide');
     await loadGrid();
     const want=location.hash.slice(1);const tb=want&&document.querySelector(`nav button[data-t="${want}"]:not(.hide)`);if(tb)tb.click();
   }catch(e){document.querySelector('main').innerHTML=`<div class="card" style="padding:16px">שגיאה בטעינה: ${e.message}</div>`}

@@ -47,5 +47,18 @@
 | S5.3 Multi-building schema | Isolation tested across two buildings (FR19) | Done, 162 checks |
 | S5.4 Backup / export (FR20) | Owner-only one-click download of every table of the building; restore script rebuilds it exactly, refuses a second run, and `--replace` leaves other buildings alone | Done: `test:backup` (8 checks), owner download and admin refusal verified in demo mode, export queries checked on the live database. Backlog: first real download from the live site |
 
+## E6 Five-role model (2026-10-29)
+| Story | Acceptance | Status |
+|---|---|---|
+| S6.1 One super user, only from the SQL editor | A second row cannot be added, even by the SQL editor; no app user can read, add or delete it | Done, tested |
+| S6.2 Buildings manager | Manages assigned buildings only; creates buildings and becomes their manager; cannot appoint managers | Done, tested; create flow verified in demo mode |
+| S6.3 Building committee | Full management of one building; cannot give the committee role; cannot touch other buildings | Done, tested |
+| S6.4 Multi-role people | Roles combine across and within buildings (e.g. committee + tenant + apartment owner) | Done, tested and verified in demo mode |
+| S6.5 Apartment owner | Sees only their apartments: status, current tenant's payments with dates, tenant name and phones; cannot read the whole board | Done: database functions tested (`my_snapshot`, `apt_payments`, `apt_tenants`), screen verified in demo mode |
+| S6.6 Grant hierarchy | Super > manager > committee as in the PRD; escalation attempts fail | Done, tested |
+| S6.7 Migration of the live database | Old owner -> committee (+ apartment owner for their apartment); old view-only admin rows block the migration; result identical to a fresh install | Done: `test:migration`; applied to the live database and verified by impersonation |
+| S6.8 Console: buildings and managers tabs, role-aware users tab | Only offers what the person may do | Done, verified in demo mode |
+| S6.9 Real-login check of the new roles on the live site | Owner login opens correctly; add a test tenant and a test apartment owner and look at their screens | Backlog: after the new app is pushed |
+
 ## Backlog (from the PRD)
 Empty-building onboarding screen · server-side matching and allocation · Capacitor wrapper for Google Play and the App Store with push notifications · payment reminders · expense screens · dates for historic Excel payments.

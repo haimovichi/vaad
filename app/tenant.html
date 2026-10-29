@@ -49,6 +49,10 @@ table.p td{padding:5px 2px;border-top:1px solid var(--line)}
 table.p td.n{font-variant-numeric:tabular-nums;font-weight:600}
 table.p tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .foot{color:var(--mute);font-size:12px;margin-top:6px}
+.res{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
+.res small{display:block;color:var(--mute);font-size:12px}
+.res:first-of-type{border-top:0}
+a.tel{color:var(--acc);text-decoration:none;direction:ltr;unicode-bidi:embed;white-space:nowrap}
 details.old{margin-top:12px}
 details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 2px}
 .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin:16px 0 0}
@@ -94,31 +98,37 @@ const MF=['ינואר','פברואר','מרץ','אפריל','מאי','יוני',
 const calc=VaadLib.calc;
 
 const ME=await Vaad.whoami();
-if(!ME||!ME.building||!['tenant','owner','admin'].includes(ME.role)){Vaad.go('index.html');return}
-const STAFF=ME.role==='owner'||ME.role==='admin';
-const store=Vaad.store(ME.building.id);
+if(!ME||!ME.building){Vaad.go('index.html');return}
+const BLD=ME.building;
+const STAFF=BLD.manage;            // committee, buildings manager or super user: the building's full data
+const BOARD=BLD.seesBoard;         // may see every apartment's status (managers and tenants)
+const myApts=BLD.linkedApts;       // apartments the owner of the building linked to this login (as tenant or apartment owner)
+const store=Vaad.store(BLD.id,ME);
 let DB=null,SNAP=null;
-try{ if(STAFF)DB=await store.load(); else SNAP=await store.getSnapshot(); }
+try{ if(STAFF)DB=await store.load(); else SNAP=await store.getBoard(); }
 catch(e){document.body.innerHTML='<div class="wrap">שגיאה בטעינה: '+e.message+'</div>';return}
 if(!STAFF&&!SNAP){document.body.innerHTML='<div class="wrap">עדיין לא פורסם מידע. נסו שוב מאוחר יותר.</div>';return}
 
 /* ---- header ---- */
-$('#who').textContent=ME.email;
+$('#who').textContent=ME.email+' · '+BLD.roles.map(r=>Vaad.ROLE_LABEL[r]).join(', ');
 $('#logout').onclick=e=>{e.preventDefault();Vaad.signOut()};
-$('#title').textContent=STAFF?ME.building.name:SNAP.title;
+$('#title').textContent=STAFF?BLD.name:SNAP.title;
 $('#updated').textContent=STAFF?'':'עודכן '+SNAP.updated.split('-').reverse().join('/');
 if(ME.memberships.length>1){const sel=document.createElement('select');sel.style.cssText='font:inherit;padding:2px 6px;margin-inline-end:8px';$('#who').before(sel);Vaad.mountSwitcher(sel,ME)}
 if(STAFF){
-  const L=ME.role==='owner'
-    ?[['מצב תשלומים (טבלה)','admin.html'],['ייבוא מהבנק','admin.html#import'],['דירות ודיירים','admin.html#apts'],['מה הדיירים רואים','admin.html#share'],['משתמשים','admin.html#users'],['גיבוי','admin.html#backup']]
-    :[['מצב תשלומים (טבלה)','admin.html'],['דירות ודיירים','admin.html#apts']];
+  const L=[['מצב תשלומים (טבלה)','admin.html'],['ייבוא מהבנק','admin.html#import'],['דירות ודיירים','admin.html#apts'],['מה הדיירים רואים','admin.html#share'],['משתמשים','admin.html#users'],['גיבוי','admin.html#backup']];
+  if(ME.isSuper||ME.isManager)L.push(['בניינים','admin.html#buildings']);
+  if(ME.isSuper)L.push(['מנהלי בניינים','admin.html#managers']);
   $('#tools').innerHTML=L.map(([t,h])=>`<a href="${h.replace('.html','.html'+Vaad.keep)}">${t}</a>`).join('');
 }
 
 /* ---- data ---- */
 const now=STAFF?calc.fromMi(calc.nowMi()):SNAP.now;
 const years=STAFF?Array.from({length:now.y-calc.fromMi(calc.START).y+1},(_,i)=>calc.fromMi(calc.START).y+i):SNAP.years;
-let year=now.y,tab='mine',openId=null;
+let year=now.y,tab=myApts.length?'mine':'debt',openId=null;
+const tabEl=t=>document.querySelector(`.tab[data-t="${t}"]`);
+tabEl('mine').hidden=!myApts.length;tabEl('mine').textContent=myApts.length>1?'הדירות שלי':'הדירה שלי';
+tabEl('debt').hidden=!BOARD;tabEl('all').hidden=!BOARD;   // an apartment owner who is not also a tenant sees only their own apartments
 for(const y of years)$('#year').add(new Option(y,y));$('#year').value=year;
 $('#mlabels').innerHTML=MN.map(m=>`<span>${m[0]}</span>`).join('');
 
@@ -127,16 +137,26 @@ function rowsFor(y){
     const g=calc.grid(DB,y);const cnt={};g.forEach(r=>cnt[r.apt]=(cnt[r.apt]||0)+1);
     return g.map(r=>({apt:r.apt,key:r.key,name:r.name,tag:cnt[r.apt]>1?(r.left?'דייר קודם':'דייר נוכחי'):undefined,left:r.left,debt:r.debt,months:r.months.map(c=>c.status)}));
   }
-  return SNAP.grids[y].map(r=>({...r,left:r.tag==='דייר קודם'}));
+  return (SNAP.grids[y]||[]).map(r=>({...r,left:r.tag==='דייר קודם'}));
 }
 function staffPayments(row,y){
   const ts=calc.tenancies(DB);const t=ts.find(x=>x.key===row.key);
   return DB.payments.filter(p=>p.y===y&&(ts.find(x=>x.key===p.key)||calc.tenancyAt(ts,p.apt,calc.mi(p.y,p.m)))===t)
     .map(p=>({y:p.y,m:p.m,amount:p.amount,method:p.method,date:p.date})).sort((a,b)=>a.m-b.m||String(a.date).localeCompare(String(b.date)));
 }
-// the apartment shown under "הדירה שלי": only the one the owner linked to this login (users tab)
-const myApt=ME.apt||null;
-if(!myApt)tab=STAFF?'debt':'all';
+// current tenants (names, phones) of the apartments this person owns
+async function tenantsOfMyApartments(){
+  const owned=new Set(BLD.ownerApts);
+  if(!owned.size)return [];
+  if(STAFF)return DB.residents.filter(r=>owned.has(r.apt)&&r.status!=='עזב');
+  return store.getAptTenants();
+}
+const telLink=p=>p?`<a class="tel" href="tel:${p.replace(/[^\d+]/g,'')}">${p}</a>`:'';
+function tenantsBox(list,apt){
+  const here=list.filter(r=>r.apt===apt);
+  if(!here.length)return'<div class="pays"><h3>הדייר בדירה</h3><div class="foot">אין דייר רשום בדירה כרגע.</div></div>';
+  return`<div class="pays"><h3>הדייר בדירה</h3>`+here.map(r=>`<div class="res"><div>${r.first} ${r.last}${r.first2?` ו${r.first2} ${r.last2||r.last}`:''}<small>${r.role||''}</small></div><div>${telLink(r.phone1)}${r.phone2?'<br>'+telLink(r.phone2):''}</div></div>`).join('')+`</div>`;
+}
 
 /* ---- pieces ---- */
 const isOwing=r=>r.debt>0||(r.debt===undefined&&r.months.some(s=>s==='unpaid'||s==='partial'));
@@ -184,25 +204,31 @@ async function render(){
   const idx=now.m-1;
   const paidNow=current.filter(r=>['paid','prepaid'].includes(r.months[idx])).length;
   const owing=new Set(all.filter(isOwing).map(r=>r.apt)).size;
-  $('#sum').innerHTML=year===now.y?`<div><small>שילמו ${MF[idx]}</small><b>${paidNow} מתוך ${current.length}</b></div><div><small>דירות עם חוב</small><b class="${owing?'bad':''}">${owing}</b></div>`:'';
+  $('#sum').innerHTML=BOARD&&year===now.y?`<div><small>שילמו ${MF[idx]}</small><b>${paidNow} מתוך ${current.length}</b></div><div><small>דירות עם חוב</small><b class="${owing?'bad':''}">${owing}</b></div>`:'';
   $('#q').hidden=tab!=='all';
-  $('#mlabels').style.display=tab==='mine'&&!myApt?'none':'';
+  $('#mlabels').style.display=tab==='mine'&&!myApts.length?'none':'';
   const my=++seq;
   $('#oldBox').style.display='none';
 
   if(tab==='mine'){
-    if(!myApt){
-      $('#list').innerHTML=`<div class="empty">הדירה שלכם עדיין לא מקושרת לחשבון.<br>${ME.role==='owner'?'אפשר לקשר אותה בלשונית "משתמשים".':'בקשו מבעל הבית לקשר אותה.'}</div>`;
+    if(!myApts.length){
+      $('#list').innerHTML=`<div class="empty">אין דירה מקושרת לחשבון הזה.<br>${BLD.grantable.includes('tenant')?'אפשר לקשר דירה בלשונית "משתמשים".':'בקשו מוועד הבית לקשר את הדירה שלכם.'}</div>`;
       return;
     }
-    const mine=current.filter(r=>r.apt===myApt);
-    if(!mine.length){$('#list').innerHTML='<div class="empty">לא נמצאה הדירה.</div>';return}
-    $('#list').innerHTML=mine.map(r=>card(r,false)).join('')+'<div id="pays"><div class="pays foot">טוען תשלומים…</div></div>';
-    try{
-      const list=STAFF?staffPayments(mine[0],year):await store.getAptPayments(myApt,year);
-      if(my!==seq)return;
-      $('#pays').innerHTML=payTable(list,'התשלומים שלי ב-'+year);
-    }catch(e){if(my===seq)$('#pays').innerHTML='<div class="pays foot">לא הצלחנו לטעון תשלומים: '+e.message+'</div>'}
+    const rowOf=a=>current.find(r=>r.apt===a);
+    $('#list').innerHTML=myApts.map(a=>`<div class="aptsec" data-apt="${a}">${rowOf(a)?card(rowOf(a),false):`<div class="empty">דירה ${a} לא נמצאה</div>`}<div class="tn"></div><div class="pp"><div class="pays foot">טוען תשלומים…</div></div></div>`).join('');
+    let tenants=[],tenErr='';
+    try{ tenants=await tenantsOfMyApartments(); }catch(e){ tenErr=e.message; }
+    for(const a of myApts){
+      const sec=document.querySelector(`.aptsec[data-apt="${a}"]`);if(!sec)continue;
+      if(BLD.ownerApts.includes(a))sec.querySelector('.tn').innerHTML=tenErr?`<div class="pays foot">לא הצלחנו לטעון את פרטי הדייר: ${tenErr}</div>`:tenantsBox(tenants,a);
+      const title=BLD.tenantApts.includes(a)?'התשלומים שלי ב-'+year:'תשלומי הדייר הנוכחי ב-'+year;
+      try{
+        const list=STAFF?(rowOf(a)?staffPayments(rowOf(a),year):[]):await store.getAptPayments(a,year);
+        if(my!==seq)return;
+        sec.querySelector('.pp').innerHTML=payTable(list,title);
+      }catch(e){if(my===seq)sec.querySelector('.pp').innerHTML='<div class="pays foot">לא הצלחנו לטעון תשלומים: '+e.message+'</div>'}
+    }
     return;
   }
 

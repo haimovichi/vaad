@@ -34,6 +34,8 @@ button.g{background:none;color:var(--mute);border:1px solid var(--line)}
 
   <div id="pick" class="hide"><p>לאיזה בניין להיכנס?</p><div id="pickList"></div></div>
 
+  <form id="newb" class="hide"><p>אין לך עדיין בניין. צרו בניין חדש (תהיו המנהלים שלו):</p><input id="bname" required placeholder="שם הבניין" style="direction:rtl;text-align:right"><button>צור בניין</button></form>
+
   <div id="noaccess" class="hide"><p>הכתובת <b id="naEmail" dir="ltr"></b> עדיין לא רשומה במערכת. בקשו מהוועד להוסיף אתכם, ואז רעננו את הדף.</p><button class="g" id="out">התנתקות</button></div>
   <div id="error" class="msg err"></div>
 </div>
@@ -42,19 +44,22 @@ button.g{background:none;color:var(--mute);border:1px solid var(--line)}
 <script src="common.js"></script>
 <script>
 const $=s=>document.querySelector(s);
-const show=id=>{for(const x of ['loading','login','sent','noaccess','pick'])$('#'+x).classList.toggle('hide',x!==id)};
+const show=id=>{for(const x of ['loading','login','sent','noaccess','pick','newb'])$('#'+x).classList.toggle('hide',x!==id)};
 (async()=>{
   try{
     const me=await Vaad.whoami();
     if(!me){show('login');return}
     if(me.memberships.length>1&&!me.building){$('#pickList').innerHTML=me.memberships.map(m=>`<button class="g" data-b="${m.id}">${m.name}</button>`).join('');show('pick');return}
-    if(me.role==='owner'||me.role==='admin')return Vaad.go('tenant.html');
-    if(me.role==='tenant')return Vaad.go('tenant.html');
+    // every role lands on the compact view; the console is one link away for whoever manages the building
+    if(me.building)return Vaad.go('tenant.html');
+    if(!me.memberships.length&&(me.isSuper||me.isManager)){show('newb');return}
     $('#naEmail').textContent=me.email;show('noaccess');
   }catch(e){show('login');$('#error').textContent=e.message}
 })();
 $('#login').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';
   try{await Vaad.signIn($('#email').value.trim());$('#sentTo').textContent=$('#email').value.trim();show('sent')}catch(err){$('#error').textContent=err.message}};
+$('#newb').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';
+  try{const{data,error}=await Vaad.client().rpc('create_building',{nm:$('#bname').value});if(error)throw error;Vaad.choose(data);location.reload()}catch(err){$('#error').textContent=err.message}};
 $('#pickList').onclick=e=>{const b=e.target.dataset.b;if(b){Vaad.choose(b);location.reload()}};
 $('#again').onclick=()=>show('login');
 $('#out').onclick=()=>Vaad.signOut();

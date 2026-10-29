@@ -1,13 +1,14 @@
 // Turns a backup file (downloaded from the admin console, "גיבוי") into SQL for the Supabase SQL editor.
 // Usage:  node scripts/restore-backup.js vaad-backup-b1-2026-10-29.json [--replace]
 //   (default)  restore into a database that does not have this building yet (fails safely if rows exist)
+// Backups taken before the five-role model (members with role owner/admin) cannot be restored as they are.
 //   --replace  first delete this building's rows (other buildings are untouched), then restore
 // Output: supabase/restore.sql  (contains personal data; git-ignored — never commit or share it)
 const fs = require('fs');
 const path = require('path');
 
 const ORDER = ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot'];
-const IDENTITY = ['residents', 'owners', 'tariffs', 'payments', 'expenses']; // "generated always" id columns
+const IDENTITY = ['residents', 'owners', 'tariffs', 'payments', 'expenses', 'members']; // "generated always" id columns
 
 function lit(v) {
   if (v === null || v === undefined) return 'null';

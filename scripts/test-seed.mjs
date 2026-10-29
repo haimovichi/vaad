@@ -12,12 +12,12 @@ for (const t of ['buildings', 'apartments', 'residents', 'owners', 'tariffs', 'p
 }
 const s = (await db.query('select sum(amount)::int t from payments')).rows[0].t; console.log('payments total', s);
 await db.exec('begin'); await db.exec(`select set_config('request.jwt.claims','{"email":"owner@example.com"}',true)`); await db.exec('set local role authenticated');
-console.log('owner sees payments:', (await db.query('select count(*)::int n from payments')).rows[0].n);
+console.log('committee sees payments:', (await db.query('select count(*)::int n from payments')).rows[0].n);
 await db.exec('rollback');
 const snap = (await db.query('select data from snapshot')).rows[0].data;
 const txt = JSON.stringify(snap);
 // a second building seeded into the same database must stay invisible to the first building's owner
-await db.exec("insert into buildings(id, name) values (2, 'Other'); insert into members(building_id, email, role) values (2, 'other@example.com', 'owner'); insert into snapshot(building_id, data) values (2, '{}');");
+await db.exec("insert into buildings(id, name) values (2, 'Other'); insert into members(building_id, email, role) values (2, 'other@example.com', 'committee'); insert into snapshot(building_id, data) values (2, '{}');");
 await db.exec('begin'); await db.exec(`select set_config('request.jwt.claims','{"email":"owner@example.com"}',true)`); await db.exec('set local role authenticated');
 console.log('owner sees building 2 snapshot:', (await db.query('select count(*)::int n from snapshot where building_id = 2')).rows[0].n, '(expect 0)');
 await db.exec('rollback');

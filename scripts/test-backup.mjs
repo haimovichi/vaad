@@ -24,7 +24,7 @@ await src.exec(`
     (1,'8-עדות',8,2026,4,1140.25,'העברה',null,'',null,'excel',null),(2,'3-x',3,2026,1,1,'x',null,'',null,'manual',null);
   insert into expenses(building_id, y, m, d, category, descr, amount) values (1,2026,5,3,'חשמל','חשבון',2934.33);
   insert into meta(building_id, name, value) values (1,'aliases','{"נפתלי נאור":26,"o''brien":3}'),(1,'bankSeen','{"k1":true}'),(1,'settings','{"title":"ועד","showNames":false,"showDebt":true}');
-  insert into members(building_id, email, role, apt, name) values (1,'owner@x.com','owner',18,'Owner'),(1,'t@x.com','tenant',8,null),(2,'o2@x.com','owner',null,'O2');
+  insert into members(building_id, email, role, apt, name) values (1,'c@x.com','committee',null,'Committee'),(1,'ao@x.com','apt_owner',18,'Owner of 18'),(1,'t@x.com','tenant',8,null),(2,'o2@x.com','committee',null,'O2');
   insert into snapshot(building_id, data) values (1,'{"updated":"2026-10-29","grids":{}}'),(2,'{}');
 `);
 

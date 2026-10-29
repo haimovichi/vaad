@@ -1,72 +1,78 @@
 # ועד הבית — building committee payments
 
-A static web app (GitHub Pages) + a Supabase database with three roles:
+A static web app (GitHub Pages) + a Supabase database with five roles.
 
 | Role | Who | Can |
 |---|---|---|
-| owner | you | everything: import bank files, edit, manage users, control what tenants see |
-| admin | the other building administrator | read-only, sees all data including phones |
-| tenant | each household | read-only payment status (apartment, month status; no phones, accounts or bank rows) |
+| **Super user** | exactly one person (the platform owner) | everything, in every building. Set only in the SQL editor; nobody can grant it from the app |
+| **Buildings manager** | someone who looks after several buildings | manages the buildings assigned to them; can create new buildings (and becomes their manager); gives out committee, tenant and apartment-owner roles there |
+| **Building committee** | the committee of one building | manages that building: bank import, payments, tenants, backup, what tenants see; gives out tenant and apartment-owner roles there |
+| **Tenant** | each household | the whole building board (statuses), and payment details with dates for their own apartment |
+| **Apartment owner** | a landlord | only their apartments: status, the current tenant's payments with dates, and the tenant's name and phones |
 
-Roles are enforced by the database (`supabase/schema.sql`, 136 checks in `npm run test:rls`), not just hidden in the UI.
+One email can hold any mix of roles, in one or several buildings; the roles combine. Roles are enforced by the database (`supabase/schema.sql`, over 400 checks in `npm run test:rls`), not just hidden in the UI. Only the people above the role in the list can give it out, and only inside their own buildings.
 
-**Multi-building:** every row belongs to a building, and roles are per building. One email can be owner of one building and a tenant of another; the app asks which to open. A building's people can never read or write another building's data.
-
-Everyone logs in with an emailed link (no passwords). Only emails listed in the app's "משתמשים" tab get access.
+Everyone logs in with an emailed link (no passwords). Only emails that have a role get access.
 
 ## One-time setup
 
 **1. Supabase (free)** — https://supabase.com → New project.
-1. SQL Editor → paste `supabase/schema.sql` → Run.
-2. Load your data: `npm run seed:sql -- your@email.com` (the email you will log in with; it becomes the owner of building 1), then paste `supabase/seed.sql` → Run.
+1. SQL Editor → paste `supabase/schema.sql` → Run. (Re-runnable. If you are upgrading a database from the earlier owner/admin/tenant version, run `supabase/migrate-roles.sql` first, then `schema.sql`.)
+2. Make yourself the super user (once, in the SQL editor; your email is deliberately not in the repository):
+   ```sql
+   insert into public.super_users (email) values ('you@example.com');
+   ```
+3. Load your data: `npm run seed:sql -- committee-member@email.com` (this email becomes a committee member of building 1), then paste `supabase/seed.sql` → Run.
    (Data comes from `data/db.json`, built from your Excel by `npm run seed:excel`. `seed.sql` has personal data and is git-ignored.)
-3. Authentication → Providers: Email on, **Confirm email on**.
-4. Authentication → URL Configuration: Site URL = your GitHub Pages address (step 2), and add the same address under Redirect URLs.
-5. Authentication → SMTP: **set up custom SMTP** (e.g. Resend or Gmail). Supabase's built-in email allows only a few messages per hour, which is not enough for 26 households logging in.
-6. Project settings → API: copy *Project URL* and the *anon public* key into `app/config.js`.
+4. Authentication → Providers: Email on, **Confirm email on**.
+5. Authentication → URL Configuration: Site URL = your GitHub Pages address, and add the same address under Redirect URLs.
+6. Authentication → SMTP: **set up custom SMTP** (e.g. Gmail with an app password, or Resend). Supabase's built-in email allows only a few messages per hour.
+7. Project settings → API: copy *Project URL* and the *anon public* key into `app/config.js`.
 
-**2. GitHub Pages**
-1. Create a GitHub repo and push this folder (the repo holds code only; `data/`, `seed.sql`, `*.xlsx` are ignored). Use a public repo — Pages on private repos needs a paid plan. The anon key is public by design.
-2. Settings → Pages → Source: **GitHub Actions**. The workflow in `.github/workflows/pages.yml` publishes `app/` on every push to `main`.
+**2. GitHub Pages** — push this folder to a public repo (code only; `data/`, `seed.sql`, `*.xlsx`, backups are ignored). Settings → Pages → Source: **GitHub Actions**. `.github/workflows/pages.yml` publishes `app/` on every push to `main`.
 
-**3. Invite people** — log in as owner, open "משתמשים", add each tenant's email with their apartment number, and the other administrator as "מנהל (צפייה)".
+**3. Invite people** — in the console's **משתמשים** tab add each email with a role and, for tenants and apartment owners, the apartment number. The super user appoints buildings managers in **מנהלי בניינים**.
 
-## Adding another building
-The platform operator (you) creates buildings in the Supabase SQL editor. Either load an Excel-based workbook as building 2:
+## Who can give out which role
+| | committee | tenant | apartment owner | buildings manager |
+|---|---|---|---|---|
+| Super user | any building | any building | any building | yes |
+| Buildings manager | their buildings | their buildings | their buildings | no |
+| Building committee | no | own building | own building | no |
+
+## Adding buildings
+The super user and buildings managers can create a building in the console (**בניינים**). A new building is empty: entering its apartments and tenants in the app is not built yet, so for now load it from a workbook:
 ```
 npm run seed:excel                                   # after pointing data/source.xlsx at the other workbook
-npm run seed:sql -- other-owner@email.com 2 "Building name"
+npm run seed:sql -- committee@email.com 2 "Building name"
 ```
-or create it empty and assign its owner:
-```sql
-insert into buildings (name) values ('Building name') returning id;
-insert into members (building_id, email, role) values (<id>, 'owner@email.com', 'owner');
-```
-That owner then manages their own tenants and administrators in "משתמשים". An in-app screen for entering apartments and tenants of an empty building is not built yet.
 
 ## The compact view (everyone's home screen)
-Three buttons: **הדירה שלי** (your apartment's card and its payments with dates for the selected year), **חייבים** (who owes), **הכל** (all apartments). Tenants see statuses for everyone and payment details only for their own apartment (served by the `apt_payments` database function, which returns just month, amount, method and date). Owners and the view-only administrator tap any card to see that tenant's payments, and get links to the admin console tabs (table, bank import, apartments, what tenants see, users). Which apartment is "mine" is decided only by the owner, in the "משתמשים" tab (the apartment field next to each email; empty = not linked). Only the owner can link, change or remove an apartment link, for tenants, apartment owners and the administrator alike; this is enforced by the database and covered by tests.
+Buttons: **הדירה שלי / הדירות שלי** (each apartment linked to you, with your payments with dates for the selected year; apartment owners also see the current tenant's name and phones), **חייבים** (who owes) and **הכל** (all apartments). Tenants and managers see the whole board; an apartment owner who is not also a tenant sees only their own apartments. Whoever manages the building taps any card to see that tenant's payments and gets links to the console tabs. The link between a person and an apartment is set in **משתמשים** by someone allowed to give that role.
 Payments recorded in the old Excel have no payment date, only the month they were for; payments imported from the bank or added in the app from now on carry the date.
 
 ## Monthly routine
 Log in → "ייבוא מהבנק" → choose the bank `.xlsx` → review yellow rows → save. Tenants see the update immediately.
 
 ## Backup and restore
-The free Supabase plan has no downloadable backups, so the owner has a **גיבוי** tab (admin console, owner only): one click downloads a JSON file with every table of the building (apartments, residents, owners, tariffs, payments, expenses, settings, users, tenant snapshot). Do it monthly after the bank update. The file contains phones and account numbers; keep it private (these file names are git-ignored).
+The free Supabase plan has no downloadable backups, so whoever manages a building has a **גיבוי** tab: one click downloads a JSON file with every table of that building. Do it monthly after the bank update. The file contains phones and account numbers; keep it private (these file names are git-ignored).
 
 To restore, turn the file into SQL and paste it into the Supabase SQL editor:
 ```
 npm run restore -- vaad-backup-b1-2026-10-29.json            # into a database that lacks this building (refuses if rows exist)
 npm run restore -- vaad-backup-b1-2026-10-29.json --replace   # replace this building's current data (other buildings untouched)
 ```
-The SQL is written to `supabase/restore.sql` (git-ignored). `npm run test:backup` proves a backup restores every row exactly.
+The SQL is written to `supabase/restore.sql` (git-ignored). Backups taken before the five-role model cannot be restored as they are. `npm run test:backup` proves a backup restores every row exactly.
 
 ## Try it locally without Supabase
 ```
-npm run dev     # http://localhost:3000/index.html?demo=owner   (also demo=admin, demo=tenant)
+npm run dev     # http://localhost:3000/index.html?demo=committee
 ```
-Demo mode keeps changes in memory only.
+Other demos: `demo=super`, `manager`, `tenant`, `apt_owner`, `multi` (committee + tenant + apartment owner). Demo mode keeps changes in memory only.
+
+## Tests
+`npm test` runs the role tests, the migration test and the backup test (in-process Postgres, no Supabase needed). `npm run test:seed` checks the generated seed.
 
 ## Notes
 - Free Supabase projects pause after a week of no activity; resume from the dashboard if that happens.
-- `docs/` has the brief, PRD and architecture notes.
+- `docs/` has the brief, PRD, architecture notes and the stories list.

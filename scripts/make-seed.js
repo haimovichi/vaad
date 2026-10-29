@@ -1,5 +1,7 @@
 // data/db.json (from the Excel workbook) -> supabase/seed.sql, to paste into the Supabase SQL editor once.
-// Usage: node scripts/make-seed.js owner@example.com [building-id] [building name]
+// Usage: node scripts/make-seed.js committee-member@example.com [building-id] [building name]
+// That email becomes a building committee member of the building. The one super user is set separately, in the SQL editor:
+//   insert into public.super_users (email) values ('you@example.com');
 // Loads the data as one building (default id 1). To add another building later, run with a different id.
 // The output contains personal data. It is git-ignored: never commit or share it.
 const fs = require('fs');
@@ -7,7 +9,7 @@ const path = require('path');
 const { snapshot } = require('../lib/snapshot');
 
 const owner = (process.argv[2] || '').trim().toLowerCase();
-if (!/^\S+@\S+\.\S+$/.test(owner)) { console.error('usage: node scripts/make-seed.js owner@example.com'); process.exit(1); }
+if (!/^\S+@\S+\.\S+$/.test(owner)) { console.error('usage: node scripts/make-seed.js committee-member@example.com [building-id] [building name]'); process.exit(1); }
 const B = Number(process.argv[3] || 1);
 const db = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'db.json'), 'utf8'));
 
@@ -37,7 +39,7 @@ sql += ins('expenses', ['y', 'm', 'd', 'category', 'descr', 'amount', 'method', 
 for (const name of ['bankSeen', 'refSeen', 'aliases', 'ignored', 'settings']) {
   sql += `insert into public.meta (building_id, name, value) values (${B}, ${q(name)}, ${j(db[name])}) on conflict (building_id, name) do update set value = excluded.value;\n`;
 }
-sql += `insert into public.members (building_id, email, role, name) values (${B}, ${q(owner)}, 'owner', 'בעל הבית') on conflict (building_id, email) do update set role = 'owner';\n`;
+sql += `insert into public.members (building_id, email, role, name) values (${B}, ${q(owner)}, 'committee', 'ועד הבית') on conflict do nothing;\n`;
 sql += `insert into public.snapshot (building_id, data) values (${B}, ${j(snapshot(db))}) on conflict (building_id) do update set data = excluded.data, updated_at = now();\n`;
 sql += `select setval(pg_get_serial_sequence('public.buildings', 'id'), (select max(id) from public.buildings));\n`;
 sql += 'commit;\n';
