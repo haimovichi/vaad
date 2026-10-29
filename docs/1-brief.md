@@ -21,7 +21,7 @@ Tenants have no visibility into who paid.
 4. Keep all history from the existing Excel (2022–2026).
 
 ## Non-goals (v1)
-Online payments, tenant logins, reminders by SMS/WhatsApp, expense management UI (expenses are imported and kept, not edited).
+Online payments, reminders by SMS/WhatsApp, expense management UI (expenses are imported and kept, not edited). *(Update 2026-10-29: tenant logins and multiple buildings were added later; see the PRD v2.)*
 
 ## Success
 Monthly update takes < 5 minutes; tenants stop asking "did X pay?".
