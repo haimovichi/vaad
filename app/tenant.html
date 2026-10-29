@@ -110,7 +110,7 @@ $('#updated').textContent=STAFF?'':'עודכן '+SNAP.updated.split('-').reverse
 if(ME.memberships.length>1){const sel=document.createElement('select');sel.style.cssText='font:inherit;padding:2px 6px;margin-inline-end:8px';$('#who').before(sel);Vaad.mountSwitcher(sel,ME)}
 if(STAFF){
   const L=ME.role==='owner'
-    ?[['מצב תשלומים (טבלה)','admin.html'],['ייבוא מהבנק','admin.html#import'],['דירות ודיירים','admin.html#apts'],['מה הדיירים רואים','admin.html#share'],['משתמשים','admin.html#users']]
+    ?[['מצב תשלומים (טבלה)','admin.html'],['ייבוא מהבנק','admin.html#import'],['דירות ודיירים','admin.html#apts'],['מה הדיירים רואים','admin.html#share'],['משתמשים','admin.html#users'],['גיבוי','admin.html#backup']]
     :[['מצב תשלומים (טבלה)','admin.html'],['דירות ודיירים','admin.html#apts']];
   $('#tools').innerHTML=L.map(([t,h])=>`<a href="${h.replace('.html','.html'+Vaad.keep)}">${t}</a>`).join('');
 }

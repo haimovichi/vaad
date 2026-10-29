@@ -57,7 +57,7 @@ window.Vaad = (function () {
   async function fetchAll(table, building) { // Supabase returns at most 1000 rows per request
     const out = [];
     for (let from = 0; ; from += 1000) {
-      const { data, error } = await client().from(table).select('*').eq('building_id', building).order(table === 'apartments' ? 'apt' : table === 'meta' ? 'name' : 'id', { ascending: true }).range(from, from + 999);
+      const { data, error } = await client().from(table).select('*').eq('building_id', building).order({ apartments: 'apt', meta: 'name', members: 'email', snapshot: 'building_id' }[table] || 'id', { ascending: true }).range(from, from + 999);
       if (error) throw error;
       out.push(...data);
       if (data.length < 1000) break;
@@ -88,6 +88,12 @@ window.Vaad = (function () {
         for (let i = 0; i < rows.length; i += 200) out.push(...ok(await c.from('payments').insert(rows.slice(i, i + 200).map((r) => ({ ...toPayment(r), building_id: B }))).select()));
         return out.sort((a, b) => a.id - b.id).map(fromPayment);
       },
+      async exportAll() { // every table of this building, as stored (the format scripts/restore-backup.js reads)
+        const tables = {};
+        for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot']) tables[t] = await fetchAll(t, B);
+        const b = ok(await c.from('buildings').select('*').eq('id', B).maybeSingle());
+        return { building: { id: B, name: b ? b.name : String(B) }, tables };
+      },
       async deletePayment(id) { ok(await c.from('payments').delete().eq('id', id).eq('building_id', B)); },
       async updateResident(r) {
         ok(await c.from('residents').update({ first_name: r.first, last_name: r.last, first2: r.first2, last2: r.last2, phone1: r.phone1, phone2: r.phone2, account: r.account, status: r.status }).eq('id', r.id).eq('building_id', B));
@@ -112,6 +118,7 @@ window.Vaad = (function () {
     return {
       async load() { if (!db) db = await (await fetch('demo-db.json')).json(); return db; },
       async addPayments(rows) { return rows.map((r) => ({ ...r, id: nextId++ })); },
+      async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
       async saveSnapshot(d) { snap = d; },
       async getAptPayments(apt, year) {

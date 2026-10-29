@@ -17,3 +17,8 @@ _bmad/render/
 # BMAD installer output (regenerable)
 _bmad/
 _bmad-output/
+
+# backups hold personal data
+vaad-backup-*.json
+supabase/restore.sql
+backups/

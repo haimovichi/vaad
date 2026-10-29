@@ -51,6 +51,16 @@ Payments recorded in the old Excel have no payment date, only the month they wer
 ## Monthly routine
 Log in → "ייבוא מהבנק" → choose the bank `.xlsx` → review yellow rows → save. Tenants see the update immediately.
 
+## Backup and restore
+The free Supabase plan has no downloadable backups, so the owner has a **גיבוי** tab (admin console, owner only): one click downloads a JSON file with every table of the building (apartments, residents, owners, tariffs, payments, expenses, settings, users, tenant snapshot). Do it monthly after the bank update. The file contains phones and account numbers; keep it private (these file names are git-ignored).
+
+To restore, turn the file into SQL and paste it into the Supabase SQL editor:
+```
+npm run restore -- vaad-backup-b1-2026-10-29.json            # into a database that lacks this building (refuses if rows exist)
+npm run restore -- vaad-backup-b1-2026-10-29.json --replace   # replace this building's current data (other buildings untouched)
+```
+The SQL is written to `supabase/restore.sql` (git-ignored). `npm run test:backup` proves a backup restores every row exactly.
+
 ## Try it locally without Supabase
 ```
 npm run dev     # http://localhost:3000/index.html?demo=owner   (also demo=admin, demo=tenant)

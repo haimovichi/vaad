@@ -45,7 +45,7 @@
 | S5.1 GitHub Pages deploy | Push to `main` redeploys; data files not served | Done, verified |
 | S5.2 Supabase project and email sending | Region Frankfurt; Gmail SMTP | Done |
 | S5.3 Multi-building schema | Isolation tested across two buildings (FR19) | Done, 162 checks |
-| S5.4 Backup / export | One-click export of all data | Backlog |
+| S5.4 Backup / export (FR20) | Owner-only one-click download of every table of the building; restore script rebuilds it exactly, refuses a second run, and `--replace` leaves other buildings alone | Done: `test:backup` (8 checks), owner download and admin refusal verified in demo mode, export queries checked on the live database. Backlog: first real download from the live site |
 
 ## Backlog (from the PRD)
 Empty-building onboarding screen · server-side matching and allocation · Capacitor wrapper for Google Play and the App Store with push notifications · payment reminders · expense screens · dates for historic Excel payments.

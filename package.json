@@ -12,7 +12,9 @@
     "seed:excel": "node lib/seed.js data/source.xlsx",
     "seed:sql": "node scripts/make-seed.js",
     "test:rls": "node scripts/test-rls.mjs",
-    "test:seed": "node scripts/test-seed.mjs"
+    "test:seed": "node scripts/test-seed.mjs",
+    "test:backup": "node scripts/test-backup.mjs",
+    "restore": "node scripts/restore-backup.js"
   },
   "keywords": [],
   "author": "",

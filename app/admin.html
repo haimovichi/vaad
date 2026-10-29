@@ -45,6 +45,7 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
     <button data-t="apts">דירות ודיירים</button>
     <button data-t="share">מה הדיירים רואים</button>
     <button data-t="users">משתמשים</button>
+    <button data-t="backup">גיבוי</button>
   </nav>
   <a id="toTenant" class="mute" style="color:var(--acc)" href="tenant.html">תצוגה מצומצמת</a><select id="bsel" class="hide" style="margin-inline-start:auto"></select><span class="mute" id="me"></span><button class="g" id="logout">יציאה</button>
 </header>
@@ -86,6 +87,16 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
   </div>
 </section>
 
+<section id="backup" class="hide">
+  <div class="card" style="padding:14px">
+    <h3 style="margin-top:0">גיבוי הנתונים</h3>
+    <div class="mute">מוריד קובץ אחד עם כל נתוני הבניין: דירות, דיירים, בעלים, תעריפים, תשלומים, הוצאות, הגדרות ומשתמשים. הקובץ כולל טלפונים ומספרי חשבון, לכן שמרו אותו במקום פרטי (לא ב-GitHub ולא בתיקייה משותפת). מומלץ לגבות פעם בחודש, אחרי עדכון הבנק.</div>
+    <div class="row"><button class="b" id="dlBackup">הורד גיבוי</button><span class="mute" id="lastBackup"></span></div>
+    <div id="backupOut" class="mute"></div>
+    <div class="mute" style="margin-top:10px">שחזור: הריצו <code dir="ltr">node scripts/restore-backup.js הקובץ.json</code> (או עם <code dir="ltr">--replace</code> כדי להחליף את הנתונים הקיימים), והדביקו את supabase/restore.sql ב-SQL Editor של Supabase.</div>
+  </div>
+</section>
+
 <section id="users" class="hide">
   <div class="card" style="padding:14px">
     <h3 style="margin-top:0">מי יכול להיכנס</h3>
@@ -115,7 +126,7 @@ const toast=t=>{const e=$('#msg');e.textContent=t;e.style.display='block';setTim
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hide',s.id!==b.dataset.t));
-  if(b.dataset.t==='apts')loadApts();if(b.dataset.t==='share')loadShare();if(b.dataset.t==='users')loadUsers();
+  if(b.dataset.t==='apts')loadApts();if(b.dataset.t==='share')loadShare();if(b.dataset.t==='users')loadUsers();if(b.dataset.t==='backup')showLastBackup();
 });
 
 /* ---- status grid ---- */
@@ -253,6 +264,28 @@ $('#uTable').onchange=async e=>{
 $('#uTable').onclick=async e=>{const r=e.target.dataset.rm;if(!r)return;if(!confirm('להסיר את הגישה?'))return;await api('DELETE','/api/member/'+r);loadUsers()};
 $('#logout').onclick=()=>Vaad.signOut();
 
+/* ---- backup ---- */
+const bkKey=()=>'vaad-lastbackup-'+ME.building.id;
+function showLastBackup(){
+  let t=null;try{t=localStorage.getItem(bkKey())}catch(e){}
+  if(!t){$('#lastBackup').textContent='עדיין לא הורדתם גיבוי במכשיר הזה.';return}
+  const days=Math.floor((Date.now()-new Date(t))/86400000);
+  $('#lastBackup').textContent=`גיבוי אחרון במכשיר הזה: ${t.slice(0,10).split('-').reverse().join('/')}${days>30?' (לפני יותר מחודש)':''}`;
+}
+$('#dlBackup').onclick=async()=>{
+  try{
+    const data=await api('GET','/api/export');
+    const payload={app:'vaad-backup',version:1,exportedAt:new Date().toISOString(),...data};
+    const blob=new Blob([JSON.stringify(payload,null,1)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`vaad-backup-b${ME.building.id}-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+    $('#backupOut').textContent='הורד: '+Object.entries(data.tables).map(([k,v])=>`${k} ${v.length}`).join(' · ');
+    try{localStorage.setItem(bkKey(),new Date().toISOString())}catch(e){}
+    showLastBackup();
+  }catch(e){toast(e.message)}
+};
+
 /* ---- start ---- */
 (async()=>{
   try{
@@ -267,7 +300,7 @@ $('#logout').onclick=()=>Vaad.signOut();
     $('#toTenant').href='tenant.html'+Vaad.keep;
     if(RO){
       $('#roBanner').classList.remove('hide');
-      document.querySelectorAll('nav button').forEach(b=>{if(['import','share','users'].includes(b.dataset.t))b.classList.add('hide')});
+      document.querySelectorAll('nav button').forEach(b=>{if(['import','share','users','backup'].includes(b.dataset.t))b.classList.add('hide')});
     }
     await loadGrid();
     const want=location.hash.slice(1);const tb=want&&document.querySelector(`nav button[data-t="${want}"]:not(.hide)`);if(tb)tb.click();

@@ -42,6 +42,9 @@ A person can hold a different role in each building. Only the owner links an apa
 - FR17 What tenants see about others is an allow-listed snapshot: apartment number, tag (current/former tenant), monthly status, and optionally last name and debt amount (owner setting). Rewritten after every change.
 - FR18 "הדירה שלי" is decided only by the owner's link; no link means the button says so.
 
+**Backup**
+- FR20 Owner-only one-click backup of the whole building (every table, as stored) from the admin console, and a restore tool that turns the file into SQL for the Supabase editor (fresh restore, or `--replace` for this building only).
+
 **Multi-building**
 - FR19 Every row belongs to a building; one email may belong to several buildings (a building switcher appears). New buildings are created by the platform operator in the SQL editor.
 
@@ -56,7 +59,6 @@ A person can hold a different role in each building. Only the owner links an apa
 - Moving matching and allocation to server functions before many buildings use it.
 - Wrapping the app for Google Play and the App Store (planned route: Capacitor), with push notifications.
 - Payment reminders, online payments, expense management screens.
-- Data export / backup button (free Supabase plan has no downloadable backups).
 - Payment dates for the history recorded in Excel (only the month is known).
 
 ## Key acceptance (current state)
