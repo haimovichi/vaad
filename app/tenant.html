@@ -134,9 +134,8 @@ function staffPayments(row,y){
   return DB.payments.filter(p=>p.y===y&&(ts.find(x=>x.key===p.key)||calc.tenancyAt(ts,p.apt,calc.mi(p.y,p.m)))===t)
     .map(p=>({y:p.y,m:p.m,amount:p.amount,method:p.method,date:p.date})).sort((a,b)=>a.m-b.m||String(a.date).localeCompare(String(b.date)));
 }
-// the apartment shown under "הדירה שלי": the member's own, or for staff without one a locally remembered choice
-let myApt=ME.apt||null;
-if(!myApt&&STAFF){try{myApt=Number(localStorage.getItem('vaad-myapt'))||null}catch(e){}}
+// the apartment shown under "הדירה שלי": only the one the owner linked to this login (users tab)
+const myApt=ME.apt||null;
 if(!myApt)tab=STAFF?'debt':'all';
 
 /* ---- pieces ---- */
@@ -193,9 +192,7 @@ async function render(){
 
   if(tab==='mine'){
     if(!myApt){
-      $('#list').innerHTML=STAFF
-        ?`<div class="card" style="cursor:default"><div>בחרו את הדירה שלכם:</div><select id="pickApt" style="margin-top:8px"><option value="">—</option>${[...new Set(all.map(r=>r.apt))].map(a=>`<option>${a}</option>`).join('')}</select></div>`
-        :'<div class="empty">הדירה שלכם עדיין לא מקושרת לחשבון. פנו לוועד הבית.</div>';
+      $('#list').innerHTML=`<div class="empty">הדירה שלכם עדיין לא מקושרת לחשבון.<br>${ME.role==='owner'?'אפשר לקשר אותה בלשונית "משתמשים".':'בקשו מבעל הבית לקשר אותה.'}</div>`;
       return;
     }
     const mine=current.filter(r=>r.apt===myApt);
@@ -229,11 +226,8 @@ async function render(){
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{tab=b.dataset.t;openId=null;render()});
 $('#year').onchange=e=>{year=+e.target.value;openId=null;render()};
 $('#q').oninput=render;
-document.body.addEventListener('change',e=>{
-  if(e.target.id==='pickApt'&&e.target.value){myApt=+e.target.value;try{localStorage.setItem('vaad-myapt',String(myApt))}catch(err){}render()}
-});
 document.body.addEventListener('click',e=>{
-  const c=e.target.closest('.card[data-id]');if(!c||e.target.closest('select'))return;
+  const c=e.target.closest('.card[data-id]');if(!c)return;
   if(tab==='mine')return;
   openId=openId===c.dataset.id?null:c.dataset.id;render();
 });

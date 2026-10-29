@@ -239,11 +239,16 @@ const ROLE={owner:'בעל הבית',admin:'מנהל (צפייה)',tenant:'דיי
 async function loadUsers(){
   const m=await api('GET','/api/members');
   $('#uTable').innerHTML='<tr><th class="l">אימייל</th><th>תפקיד</th><th>דירה</th><th class="l">שם</th><th></th></tr>'+
-   m.map(x=>`<tr><td class="l" dir="ltr">${x.email}</td><td>${ROLE[x.role]}</td><td>${x.apt||''}</td><td class="l">${x.name||''}</td><td>${x.email===ME.email?'':`<button class="g" data-rm="${encodeURIComponent(x.email)}">הסר</button>`}</td></tr>`).join('');
+   m.map(x=>`<tr><td class="l" dir="ltr">${x.email}</td><td>${ROLE[x.role]}</td><td><input type="number" min="1" style="width:70px" value="${x.apt||''}" data-em="${encodeURIComponent(x.email)}" data-role="${x.role}" data-name="${encodeURIComponent(x.name||'')}" title="מספר הדירה המקושרת לכתובת הזו. ריק = בלי קישור"></td><td class="l">${x.name||''}</td><td>${x.email===ME.email?'':`<button class="g" data-rm="${encodeURIComponent(x.email)}">הסר</button>`}</td></tr>`).join('');
 }
 $('#uAdd').onclick=async()=>{
   try{await api('PUT','/api/member',{email:$('#uEmail').value,role:$('#uRole').value,apt:$('#uApt').value,name:$('#uName').value});
     ['#uEmail','#uApt','#uName'].forEach(i=>$(i).value='');toast('נוסף');loadUsers()}catch(e){toast(e.message)}
+};
+$('#uTable').onchange=async e=>{
+  const i=e.target;if(!i.dataset.em)return;
+  try{await api('PUT','/api/member',{email:decodeURIComponent(i.dataset.em),role:i.dataset.role,apt:i.value,name:decodeURIComponent(i.dataset.name)});toast(i.value?`קושרה דירה ${i.value}`:'הקישור הוסר')}
+  catch(err){toast(err.message);loadUsers()}
 };
 $('#uTable').onclick=async e=>{const r=e.target.dataset.rm;if(!r)return;if(!confirm('להסיר את הגישה?'))return;await api('DELETE','/api/member/'+r);loadUsers()};
 $('#logout').onclick=()=>Vaad.signOut();

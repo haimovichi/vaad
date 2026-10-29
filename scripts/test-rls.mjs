@@ -114,5 +114,21 @@ await check('anon', null, 'apt_payments', fn(1, 8, 2026), 'BLOCKED');
   console.log(`${ok ? 'PASS' : 'FAIL'}  columns exposed to tenants: ${cols}`);
 }
 
+// linking an apartment to a person (members.apt) is an owner-only action
+const link = (e, apt) => `update members set apt = ${apt} where email = '${e}' and building_id = 1`;
+await check('owner1', 'owner1@x.com', 'link apartment to a tenant', link('t1@x.com', 3), 1);
+await check('owner1', 'owner1@x.com', 'link apartment to an owner', link('owner1@x.com', 18), 1);
+await check('owner1', 'owner1@x.com', 'add a tenant with an apartment', "insert into members(building_id,email,role,apt) values (1,'new@x.com','tenant',5)", 1);
+await check('admin1', 'admin1@x.com', 'link apartment to a tenant', link('t1@x.com', 3), 'BLOCKED');
+await check('admin1', 'admin1@x.com', 'link own apartment', link('admin1@x.com', 8), 'BLOCKED');
+await check('admin1', 'admin1@x.com', 'add a member with an apartment', "insert into members(building_id,email,role,apt) values (1,'new@x.com','tenant',5)", 'BLOCKED');
+await check('tenant1', 't1@x.com', 'change own apartment link', link('t1@x.com', 3), 'BLOCKED');
+await check('tenant1', 't1@x.com', 'change anyone else\'s link', link('admin1@x.com', 3), 'BLOCKED');
+await check('tenant1', 't1@x.com', 'add a member with an apartment', "insert into members(building_id,email,role,apt) values (1,'new@x.com','tenant',5)", 'BLOCKED');
+await check('tenant1', 't1@x.com', 'remove own membership', "delete from members where email = 't1@x.com' and building_id = 1", 'BLOCKED');
+await check('owner2', 'owner2@x.com', 'link a person in another building', link('t1@x.com', 3), 'BLOCKED');
+await check('stranger', 'nobody@x.com', 'link an apartment', link('t1@x.com', 3), 'BLOCKED');
+await check('both', 'both@x.com', 'tenant of B2 changing own B2 link', "update members set apt = 3 where email = 'both@x.com' and building_id = 2", 'BLOCKED');
+
 console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
 process.exit(bad ? 1 : 0);
