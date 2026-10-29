@@ -9,3 +9,11 @@ app/demo-db.json
 app/vaad-lib.js
 .tmp/
 .claude/
+.bmad-loop/runs/
+.bmad-loop/cache/
+.bmad-loop/policy.toml
+_bmad/render/
+
+# BMAD installer output (regenerable)
+_bmad/
+_bmad-output/
