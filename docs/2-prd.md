@@ -54,7 +54,7 @@ Who gives which role: super user: any role, any building, and buildings managers
 - FR20 One-click backup for whoever manages a building of the whole building (every table, as stored) from the admin console, and a restore tool that turns the file into SQL for the Supabase editor (fresh restore, or `--replace` for this building only).
 
 **Multi-building**
-- FR19 Every row belongs to a building; one email may belong to several buildings (a building switcher appears). The super user and buildings managers create buildings in the app (a new building is empty; entering its apartments and tenants in the app is still backlog).
+- FR19 Every row belongs to a building; one email may belong to several buildings (a building switcher appears). The super user, buildings managers and committee members create buildings in the app; the name is the address, picked from the official city/street list plus a house number (a new building is empty; entering its apartments and tenants in the app is still backlog).
 
 ## Non-functional
 - Hebrew, right-to-left, usable at 360 px without horizontal scroll; dark mode.

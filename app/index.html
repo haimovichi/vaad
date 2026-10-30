@@ -34,7 +34,7 @@ button.g{background:none;color:var(--mute);border:1px solid var(--line)}
 
   <div id="pick" class="hide"><p>לאיזה בניין להיכנס?</p><div id="pickList"></div></div>
 
-  <form id="newb" class="hide"><p>אין לך עדיין בניין. צרו בניין חדש (תהיו המנהלים שלו):</p><input id="bname" required placeholder="שם הבניין" style="direction:rtl;text-align:right"><button>צור בניין</button></form>
+  <form id="newb" class="hide"><p>אין לך עדיין בניין. צרו בניין חדש (תהיו המנהלים שלו):</p><div id="bpick"></div><button id="bgo" disabled>צור בניין</button></form>
 
   <div id="noaccess" class="hide"><p>הכתובת <b id="naEmail" dir="ltr"></b> עדיין לא רשומה במערכת. בקשו מהוועד להוסיף אתכם, ואז רעננו את הדף.</p><button class="g" id="out">התנתקות</button></div>
   <div id="error" class="msg err"></div>
@@ -58,8 +58,9 @@ const show=id=>{for(const x of ['loading','login','sent','noaccess','pick','newb
 })();
 $('#login').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';
   try{await Vaad.signIn($('#email').value.trim());$('#sentTo').textContent=$('#email').value.trim();show('sent')}catch(err){$('#error').textContent=err.message}};
-$('#newb').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';
-  try{const{data,error}=await Vaad.client().rpc('create_building',{nm:$('#bname').value});if(error)throw error;Vaad.choose(data);location.reload()}catch(err){$('#error').textContent=err.message}};
+let addr=null;const pick=Vaad.addressPicker($('#bpick'),a=>{addr=a;$('#bgo').disabled=!a});
+$('#newb').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';if(!addr)return;
+  try{const{data,error}=await Vaad.client().rpc('create_building',{nm:addr});if(error)throw error;Vaad.choose(data);location.reload()}catch(err){$('#error').textContent=err.message}};
 $('#pickList').onclick=e=>{const b=e.target.dataset.b;if(b){Vaad.choose(b);location.reload()}};
 $('#again').onclick=()=>show('login');
 $('#out').onclick=()=>Vaad.signOut();

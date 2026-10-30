@@ -36,7 +36,7 @@ window.Vaad = (function () {
       };
     });
     const picked = memberships.find((m) => m.id === getChosen()) || (memberships.length === 1 ? memberships[0] : null);
-    return { email, isSuper, isManager, memberships, building: picked };
+    return { email, isSuper, isManager, canCreate: isSuper || isManager || memberships.some((m) => m.roles.includes('committee')), memberships, building: picked };
   }
   const chosenKey = 'vaad-building';
   const getChosen = () => { try { return Number(localStorage.getItem(chosenKey)) || null; } catch (e) { return null; } };
@@ -78,13 +78,42 @@ window.Vaad = (function () {
     sel.classList.remove('hide'); sel.style.display = '';
     sel.onchange = () => { choose(sel.value); location.href = 'index.html' + keep; };
   }
+  // Address picker: city and street come from Israel's official street list (data.gov.il); only a listed city and street are accepted.
+  // get() returns "street number city" once all three are valid, else null.
+  let apSeq = 0;
+  function addressPicker(el, onchange) {
+    const RES = '9ad3862c-8391-4b2f-84a4-2d4c68625f4b'; const API = 'https://data.gov.il/api/3/action/datastore_search';
+    const id = 'ap' + (++apSeq); const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+    const st = 'direction:rtl;text-align:right;width:auto;margin:0';
+    el.innerHTML = `<input class="c" list="${id}c" placeholder="עיר" autocomplete="off" style="${st};width:140px"><input class="s" list="${id}s" placeholder="רחוב" autocomplete="off" disabled style="${st};width:170px"><input class="n" type="number" min="1" placeholder="מספר" disabled style="${st};width:80px"><datalist id="${id}c"></datalist><datalist id="${id}s"></datalist><span class="mute msg" style="font-size:13px"></span>`;
+    const q = (s) => el.querySelector(s); let cities = []; let streets = []; let forCity = '';
+    const say = (t) => { q('.msg').textContent = t; };
+    const fetchRows = async (filters, limit) => {
+      const r = await fetch(`${API}?resource_id=${RES}&limit=${limit}&fields=${encodeURIComponent('שם_ישוב,שם_רחוב,סמל_רחוב')}&filters=${encodeURIComponent(JSON.stringify(filters))}`);
+      const j = await r.json(); if (!j.success) throw new Error('lookup failed'); return j.result.records;
+    };
+    const fill = (dl, list) => { dl.innerHTML = list.map((x) => `<option value="${x.replace(/"/g, '&quot;')}">`).join(''); };
+    const get = () => { const c = norm(q('.c').value); const s = norm(q('.s').value); const n = Math.floor(+q('.n').value); return cities.includes(c) && forCity === c && streets.includes(s) && n > 0 ? `${s} ${n} ${c}` : null; };
+    const changed = () => onchange && onchange(get());
+    (async () => { try { say('טוען ערים…'); cities = [...new Set((await fetchRows({ 'סמל_רחוב': 9000 }, 5000)).map((r) => norm(r['שם_ישוב'])))].sort(); fill(q('datalist'), cities); say(''); } catch (e) { say('לא ניתן לטעון את רשימת הערים. בדקו חיבור ונסו שוב.'); } })();
+    q('.c').oninput = async () => {
+      const c = norm(q('.c').value); q('.s').value = ''; q('.n').value = ''; streets = []; forCity = '';
+      q('.s').disabled = q('.n').disabled = true; changed();
+      if (!cities.includes(c)) return;
+      try { say('טוען רחובות…'); const rows = await fetchRows({ 'שם_ישוב': c }, 20000); streets = [...new Set(rows.filter((r) => r['סמל_רחוב'] !== 9000).map((r) => norm(r['שם_רחוב'])))].sort(); forCity = c; fill(el.querySelectorAll('datalist')[1], streets); q('.s').disabled = q('.n').disabled = false; say(''); }
+      catch (e) { say('לא ניתן לטעון את רשימת הרחובות.'); }
+      changed();
+    };
+    q('.s').oninput = changed; q('.n').oninput = changed;
+    return { get, reset() { q('.c').value = q('.s').value = q('.n').value = ''; q('.s').disabled = q('.n').disabled = true; changed(); } };
+  }
   const signIn = async (email) => {
     const { error } = await client().auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: location.origin + location.pathname.replace(/[^/]*$/, '') + 'index.html' } });
     if (error) throw error;
   };
   const signOut = async () => { if (!demo) await client().auth.signOut(); location.href = 'index.html' + keep; };
   const go = (page) => { location.href = page + keep; };
-  const perms = (me) => ({ manage: !!(me.building && me.building.manage), isSuper: !!me.isSuper, isManager: !!me.isManager, grantable: me.building ? me.building.grantable : [] });
+  const perms = (me) => ({ canCreate: !!me.canCreate, manage: !!(me.building && me.building.manage), isSuper: !!me.isSuper, isManager: !!me.isManager, grantable: me.building ? me.building.grantable : [] });
 
   /* ---------- Supabase row mapping ---------- */
   const num = (v) => (v === null || v === undefined ? v : Number(v));
@@ -223,5 +252,5 @@ window.Vaad = (function () {
   }
 
   const store = (building, me) => (demo ? demoStore(building, me) : supabaseStore(building));
-  return { demo, keep, client, whoami, buildMe, mountSwitcher, choose, signIn, signOut, go, store, perms, ROLE_LABEL };
+  return { demo, keep, client, whoami, addressPicker, buildMe, mountSwitcher, choose, signIn, signOut, go, store, perms, ROLE_LABEL };
 })();

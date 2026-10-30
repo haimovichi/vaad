@@ -206,18 +206,22 @@ language sql stable security definer set search_path = public as $$
   order by r.apt
 $$;
 
--- a super user or a buildings manager creates a building; a manager becomes its manager
+-- the super user, a buildings manager or a building committee member creates a building;
+-- a manager becomes its manager, a committee member becomes its committee
 create or replace function public.create_building(nm text) returns bigint
 language plpgsql security definer set search_path = public as $$
-declare nid bigint;
+declare nid bigint; mgr boolean; com boolean;
 begin
-  if not (public.is_super() or exists (select 1 from public.managers where email = public.me())) then
+  mgr := exists (select 1 from public.managers where email = public.me());
+  com := exists (select 1 from public.members where email = public.me() and role = 'committee');
+  if not (public.is_super() or mgr or com) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
   if nm is null or length(trim(nm)) = 0 then raise exception 'name required'; end if;
   insert into public.buildings (name) values (trim(nm)) returning id into nid;
-  if not public.is_super() then
-    insert into public.manager_buildings (building_id, email) values (nid, public.me());
+  if public.is_super() then null;
+  elsif mgr then insert into public.manager_buildings (building_id, email) values (nid, public.me());
+  else insert into public.members (building_id, email, role) values (nid, public.me(), 'committee');
   end if;
   return nid;
 end $$;

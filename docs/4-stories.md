@@ -51,6 +51,7 @@
 | Story | Acceptance | Status |
 |---|---|---|
 | S6.1 One super user, only from the SQL editor | A second row cannot be added, even by the SQL editor; no app user can read, add or delete it | Done, tested |
+| S7.6 Building address | Name = address (אורי אלמוג 15 חולון); top banner links to a map; creating a building requires picking city and street from the official list plus a number; committee members may create buildings too (`create_building` extended, applied live) | Done, tested; address picker verified in demo mode |
 | S6.2 Buildings manager | Manages assigned buildings only; creates buildings and becomes their manager; cannot appoint managers | Done, tested; create flow verified in demo mode |
 | S6.3 Building committee | Full management of one building; cannot give the committee role; cannot touch other buildings | Done, tested |
 | S6.4 Multi-role people | Roles combine across and within buildings (e.g. committee + tenant + apartment owner) | Done, tested and verified in demo mode |

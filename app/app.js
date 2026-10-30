@@ -19,7 +19,8 @@ if (!ME || !ME.building) { Vaad.go('index.html'); return; }
 const BLD = ME.building;
 const STAFF = BLD.manage;                     // committee, buildings manager or super user: the building's full data
 const BOARD = BLD.seesBoard;                  // may see every apartment's status
-const PLATFORM = ME.isSuper || ME.isManager;  // may create buildings and see everyone's roles
+const PLATFORM = ME.isSuper || ME.isManager;  // may see everyone's roles
+const CREATE = PLATFORM || ME.canCreate;      // may create buildings (also committee members)
 const myApts = BLD.linkedApts;                // apartments linked to this login as tenant or apartment owner
 const store = Vaad.store(BLD.id, ME);
 let DB = null; let SNAP = null; let SVC = null;
@@ -47,7 +48,7 @@ const SCREENS = [
   ['users', 'משתמשים', '🔑', 'אנשים', 'people', () => STAFF],
   ['apts', 'דירות ודיירים', '🏘️', 'אנשים', 'people', () => STAFF],
   ['everyone', 'כל האנשים', '👥', 'אנשים', 'people', () => PLATFORM],
-  ['list', 'הבניינים שלי', '🏢', 'בניינים', 'buildings', () => PLATFORM],
+  ['list', 'הבניינים שלי', '🏢', 'בניינים', 'buildings', () => CREATE],
   ['managers', 'מנהלי בניינים', '🧑‍💼', 'בניינים', 'buildings', () => ME.isSuper],
   ['share', 'מה הדיירים רואים', '📢', 'הגדרות', 'more', () => STAFF],
 ];
@@ -373,7 +374,9 @@ function loadBuildings() {
   $('#bTable').innerHTML = '<tr><th>#</th><th class="l">שם</th><th class="l">התפקידים שלכם</th><th></th></tr>' +
     ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l"><input value="${esc(m.name)}" data-rename="${m.id}" ${m.manage ? '' : 'disabled'}></td><td class="l">${m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${m.id === BLD.id ? '<span class="mute">פתוח עכשיו</span>' : `<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
 }
-$('#bAdd').onclick = async () => { try { const b = await api('POST', '/api/building', { name: $('#bName').value }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
+let newAddr = null;
+const bPick = Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
+$('#bAdd').onclick = async () => { if (!newAddr) return; try { const b = await api('POST', '/api/building', { name: newAddr }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
 $('#bTable').onchange = async (e) => { const id = e.target.dataset.rename; if (!id) return; try { await api('PUT', '/api/building', { id, name: e.target.value }); const m = ME.memberships.find((x) => String(x.id) === id); if (m) m.name = e.target.value.trim(); toast('השם עודכן'); } catch (err) { toast(err.message); loadBuildings(); } };
 $('#bTable').onclick = (e) => { const id = e.target.dataset.open; if (id) { Vaad.choose(id); Vaad.go('index.html'); } };
 

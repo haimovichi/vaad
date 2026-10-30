@@ -232,9 +232,16 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   report(superMade === 0, 'super', 'creates a building (no manager row needed)', 0, superMade);
   const leak = await asUser('m12@x.com', async (q) => { await q("select public.create_building('Z')"); return (await q('select * from buildings')).rows.length; });
   report(leak === 3, 'manager12', 'sees own buildings plus the new one', 3, leak);
-  for (const [who, email] of [['committee1', 'c1@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+  for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
     await blocked(who, email, 'create a building', "select public.create_building('X')");
   }
+  const comMade = await asUser('c1@x.com', async (q) => {
+    const id = (await q("select public.create_building('Com') as id")).rows[0].id;
+    const role = (await q(`select role from members where building_id = ${id} and email = 'c1@x.com'`)).rows.map((r) => r.role).join();
+    const mgr = (await q(`select * from manager_buildings where building_id = ${id}`)).rows.length;
+    return `${role}/${mgr}`;
+  });
+  report(comMade === 'committee/0', 'committee1', 'creates a building and becomes its committee', 'committee/0', comMade);
   await blocked('manager3', 'm3@x.com', 'create a building with an empty name', "select public.create_building('   ')");
 
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
