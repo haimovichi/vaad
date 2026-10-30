@@ -51,7 +51,7 @@ const show=id=>{for(const x of ['loading','login','sent','noaccess','pick','newb
     if(!me){show('login');return}
     if(me.memberships.length>1&&!me.building){$('#pickList').innerHTML=me.memberships.map(m=>`<button class="g" data-b="${m.id}">${m.name}</button>`).join('');show('pick');return}
     // every role lands on the compact view; the console is one link away for whoever manages the building
-    if(me.building)return Vaad.go('tenant.html');
+    if(me.building)return Vaad.go('app.html');
     if(!me.memberships.length&&(me.isSuper||me.isManager)){show('newb');return}
     $('#naEmail').textContent=me.email;show('noaccess');
   }catch(e){show('login');$('#error').textContent=e.message}

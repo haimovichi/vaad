@@ -31,7 +31,7 @@ Everyone logs in with an emailed link (no passwords). Only emails that have a ro
 
 **2. GitHub Pages** — push this folder to a public repo (code only; `data/`, `seed.sql`, `*.xlsx`, backups are ignored). Settings → Pages → Source: **GitHub Actions**. `.github/workflows/pages.yml` publishes `app/` on every push to `main`.
 
-**3. Invite people** — in the console's **משתמשים** tab add each email with a role and, for tenants and apartment owners, the apartment number. The super user appoints buildings managers in **מנהלי בניינים**. The **אנשים** tab (super user and managers) lists every person with their roles in all buildings.
+**3. Invite people** — in **אנשים → משתמשים** add each email with a role and, for tenants and apartment owners, the apartment number. The super user appoints buildings managers in **בניינים → מנהלי בניינים**. **אנשים → כל האנשים** (super user and managers) lists every person with their roles in all buildings.
 
 ## Who can give out which role
 | | committee | tenant | apartment owner | buildings manager |
@@ -41,21 +41,27 @@ Everyone logs in with an emailed link (no passwords). Only emails that have a ro
 | Building committee | no | own building | own building | no |
 
 ## Adding buildings
-The super user and buildings managers can create a building in the console (**בניינים**). A new building is empty: entering its apartments and tenants in the app is not built yet, so for now load it from a workbook:
+The super user and buildings managers can create a building in **בניינים**. A new building is empty: entering its apartments and tenants in the app is not built yet, so for now load it from a workbook:
 ```
 npm run seed:excel                                   # after pointing data/source.xlsx at the other workbook
 npm run seed:sql -- committee@email.com 2 "Building name"
 ```
 
-## The compact view (everyone's home screen)
-Buttons: **הדירה שלי / הדירות שלי** (each apartment linked to you, with your payments with dates for the selected year; apartment owners also see the current tenant's name and phones), **חייבים** (who owes) and **הכל** (all apartments). Tenants and managers see the whole board; an apartment owner who is not also a tenant sees only their own apartments. Whoever manages the building taps any card to see that tenant's payments and gets links to the console tabs. The link between a person and an apartment is set in **משתמשים** by someone allowed to give that role.
+## One page, one menu
+Everyone uses the same page (`app.html`). A menu (bottom bar on a phone, panel on the right on a computer) shows only what the person's roles allow: **בית** (all roles), **ייבוא**, **אנשים**, **עוד** (whoever manages a building), **בניינים** (super user and managers). Tenants and apartment owners see just the home screen.
+
+**Home** has the buttons **הדירה שלי / הדירות שלי** (each apartment linked to you, with your payments with dates for the selected year; apartment owners also see the current tenant's name and phones), **חייבים** and **הכל**. Tenants and managers see the whole board; an apartment owner who is not also a tenant sees only their own apartments.
+
+**Drill-down (committee, managers, super user):** tap any apartment card to see that tenant's balance (debt or credit), the exact paid and due amount for every month, their payments with dates, and buttons to **add a cash/cheque/transfer payment** or **delete** one. This replaces the old month-by-month table screen. Which apartment is "mine" comes only from the links set in **אנשים → משתמשים**.
 Payments recorded in the old Excel have no payment date, only the month they were for; payments imported from the bank or added in the app from now on carry the date.
 
+Old addresses (`admin.html#users`, `tenant.html`) still work: they redirect to the matching place in the new page.
+
 ## Monthly routine
-Log in → "ייבוא מהבנק" → choose the bank `.xlsx` → review yellow rows → save. Tenants see the update immediately.
+Log in → **ייבוא** → choose the bank `.xlsx` → review yellow rows → save. Tenants see the update immediately.
 
 ## Backup and restore
-The free Supabase plan has no downloadable backups, so whoever manages a building has a **גיבוי** tab: one click downloads a JSON file with every table of that building. Do it monthly after the bank update. The file contains phones and account numbers; keep it private (these file names are git-ignored).
+The free Supabase plan has no downloadable backups, so whoever manages a building has **עוד → גיבוי**: one click downloads a JSON file with every table of that building. Do it monthly after the bank update. The file contains phones and account numbers; keep it private (these file names are git-ignored).
 
 To restore, turn the file into SQL and paste it into the Supabase SQL editor:
 ```

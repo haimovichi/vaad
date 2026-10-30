@@ -61,5 +61,14 @@
 | S6.9 Real-login check of the new roles on the live site | Owner login opens correctly; add a test tenant and a test apartment owner and look at their screens | Partly done: the owner/super-user login works on the live site; tenant and apartment-owner logins with spare emails still to check |
 | S6.10 People overview | Super user: everyone with every role in every building; a manager: the people in their buildings; committee, tenants and apartment owners: no access. Filter by email, by building, and only people with several roles; a role opens that building's users tab | Done, verified in demo mode for super user, manager and committee |
 
+## E7 One page, one menu (2026-10-30)
+| Story | Acceptance | Status |
+|---|---|---|
+| S7.1 Single page with one menu | Bottom bar on phones, right-hand panel on computers; items by role; tenants and apartment owners get no menu; management addresses bounce back to Home for them | Done, verified in demo mode for committee, super user, tenant and apartment owner |
+| S7.2 Full drill-down on an apartment card | Balance, exact paid/due per month, payments with dates, add and delete a payment; amounts update at once | Done, verified: adding a payment moved a 1,710 ₪ debt to 1,140 ₪, deleting restored it |
+| S7.3 Other sections ported | Bank import, users, everyone, apartments, buildings, managers, what tenants see, backup | Done, verified in demo mode (import read a real bank file and saved payments) |
+| S7.4 Old addresses | admin.html and tenant.html redirect to the matching section | Done |
+| S7.5 Real-login check on phone and computer | Owner login: menu, drill-down, adding and deleting a real payment (then reverse it) | Backlog: after the push |
+
 ## Backlog (from the PRD)
 Empty-building onboarding screen · server-side matching and allocation · Capacitor wrapper for Google Play and the App Store with push notifications · payment reminders · expense screens · dates for historic Excel payments.
