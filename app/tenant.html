@@ -116,7 +116,7 @@ $('#title').textContent=STAFF?BLD.name:SNAP.title;
 $('#updated').textContent=STAFF?'':'עודכן '+SNAP.updated.split('-').reverse().join('/');
 if(ME.memberships.length>1){const sel=document.createElement('select');sel.style.cssText='font:inherit;padding:2px 6px;margin-inline-end:8px';$('#who').before(sel);Vaad.mountSwitcher(sel,ME)}
 if(STAFF){
-  const L=[['מצב תשלומים (טבלה)','admin.html'],['ייבוא מהבנק','admin.html#import'],['דירות ודיירים','admin.html#apts'],['מה הדיירים רואים','admin.html#share'],['משתמשים','admin.html#users'],['גיבוי','admin.html#backup']];
+  const L=[['מצב תשלומים (טבלה)','admin.html#status'],['ייבוא מהבנק','admin.html#import'],['דירות ודיירים','admin.html#apts'],['מה הדיירים רואים','admin.html#share'],['משתמשים','admin.html#users'],['גיבוי','admin.html#backup']];
   if(ME.isSuper||ME.isManager)L.push(['בניינים','admin.html#buildings']);
   if(ME.isSuper)L.push(['מנהלי בניינים','admin.html#managers']);
   $('#tools').innerHTML=L.map(([t,h])=>`<a href="${h.replace('.html','.html'+Vaad.keep)}">${t}</a>`).join('');

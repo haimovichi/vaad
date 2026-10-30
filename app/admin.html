@@ -358,6 +358,9 @@ $('#dlBackup').onclick=async()=>{
   try{
     ME=await Vaad.whoami();
     if(!ME||!ME.building||!ME.building.manage)return Vaad.go('index.html');   // the console is for whoever manages the building
+    // on a phone, the bare console address (a bookmark, a home-screen shortcut, a restored tab) opens the compact view;
+    // links that name a console tab (…#import, …#users) still open that tab
+    if(!location.hash&&matchMedia('(max-width:700px)').matches)return Vaad.go('tenant.html');
     RO=false;
     const store=Vaad.store(ME.building.id,ME);
     const db=await store.load();
