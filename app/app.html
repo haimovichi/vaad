@@ -32,29 +32,32 @@ tr.warn{background:rgba(224,161,0,.15)}
 .chip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:1px;font-size:12px;color:var(--ink);text-decoration:none}
 a.chip{color:var(--acc)}
 
-/* ---- menu: bottom bar on phones, side menu on computers ---- */
-#menu{display:none}
-body.staff #menu{display:flex}
-#menu a{color:var(--mute);text-decoration:none;text-align:center;font-size:12px}
-#menu a b{display:block;font-size:19px;font-weight:400}
-#menu a.on{color:var(--acc);font-weight:600}
-@media(max-width:759px){
-  #menu{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);z-index:10;padding-bottom:env(safe-area-inset-bottom)}
-  #menu a{flex:1;padding:8px 2px}
-  body.staff .wrap{padding-bottom:84px}
-}
+/* ---- one flat menu: a sheet on phones (opened by the top bar), a side panel on computers ---- */
+#bar,#menu{display:none}
+body.staff #bar{display:flex}
+#bar{position:sticky;top:0;z-index:15;align-items:center;gap:10px;background:var(--card);border-bottom:1px solid var(--line);padding:8px 14px}
+#bar .mb{font-size:22px;line-height:1;padding:6px 12px;border:1px solid var(--line);border-radius:10px;background:none;color:var(--ink);cursor:pointer}
+#bar .st{flex:1;font-weight:600;font-size:17px}
+#bar a.home{color:var(--acc);text-decoration:none;font-size:15px;padding:6px 12px;border:1px solid var(--acc);border-radius:10px}
+#menu{position:fixed;inset:0;z-index:30;background:var(--bg);overflow:auto;padding:14px 18px 28px}
+body.staff.mopen #menu{display:block}
+#menu .mh{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:18px;margin-bottom:6px}
+#menu .mh button{font-size:20px;border:0;background:none;color:var(--ink);cursor:pointer}
+#menu h4{margin:16px 0 4px;color:var(--mute);font-size:12px;font-weight:600}
+#menu a{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-size:17px;padding:12px 10px;border-radius:10px}
+#menu a.on{background:var(--accbg);color:var(--acc);font-weight:600}
 @media(min-width:760px){
-  #menu{position:fixed;top:0;bottom:0;right:0;width:150px;flex-direction:column;gap:2px;padding:18px 8px;background:var(--card);border-inline-start:1px solid var(--line)}
-  #menu a{display:flex;align-items:center;gap:10px;text-align:right;font-size:14px;padding:9px 10px;border-radius:10px}
-  #menu a b{font-size:17px;display:inline}
-  #menu a.on{background:var(--accbg)}
-  body.staff .wrap{margin:0 164px 0 auto;max-width:860px}
+  #bar .mb{display:none}
+  body.staff #menu{display:block;position:fixed;inset:0 0 0 auto;width:190px;z-index:10;background:var(--card);border-inline-start:1px solid var(--line);padding:14px 8px}
+  #menu .mh{display:none}
+  #menu a{font-size:14px;padding:8px 10px}
+  body.staff #bar,body.staff .wrap{margin-inline-end:190px}
+  body.staff .wrap{max-width:860px;margin-inline-start:auto}
 }
 
 /* ---- sub tabs ---- */
-.subs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px}
-.subs button,.tab{border:1px solid var(--line);border-radius:999px;padding:7px 14px;font:inherit;font-size:14px;background:var(--card);color:var(--mute);cursor:pointer;white-space:nowrap}
-.subs button.on,.tab.on{background:var(--accbg);color:var(--acc);border-color:var(--acc);font-weight:600}
+.tab{border:1px solid var(--line);border-radius:999px;padding:7px 14px;font:inherit;font-size:14px;background:var(--card);color:var(--mute);cursor:pointer;white-space:nowrap}
+.tab.on{background:var(--accbg);color:var(--acc);border-color:var(--acc);font-weight:600}
 .tabs{display:flex;gap:6px;margin:8px 0;align-items:center}
 .tab{flex:1;font-size:15px;padding:8px 6px}
 .tabs select{padding:7px 8px;border-radius:999px;font-size:14px}
@@ -102,16 +105,15 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 .legend span{display:flex;align-items:center;gap:5px}
 .legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
 .empty{color:var(--mute);text-align:center;padding:24px 0}
-#msg{position:fixed;bottom:84px;left:16px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:20}
-@media(min-width:760px){#msg{bottom:16px}}
+#msg{position:fixed;bottom:16px;left:16px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:20}
 </style>
 </head>
 <body>
+<div id="bar"><button class="mb" id="mbtn" aria-label="תפריט">☰</button><span class="st" id="scr"></span><a class="home hide" id="homeBtn" href="#home">← בית</a></div>
 <nav id="menu" aria-label="תפריט"></nav>
 <div class="wrap">
   <div class="head"><h1 id="title"></h1><span class="sub" id="updated"></span></div>
   <div class="sub" style="margin-bottom:4px"><select id="bsel" class="hide" style="padding:2px 6px;margin-inline-end:8px;font-size:13px"></select><span id="who"></span> · <a href="#" id="logout">יציאה</a></div>
-  <div class="subs hide" id="subs"></div>
 
   <!-- ===== home: my apartment / debtors / all ===== -->
   <section id="sec-home">

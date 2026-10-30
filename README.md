@@ -48,7 +48,7 @@ npm run seed:sql -- committee@email.com 2 "Building name"
 ```
 
 ## One page, one menu
-Everyone uses the same page (`app.html`). A menu (bottom bar on a phone, panel on the right on a computer) shows only what the person's roles allow: **בית** (all roles), **ייבוא**, **אנשים**, **עוד** (whoever manages a building), **בניינים** (super user and managers). Tenants and apartment owners see just the home screen.
+Everyone uses the same page (`app.html`). One flat menu (a ☰ button on a phone, a panel on the right on a computer) lists only the screens the person's roles allow, with no second level: **בית**; **ייבוא מהבנק**, **גיבוי נתונים**, **משתמשים**, **דירות ודיירים**, **מה הדיירים רואים** (whoever manages a building); **כל האנשים**, **הבניינים שלי** (super user and managers); **מנהלי בניינים** (super user). Every screen except Home has a **← בית** button, and the menu also has switch-building and sign-out. Tenants and apartment owners see just the home screen.
 
 **Home** has the buttons **הדירה שלי / הדירות שלי** (each apartment linked to you, with your payments with dates for the selected year; apartment owners also see the current tenant's name and phones), **חייבים** and **הכל**. Tenants and managers see the whole board; an apartment owner who is not also a tenant sees only their own apartments.
 

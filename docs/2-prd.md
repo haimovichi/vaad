@@ -48,7 +48,7 @@ Who gives which role: super user: any role, any building, and buildings managers
 
 - FR21 People overview (super user and buildings managers): one list of every person with all their roles in every building they can see, with filters, so the same person can be committee in one building and tenant in another and it is visible in one place.
 
-- FR22 One page, one menu for everyone (bottom bar on phones, side menu on computers), showing only the sections a person's roles allow. No separate detailed table screen: whoever manages the building gets the full detail (balance, exact paid/due per month, payments with dates, add and delete a payment) when drilling into an apartment card.
+- FR22 One page, one menu for everyone (one flat ☰ menu on phones, side menu on computers, ← בית on every screen but Home), showing only the sections a person's roles allow. No separate detailed table screen: whoever manages the building gets the full detail (balance, exact paid/due per month, payments with dates, add and delete a payment) when drilling into an apartment card.
 
 **Backup**
 - FR20 One-click backup for whoever manages a building of the whole building (every table, as stored) from the admin console, and a restore tool that turns the file into SQL for the Supabase editor (fresh restore, or `--replace` for this building only).

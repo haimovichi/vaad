@@ -37,38 +37,60 @@ $('#who').textContent = ME.email + ' · ' + BLD.roles.map((r) => Vaad.ROLE_LABEL
 $('#logout').onclick = (e) => { e.preventDefault(); Vaad.signOut(); };
 Vaad.mountSwitcher($('#bsel'), ME);
 
-/* ---------- menu and routing ---------- */
-const SECTIONS = {
-  home: { t: 'בית', i: '🏠' },
-  import: { t: 'ייבוא', i: '📥', need: () => STAFF },
-  people: { t: 'אנשים', i: '👥', need: () => STAFF, subs: [['users', 'משתמשים'], ['everyone', 'כל האנשים', () => PLATFORM], ['apts', 'דירות ודיירים']] },
-  buildings: { t: 'בניינים', i: '🏢', need: () => PLATFORM, subs: [['list', 'בניינים'], ['managers', 'מנהלי בניינים', () => ME.isSuper]] },
-  more: { t: 'עוד', i: '⋯', need: () => STAFF, subs: [['share', 'מה הדיירים רואים'], ['backup', 'גיבוי']] },
+/* ---------- menu and routing: one flat list of screens, ← בית on every screen but home ---------- */
+const SCREENS = [
+  ['home', 'בית', '🏠', '', 'home'],
+  ['import', 'ייבוא מהבנק', '📥', 'כספים', 'import', () => STAFF],
+  ['backup', 'גיבוי נתונים', '💾', 'כספים', 'more', () => STAFF],
+  ['users', 'משתמשים', '🔑', 'אנשים', 'people', () => STAFF],
+  ['apts', 'דירות ודיירים', '🏘️', 'אנשים', 'people', () => STAFF],
+  ['everyone', 'כל האנשים', '👥', 'אנשים', 'people', () => PLATFORM],
+  ['list', 'הבניינים שלי', '🏢', 'בניינים', 'buildings', () => PLATFORM],
+  ['managers', 'מנהלי בניינים', '🧑‍💼', 'בניינים', 'buildings', () => ME.isSuper],
+  ['share', 'מה הדיירים רואים', '📢', 'הגדרות', 'more', () => STAFF],
+];
+const PANE = { users: 'p-users', apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers: 'b-managers', share: 'm-share', backup: 'm-backup' };
+const LEGACY = { people: 'users', buildings: 'list', more: 'share' };   // old #people/users style addresses
+const screens = SCREENS.filter((x) => !x[5] || x[5]());
+const LOAD = { home: () => renderHome(), import: () => {}, users: () => loadUsers(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
+for (const x of screens) {
+  if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
+  menuHtml += `<a href="#${x[0]}" data-k="${x[0]}"><b>${x[2]}</b> ${x[1]}</a>`;
+}
+const others = ME.memberships.filter((m) => !ME.building || m.id !== ME.building.id);
+menuHtml += '<h4>חשבון</h4>' + others.map((m) => `<a href="#" data-b="${m.id}"><b>🔄</b> עבור ל${esc(m.name)}</a>`).join('') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
+$('#menu').innerHTML = menuHtml;
+const setMenu = (on) => document.body.classList.toggle('mopen', on);
+$('#mbtn').onclick = () => setMenu(true);
+$('#menu').onclick = (e) => {
+  const a = e.target.closest('a'); const c = e.target.closest('#mclose');
+  if (c) return setMenu(false);
+  if (!a) return;
+  if (a.id === 'mout') { e.preventDefault(); return Vaad.signOut(); }
+  if (a.dataset.b) { e.preventDefault(); Vaad.choose(a.dataset.b); return (location.href = 'index.html' + Vaad.keep); }
+  setMenu(false);
 };
-const allowed = (k) => SECTIONS[k] && (!SECTIONS[k].need || SECTIONS[k].need());
-const visibleSubs = (k) => (SECTIONS[k].subs || []).filter((x) => !x[2] || x[2]());
-$('#menu').innerHTML = Object.keys(SECTIONS).filter(allowed).map((k) => `<a href="#${k}" data-k="${k}"><b>${SECTIONS[k].i}</b>${SECTIONS[k].t}</a>`).join('');
 
 const homeTabs = [...(myApts.length ? ['mine'] : []), ...(BOARD ? ['debt', 'all'] : [])];
 let sec = 'home'; let sub = ''; let tab = homeTabs[0];
 function route() {
   const h = location.hash.replace(/^#\/?/, '').split('/');
   let s = h[0] || 'home'; let u = h[1] || '';
-  if (!allowed(s)) s = 'home';
-  if (s === 'home') { if (!homeTabs.includes(u)) u = homeTabs.includes(tab) ? tab : homeTabs[0]; tab = u; }
-  else { const subs = visibleSubs(s); if (subs.length && !subs.find((x) => x[0] === u)) u = subs[0][0]; }
+  if (LEGACY[s] && (!u || PANE[u])) s = u || LEGACY[s];
+  if (!screens.find((x) => x[0] === s)) s = 'home';
+  if (s === 'home') { if (!homeTabs.includes(u)) u = homeTabs.includes(tab) ? tab : homeTabs[0]; tab = u; } else u = '';
   sec = s; sub = u;
-  $$('#menu a').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
-  ['home', 'import', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== s));
-  const subs = s === 'home' ? [] : visibleSubs(s);
-  $('#subs').classList.toggle('hide', subs.length < 2);
-  $('#subs').innerHTML = subs.map((x) => `<button data-s="${x[0]}" class="${x[0] === u ? 'on' : ''}">${x[1]}</button>`).join('');
-  if (s !== 'home') subs.forEach((x) => $(`#${{ people: 'p', buildings: 'b', more: 'm' }[s]}-${x[0]}`).classList.toggle('hide', x[0] !== u));
-  ({ home: renderHome, import: () => {}, people: { users: loadUsers, everyone: loadPeople, apts: loadApts }[u] || (() => {}),
-     buildings: { list: loadBuildings, managers: loadManagers }[u] || (() => {}), more: { share: loadShare, backup: showLastBackup }[u] || (() => {}) }[s])();
+  const def = screens.find((x) => x[0] === s);
+  $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
+  ['home', 'import', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
+  Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
+  $('#scr').textContent = s === 'home' ? 'בית' : def[1];
+  $('#homeBtn').classList.toggle('hide', s === 'home');
+  setMenu(false);
+  LOAD[s]();
   window.scrollTo(0, 0);
 }
-$('#subs').onclick = (e) => { const b = e.target.closest('button[data-s]'); if (b) location.hash = `#${sec}/${b.dataset.s}`; };
 window.addEventListener('hashchange', route);
 
 /* ================= HOME ================= */

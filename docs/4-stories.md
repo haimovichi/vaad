@@ -64,7 +64,7 @@
 ## E7 One page, one menu (2026-10-30)
 | Story | Acceptance | Status |
 |---|---|---|
-| S7.1 Single page with one menu | Bottom bar on phones, right-hand panel on computers; items by role; tenants and apartment owners get no menu; management addresses bounce back to Home for them | Done, verified in demo mode for committee, super user, tenant and apartment owner |
+| S7.1 Single page with one menu | One flat list of screens, grouped; opened with a ☰ button on phones, a right-hand panel on computers; every screen except Home shows "← בית"; items by role; tenants and apartment owners get no menu; management addresses bounce back to Home for them | Done, verified in demo mode for committee, super user, tenant and apartment owner |
 | S7.2 Full drill-down on an apartment card | Balance, exact paid/due per month, payments with dates, add and delete a payment; amounts update at once | Done, verified: adding a payment moved a 1,710 ₪ debt to 1,140 ₪, deleting restored it |
 | S7.3 Other sections ported | Bank import, users, everyone, apartments, buildings, managers, what tenants see, backup | Done, verified in demo mode (import read a real bank file and saved payments) |
 | S7.4 Old addresses | admin.html and tenant.html redirect to the matching section | Done |
