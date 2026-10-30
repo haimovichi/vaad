@@ -33,6 +33,8 @@ tr.warn{background:rgba(224,161,0,.15)}
 a.chip{color:var(--acc)}
 
 /* ---- one flat menu: a sheet on phones (opened by the top bar), a side panel on computers ---- */
+#banner{display:block;text-align:center;font-size:19px;font-weight:700;color:var(--ink);text-decoration:none;padding:12px 14px 10px;background:var(--card);border-bottom:1px solid var(--line)}
+#banner small{display:block;font-size:12px;font-weight:400;color:var(--mute)}
 #bar,#menu{display:none}
 body.staff #bar{display:flex}
 #bar{position:sticky;top:0;z-index:15;align-items:center;gap:10px;background:var(--card);border-bottom:1px solid var(--line);padding:8px 14px}
@@ -51,7 +53,7 @@ body.staff.mopen #menu{display:block}
   body.staff #menu{display:block;position:fixed;inset:0 0 0 auto;width:190px;z-index:10;background:var(--card);border-inline-start:1px solid var(--line);padding:14px 8px}
   #menu .mh{display:none}
   #menu a{font-size:14px;padding:8px 10px}
-  body.staff #bar,body.staff .wrap{margin-inline-end:190px}
+  body.staff #banner,body.staff #bar,body.staff .wrap{margin-inline-end:190px}
   body.staff .wrap{max-width:860px;margin-inline-start:auto}
 }
 
@@ -109,10 +111,11 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 </style>
 </head>
 <body>
+<a id="banner" target="_blank" rel="noopener"></a>
 <div id="bar"><button class="mb" id="mbtn" aria-label="תפריט">☰</button><span class="st" id="scr"></span><a class="home hide" id="homeBtn" href="#home">← בית</a></div>
 <nav id="menu" aria-label="תפריט"></nav>
 <div class="wrap">
-  <div class="head"><h1 id="title"></h1><span class="sub" id="updated"></span></div>
+  <div class="head"><span class="sub" id="updated"></span></div>
   <div class="sub" style="margin-bottom:4px"><select id="bsel" class="hide" style="padding:2px 6px;margin-inline-end:8px;font-size:13px"></select><span id="who"></span> · <a href="#" id="logout">יציאה</a></div>
 
   <!-- ===== home: my apartment / debtors / all ===== -->

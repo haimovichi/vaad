@@ -31,7 +31,9 @@ const api = (m, u, b) => SVC.call(m, u, b);
 
 /* ---------- header ---------- */
 document.body.classList.toggle('staff', STAFF);
-$('#title').textContent = STAFF ? BLD.name : SNAP.title;
+$('#banner').innerHTML = '📍 ' + esc(BLD.name);
+$('#banner').href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(BLD.name);
+document.title = BLD.name;
 $('#updated').textContent = STAFF ? '' : 'עודכן ' + SNAP.updated.split('-').reverse().join('/');
 $('#who').textContent = ME.email + ' · ' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ');
 $('#logout').onclick = (e) => { e.preventDefault(); Vaad.signOut(); };
