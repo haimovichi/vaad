@@ -149,6 +149,16 @@ window.Vaad = (function () {
       },
       async getAptTenants() { return ok(await c.rpc('apt_tenants', { b: B })).map(fromTenantRow); },
       async listMembers() { return ok(await c.from('members').select('*').eq('building_id', B).order('email').order('role').order('apt')); },
+      async listPeople() { // RLS decides what is visible: the super user sees every building, a manager only theirs
+        const members = [];
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await c.from('members').select('*').order('email').range(from, from + 999);
+          if (error) throw new Error(error.message);
+          members.push(...data);
+          if (data.length < 1000) break;
+        }
+        return { members, managers: await this.listManagers() };
+      },
       async addMember(m) { return ok(await c.from('members').insert({ building_id: B, email: m.email, role: m.role, apt: m.apt, name: m.name }).select().single()); },
       async updateMember(id, patch) { return ok(await c.from('members').update(patch).eq('id', id).eq('building_id', B).select().single()); },
       async deleteMember(id) { ok(await c.from('members').delete().eq('id', id).eq('building_id', B)); },
@@ -198,6 +208,7 @@ window.Vaad = (function () {
         return d.residents.filter((r) => own.has(r.apt) && r.status !== 'עזב').map((r) => ({ apt: r.apt, key: r.key, first: r.first, last: r.last, first2: r.first2, last2: r.last2, phone1: r.phone1, phone2: r.phone2, role: r.role }));
       },
       async listMembers() { return members; },
+      async listPeople() { return { members: members.map((m) => ({ ...m, building_id: 1 })), managers }; },
       async addMember(m) { const row = { ...m, id: nextId++ }; members = members.concat(row); return row; },
       async updateMember(id, patch) { members = members.map((x) => (x.id === id ? { ...x, ...patch } : x)); return members.find((x) => x.id === id); },
       async deleteMember(id) { members = members.filter((x) => x.id !== id); },

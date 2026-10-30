@@ -46,6 +46,7 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
     <button data-t="share">מה הדיירים רואים</button>
     <button data-t="users">משתמשים</button>
     <button data-t="backup">גיבוי</button>
+    <button data-t="people" class="hide">אנשים</button>
     <button data-t="buildings" class="hide">בניינים</button>
     <button data-t="managers" class="hide">מנהלי בניינים</button>
   </nav>
@@ -109,6 +110,15 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);co
   <div class="card"><table id="uTable"></table></div>
 </section>
 
+<section id="people" class="hide">
+  <div class="card" style="padding:14px">
+    <h3 style="margin-top:0">אנשים ותפקידים</h3>
+    <div class="mute">כל אדם עם כל התפקידים שלו בכל הבניינים. לחיצה על תפקיד פותחת את רשימת המשתמשים של אותו בניין. אותו אדם יכול להיות, למשל, ועד בבניין אחד ודייר בבניין אחר.<span id="peopleNote"></span></div>
+    <div class="row"><input id="pQ" type="search" placeholder="חפש אימייל" style="width:200px;direction:ltr"><select id="pB"></select><label><input type="checkbox" id="pMulti"> רק אנשים עם כמה תפקידים</label><span class="mute" id="pCount"></span></div>
+  </div>
+  <div class="card"><table id="pTable"></table></div>
+</section>
+
 <section id="buildings" class="hide">
   <div class="card" style="padding:14px">
     <h3 style="margin-top:0">בניינים</h3>
@@ -147,7 +157,7 @@ const toast=t=>{const e=$('#msg');e.textContent=t;e.style.display='block';setTim
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('main>section').forEach(s=>s.classList.toggle('hide',s.id!==b.dataset.t));
-  if(b.dataset.t==='apts')loadApts();if(b.dataset.t==='share')loadShare();if(b.dataset.t==='users')loadUsers();if(b.dataset.t==='backup')showLastBackup();if(b.dataset.t==='buildings')loadBuildings();if(b.dataset.t==='managers')loadManagers();
+  if(b.dataset.t==='apts')loadApts();if(b.dataset.t==='share')loadShare();if(b.dataset.t==='users')loadUsers();if(b.dataset.t==='backup')showLastBackup();if(b.dataset.t==='buildings')loadBuildings();if(b.dataset.t==='people')loadPeople();if(b.dataset.t==='managers')loadManagers();
 });
 
 /* ---- status grid ---- */
@@ -294,6 +304,35 @@ $('#uTable').onchange=async e=>{
 $('#uTable').onclick=async e=>{const r=e.target.dataset.rm;if(!r)return;if(!confirm('להסיר את התפקיד?'))return;
   try{await api('DELETE','/api/member/'+r);loadUsers()}catch(err){toast(err.message)}};
 
+/* ---- people overview (super user and buildings managers) ---- */
+let PEOPLE=null;
+async function loadPeople(){
+  PEOPLE=await api('GET','/api/people');
+  const names=Object.fromEntries(ME.memberships.map(m=>[m.id,m.name]));
+  $('#pB').innerHTML='<option value="">כל הבניינים</option>'+ME.memberships.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  $('#peopleNote').textContent=ME.isSuper?'':' כמנהל בניינים אתם רואים את האנשים בבניינים שלכם בלבד.';
+  renderPeople(names);
+}
+function renderPeople(names){
+  names=names||Object.fromEntries(ME.memberships.map(m=>[m.id,m.name]));
+  const by={};const add=(e,r)=>{(by[e]=by[e]||[]).push(r)};
+  for(const m of PEOPLE.members)add(m.email,{b:m.building_id,t:ROLE[m.role]+(m.apt?` · דירה ${m.apt}`:''),k:m.role});
+  for(const x of PEOPLE.managers){
+    if(!x.buildings.length)add(x.email,{b:null,t:'מנהל בניינים (עדיין בלי בניין)',k:'manager'});
+    for(const b of x.buildings)add(x.email,{b,t:'מנהל בניינים',k:'manager'});
+  }
+  if(ME.isSuper)add(ME.email,{b:null,t:'מנהל על · כל הבניינים',k:'super'});
+  const q=$('#pQ').value.trim().toLowerCase(),fb=$('#pB').value,multi=$('#pMulti').checked;
+  let list=Object.entries(by).filter(([e,rs])=>(!q||e.includes(q))&&(!fb||rs.some(r=>String(r.b)===fb||r.k==='super'))&&(!multi||rs.length>1));
+  list.sort((a,b)=>(a[0]===ME.email?-1:b[0]===ME.email?1:0)||b[1].length-a[1].length||a[0].localeCompare(b[0]));
+  $('#pCount').textContent=`${list.length} אנשים`;
+  $('#pTable').innerHTML='<tr><th class="l">אימייל</th><th class="l">תפקידים</th></tr>'+list.map(([e,rs])=>
+    `<tr><td class="l" dir="ltr">${e}${e===ME.email?' <span class="mute">(אתם)</span>':''}</td><td class="l">`+
+    rs.map(r=>r.b?`<a href="#" class="chip" data-open="${r.b}">${names[r.b]||'בניין '+r.b}: ${r.t}</a>`:`<span class="chip">${r.t}</span>`).join(' ')+`</td></tr>`).join('')||'<tr><td class="mute">אין אנשים להצגה</td></tr>';
+}
+['#pQ','#pB','#pMulti'].forEach(i=>{$(i).oninput=()=>PEOPLE&&renderPeople();$(i).onchange=()=>PEOPLE&&renderPeople()});
+$('#pTable').onclick=e=>{const a=e.target.closest('a[data-open]');if(!a)return;e.preventDefault();Vaad.choose(a.dataset.open);location.href='admin.html'+Vaad.keep+'#users'};
+
 /* ---- buildings (super user and buildings managers) ---- */
 function loadBuildings(){
   $('#bTable').innerHTML='<tr><th>#</th><th class="l">שם</th><th class="l">התפקידים שלכם</th><th></th></tr>'+
@@ -368,7 +407,7 @@ $('#dlBackup').onclick=async()=>{
     $('#me').textContent=`${ME.building.name} · ${ME.email} · ${ME.building.roles.map(r=>Vaad.ROLE_LABEL[r]).join(', ')}`;
     Vaad.mountSwitcher($('#bsel'),ME);
     $('#toTenant').href='tenant.html'+Vaad.keep;
-    if(ME.isSuper||ME.isManager)document.querySelector('nav button[data-t="buildings"]').classList.remove('hide');
+    if(ME.isSuper||ME.isManager){document.querySelector('nav button[data-t="buildings"]').classList.remove('hide');document.querySelector('nav button[data-t="people"]').classList.remove('hide')}
     if(ME.isSuper)document.querySelector('nav button[data-t="managers"]').classList.remove('hide');
     await loadGrid();
     const want=location.hash.slice(1);const tb=want&&document.querySelector(`nav button[data-t="${want}"]:not(.hide)`);if(tb)tb.click();

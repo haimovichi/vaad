@@ -31,7 +31,7 @@ Everyone logs in with an emailed link (no passwords). Only emails that have a ro
 
 **2. GitHub Pages** — push this folder to a public repo (code only; `data/`, `seed.sql`, `*.xlsx`, backups are ignored). Settings → Pages → Source: **GitHub Actions**. `.github/workflows/pages.yml` publishes `app/` on every push to `main`.
 
-**3. Invite people** — in the console's **משתמשים** tab add each email with a role and, for tenants and apartment owners, the apartment number. The super user appoints buildings managers in **מנהלי בניינים**.
+**3. Invite people** — in the console's **משתמשים** tab add each email with a role and, for tenants and apartment owners, the apartment number. The super user appoints buildings managers in **מנהלי בניינים**. The **אנשים** tab (super user and managers) lists every person with their roles in all buildings.
 
 ## Who can give out which role
 | | committee | tenant | apartment owner | buildings manager |

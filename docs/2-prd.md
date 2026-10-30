@@ -46,6 +46,8 @@ Who gives which role: super user: any role, any building, and buildings managers
 - FR17 What tenants see about others is an allow-listed snapshot: apartment number, tag (current/former tenant), monthly status, and optionally last name and debt amount (owner setting). Rewritten after every change.
 - FR18 "הדירה שלי / הדירות שלי" comes only from the links set in the users tab (tenant or apartment-owner rows); no link means the button says so. An apartment owner who is not also a tenant sees only their own apartments, enforced by the database (a filtered view of the board), not by the screen.
 
+- FR21 People overview (super user and buildings managers): one list of every person with all their roles in every building they can see, with filters, so the same person can be committee in one building and tenant in another and it is visible in one place.
+
 **Backup**
 - FR20 One-click backup for whoever manages a building of the whole building (every table, as stored) from the admin console, and a restore tool that turns the file into SQL for the Supabase editor (fresh restore, or `--replace` for this building only).
 

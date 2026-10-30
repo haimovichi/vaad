@@ -59,6 +59,7 @@
 | S6.7 Migration of the live database | Old owner -> committee (+ apartment owner for their apartment); old view-only admin rows block the migration; result identical to a fresh install | Done: `test:migration`; applied to the live database and verified by impersonation |
 | S6.8 Console: buildings and managers tabs, role-aware users tab | Only offers what the person may do | Done, verified in demo mode |
 | S6.9 Real-login check of the new roles on the live site | Owner login opens correctly; add a test tenant and a test apartment owner and look at their screens | Partly done: the owner/super-user login works on the live site; tenant and apartment-owner logins with spare emails still to check |
+| S6.10 People overview | Super user: everyone with every role in every building; a manager: the people in their buildings; committee, tenants and apartment owners: no access. Filter by email, by building, and only people with several roles; a role opens that building's users tab | Done, verified in demo mode for super user, manager and committee |
 
 ## Backlog (from the PRD)
 Empty-building onboarding screen · server-side matching and allocation · Capacitor wrapper for Google Play and the App Store with push notifications · payment reminders · expense screens · dates for historic Excel payments.
