@@ -98,7 +98,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         await rows(who, email, `update payment B${b}`, `update payments set amount = 1 where building_id = ${b}`, PAY[b]);
         await rows(who, email, `delete payment B${b}`, `delete from payments where building_id = ${b}`, PAY[b]);
         await rows(who, email, `write snapshot B${b}`, `update snapshot set data = data where building_id = ${b}`, 1);
-        await rows(who, email, `rename building B${b}`, `update buildings set name = 'renamed' where id = ${b}`, 1);
+        await blocked(who, email, `rename building B${b}`, `update buildings set name = 'renamed' where id = ${b}`);
       } else {
         await blocked(who, email, `insert payment B${b}`, `insert into payments(building_id,key,apt,y,m,amount) values (${b},'x',1,2026,11,1)`);
         await blocked(who, email, `update payment B${b}`, `update payments set amount = 1 where building_id = ${b}`);

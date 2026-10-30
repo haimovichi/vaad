@@ -200,7 +200,6 @@ window.Vaad = (function () {
       async addManagerBuilding(e, id) { ok(await c.from('manager_buildings').insert({ email: e, building_id: id })); },
       async removeManagerBuilding(e, id) { ok(await c.from('manager_buildings').delete().eq('email', e).eq('building_id', id)); },
       async createBuilding(name) { return ok(await c.rpc('create_building', { nm: name })); },
-      async renameBuilding(id, name) { ok(await c.from('buildings').update({ name }).eq('id', id)); },
     };
   }
 
@@ -247,7 +246,6 @@ window.Vaad = (function () {
       async addManagerBuilding(e, id) { managers = managers.map((x) => (x.email === e ? { ...x, buildings: [...x.buildings, id] } : x)); },
       async removeManagerBuilding(e, id) { managers = managers.map((x) => (x.email === e ? { ...x, buildings: x.buildings.filter((b) => b !== id) } : x)); },
       async createBuilding(name) { const id = Math.max(...buildings.map((b) => b.id)) + 1; buildings = buildings.concat({ id, name }); return id; },
-      async renameBuilding(id, name) { buildings = buildings.map((b) => (b.id === id ? { ...b, name } : b)); },
     };
   }
 

@@ -372,12 +372,11 @@ $('#aptTable').onchange = async (e) => { const i = e.target.dataset.i; if (i ===
 /* ================= BUILDINGS (super user, managers) ================= */
 function loadBuildings() {
   $('#bTable').innerHTML = '<tr><th>#</th><th class="l">שם</th><th class="l">התפקידים שלכם</th><th></th></tr>' +
-    ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l"><input value="${esc(m.name)}" data-rename="${m.id}" ${m.manage ? '' : 'disabled'}></td><td class="l">${m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${m.id === BLD.id ? '<span class="mute">פתוח עכשיו</span>' : `<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
+    ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l">${esc(m.name)}</td><td class="l">${m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${m.id === BLD.id ? '<span class="mute">פתוח עכשיו</span>' : `<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
 }
 let newAddr = null;
 const bPick = Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
 $('#bAdd').onclick = async () => { if (!newAddr) return; try { const b = await api('POST', '/api/building', { name: newAddr }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
-$('#bTable').onchange = async (e) => { const id = e.target.dataset.rename; if (!id) return; try { await api('PUT', '/api/building', { id, name: e.target.value }); const m = ME.memberships.find((x) => String(x.id) === id); if (m) m.name = e.target.value.trim(); toast('השם עודכן'); } catch (err) { toast(err.message); loadBuildings(); } };
 $('#bTable').onclick = (e) => { const id = e.target.dataset.open; if (id) { Vaad.choose(id); Vaad.go('index.html'); } };
 
 async function loadManagers() {
