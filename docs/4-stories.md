@@ -37,7 +37,7 @@
 | S4.3 Debtors and all, search, former tenants collapsed | (FR15) | Done |
 | S4.4 Admin drill-down and console links | Tap a card for payments with dates; links open the right console tab (FR16) | Done, verified in demo mode |
 | S4.5 Tenant-safe snapshot and owner settings | Names and debt amounts optional; no phones or accounts (FR17) | Done, verified in the database seed test |
-| S4.6 Real-login check of the live compact view | Owner login opens on apartment 18 with real payments | Backlog: owner to confirm on the live site |
+| S4.6 Real-login check of the live compact view | Owner login opens on apartment 18 with real payments | Done 2026-10-30: owner confirmed on the phone (after the fix that opens the compact view for a bare console address) |
 
 ## E5 Hosting and operations
 | Story | Acceptance | Status |
@@ -58,7 +58,7 @@
 | S6.6 Grant hierarchy | Super > manager > committee as in the PRD; escalation attempts fail | Done, tested |
 | S6.7 Migration of the live database | Old owner -> committee (+ apartment owner for their apartment); old view-only admin rows block the migration; result identical to a fresh install | Done: `test:migration`; applied to the live database and verified by impersonation |
 | S6.8 Console: buildings and managers tabs, role-aware users tab | Only offers what the person may do | Done, verified in demo mode |
-| S6.9 Real-login check of the new roles on the live site | Owner login opens correctly; add a test tenant and a test apartment owner and look at their screens | Backlog: after the new app is pushed |
+| S6.9 Real-login check of the new roles on the live site | Owner login opens correctly; add a test tenant and a test apartment owner and look at their screens | Partly done: the owner/super-user login works on the live site; tenant and apartment-owner logins with spare emails still to check |
 
 ## Backlog (from the PRD)
 Empty-building onboarding screen · server-side matching and allocation · Capacitor wrapper for Google Play and the App Store with push notifications · payment reminders · expense screens · dates for historic Excel payments.
