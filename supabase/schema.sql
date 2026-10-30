@@ -279,8 +279,9 @@ begin
   end loop;
 end $$;
 
--- buildings: you see the ones you belong to; super user sees all. The name is the address and never changes. Create/delete: functions / SQL editor only
+-- buildings: you see the ones you belong to; super user sees all. The name is the address; only the super user changes it. Create/delete: functions / SQL editor only
 create policy member_read  on public.buildings for select to authenticated using (public.is_super() or public.is_manager_of(id) or public.is_member_any(id));
+create policy super_rename on public.buildings for update to authenticated using (public.is_super()) with check (public.is_super());
 grant select, update on public.buildings to authenticated;
 
 -- managers and their buildings: a manager reads their own rows; only the super user writes

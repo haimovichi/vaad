@@ -41,7 +41,7 @@ Everyone logs in with an emailed link (no passwords). Only emails that have a ro
 | Building committee | no | own building | own building | no |
 
 ## Adding buildings
-The super user, buildings managers and building committee members can create a building in **בניינים** (a manager becomes its manager, a committee member its committee). The building name is its address, chosen from Israel's official city and street lists (data.gov.il) plus a house number; free text is not accepted, and the name can't be changed afterwards. A new building is empty: entering its apartments and tenants in the app is not built yet, so for now load it from a workbook:
+The super user, buildings managers and building committee members can create a building in **בניינים** (a manager becomes its manager, a committee member its committee). The building name is its address, chosen from Israel's official city and street lists (data.gov.il) plus a house number; free text is not accepted, and only the super user can change it afterwards (בניינים → שנה כתובת). A new building is empty: entering its apartments and tenants in the app is not built yet, so for now load it from a workbook:
 ```
 npm run seed:excel                                   # after pointing data/source.xlsx at the other workbook
 npm run seed:sql -- committee@email.com 2 "Building name"

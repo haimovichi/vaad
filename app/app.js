@@ -372,12 +372,20 @@ $('#aptTable').onchange = async (e) => { const i = e.target.dataset.i; if (i ===
 /* ================= BUILDINGS (super user, managers) ================= */
 function loadBuildings() {
   $('#bTable').innerHTML = '<tr><th>#</th><th class="l">שם</th><th class="l">התפקידים שלכם</th><th></th></tr>' +
-    ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l">${esc(m.name)}</td><td class="l">${m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${m.id === BLD.id ? '<span class="mute">פתוח עכשיו</span>' : `<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
+    ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l">${esc(m.name)}</td><td class="l">${m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${ME.isSuper ? `<button class="g" data-edit="${m.id}">שנה כתובת</button> ` : ''}${m.id === BLD.id ? '<span class="mute">פתוח עכשיו</span>' : `<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
 }
 let newAddr = null;
 const bPick = Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
 $('#bAdd').onclick = async () => { if (!newAddr) return; try { const b = await api('POST', '/api/building', { name: newAddr }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
-$('#bTable').onclick = (e) => { const id = e.target.dataset.open; if (id) { Vaad.choose(id); Vaad.go('index.html'); } };
+let editId = null; let editAddr = null;
+const editPick = ME.isSuper ? Vaad.addressPicker($('#bEditPick'), (a) => { editAddr = a; $('#bEditSave').disabled = !a; }) : null;
+const closeEdit = () => { editId = null; $('#bEditBox').classList.add('hide'); if (editPick) editPick.reset(); };
+$('#bEditCancel').onclick = closeEdit;
+$('#bEditSave').onclick = async () => {
+  if (!editAddr) return;
+  try { await api('PUT', '/api/building', { id: editId, name: editAddr }); const m = ME.memberships.find((x) => String(x.id) === String(editId)); if (m) m.name = editAddr; if (BLD.id === +editId) BLD.name = editAddr; closeEdit(); loadBuildings(); toast('הכתובת עודכנה'); } catch (err) { toast(err.message); }
+};
+$('#bTable').onclick = (e) => { const ed = e.target.dataset.edit; if (ed) { editId = ed; const m = ME.memberships.find((x) => String(x.id) === ed); $('#bEditT').textContent = 'שינוי כתובת: ' + m.name; $('#bEditBox').classList.remove('hide'); $('#bEditBox').scrollIntoView(); return; } const id = e.target.dataset.open; if (id) { Vaad.choose(id); Vaad.go('index.html'); } };
 
 async function loadManagers() {
   const list = await api('GET', '/api/managers'); const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name])); const enc = encodeURIComponent;
