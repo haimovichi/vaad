@@ -1,15 +1,16 @@
 -- Merges duplicate people in the users table so that every person is ONE user record, however many apartments
 -- they own, rent or hold roles in. Run once after migrate-users.sql (which creates one user per tenancy and per
 -- owner record, so a person who owns two apartments, or owns one and rents another, appears several times).
--- Safe to re-run. Copy users, residents, owners and members to a backup schema first.
+-- Safe to re-run. Copy users, residents, owners and members to a backup schema first. Works whether bank accounts
+-- are still the users.bank_account column (run it before migrate-bank-accounts.sql) or already the bank_accounts table.
 --
 -- Two records are the same person when
 --   * they have the same full name and the same phone (or one of them has no phone), and no two different emails; or
 --   * one has no name and its phone is the phone of exactly one named person; or
 --   * both have no name and the same phone.
 -- Same name with two different phones (could be two people, or one person with two phones) is left alone.
--- Everything points at the surviving record: tenancies, owner records and roles. Bank accounts are kept, as a list
--- separated by commas (one person may pay from several accounts). Phone and email are kept when only one record had them.
+-- Everything points at the surviving record: tenancies, owner records, roles and bank accounts (one person may pay
+-- from several accounts, so all of them are kept). Phone and email are kept when only one record had them.
 
 create or replace function pg_temp.merge_user(keep bigint, gone bigint) returns void
 language plpgsql as $$
@@ -24,14 +25,17 @@ begin
   delete from public.members m where m.user_id = gone and exists (
     select 1 from public.members k where k.user_id = keep and k.building_id = m.building_id and k.role = m.role and coalesce(k.apt, 0) = coalesce(m.apt, 0));
   update public.members set user_id = keep where user_id = gone;
+  if to_regclass('public.bank_accounts') is not null then
+    delete from public.bank_accounts b where b.user_id = gone and exists (select 1 from public.bank_accounts k where k.user_id = keep and k.account = b.account);
+    update public.bank_accounts set user_id = keep where user_id = gone;
+  end if;
   delete from public.users where id = gone;
-  update public.users k set
-    email = coalesce(k.email, d.email),
-    phone = coalesce(k.phone, d.phone),
-    bank_account = (select nullif(string_agg(a, ', ' order by ord), '') from (
-      select distinct on (a) a, ord from unnest(string_to_array(regexp_replace(coalesce(k.bank_account, '') || ',' || coalesce(d.bank_account, ''), '[\s;]+', '', 'g'), ',')) with ordinality as t(a, ord)
-      where a <> '' order by a, ord) z)
-  where k.id = keep;
+  update public.users k set email = coalesce(k.email, d.email), phone = coalesce(k.phone, d.phone) where k.id = keep;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'users' and column_name = 'bank_account') then
+    execute $q$ update public.users k set bank_account = (select nullif(string_agg(a, ', ' order by ord), '') from (
+        select distinct on (a) a, ord from unnest(string_to_array(regexp_replace(coalesce(k.bank_account, '') || ',' || coalesce($2, ''), '[\s;]+', '', 'g'), ',')) with ordinality as t(a, ord)
+        where a <> '' order by a, ord) z) where k.id = $1 $q$ using keep, to_jsonb(d) ->> 'bank_account';
+  end if;
 end $$;
 
 do $$

@@ -7,7 +7,7 @@ await db.exec(`create role anon nologin; create role authenticated nologin; crea
   grant usage on schema public, auth to anon, authenticated;`);
 await db.exec(fs.readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8'));
 await db.exec(fs.readFileSync(new URL('../supabase/seed.sql', import.meta.url), 'utf8'));
-for (const t of ['buildings', 'users', 'apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot']) {
+for (const t of ['buildings', 'users', 'bank_accounts', 'apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot']) {
   console.log(t.padEnd(11), (await db.query(`select count(*)::int n from ${t}`)).rows[0].n);
 }
 const s = (await db.query('select sum(amount)::int t from payments')).rows[0].t; console.log('payments total', s);

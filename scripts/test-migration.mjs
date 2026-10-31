@@ -1,5 +1,6 @@
 // Upgrading a database: (1) from the earlier roles (owner/admin/tenant): migrate-roles.sql, migrate-users.sql, schema.sql;
-// (2) from the five-role model that keeps names on residents/owners: migrate-users.sql, schema.sql.
+// (2) from the five-role model that keeps names on residents/owners: migrate-users.sql, migrate-bank-accounts.sql, schema.sql;
+// (3) from the users table that still holds bank accounts as one text field: migrate-bank-accounts.sql, schema.sql.
 // Both must keep the data, enforce the same rules, and end up identical to a fresh install.
 import { PGlite } from '@electric-sql/pglite';
 import fs from 'fs';
@@ -9,6 +10,8 @@ const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8');
 const oldSchema = read('./fixtures/schema-v1.sql');
 const migrateRoles = read('../supabase/migrate-roles.sql');
 const migrateUsers = read('../supabase/migrate-users.sql');
+const migrateBank = read('../supabase/migrate-bank-accounts.sql');
+const oldSchemaV3 = read('./fixtures/schema-v3.sql');
 const oldSchemaV2 = read('./fixtures/schema-v2.sql');
 const schema = read('../supabase/schema.sql');
 
@@ -28,7 +31,7 @@ async function legacyDb(extra = '') {
 
 // 1) migrate a database with owner + tenant rows
 const a = await legacyDb();
-await a.exec(migrateRoles); await a.exec(migrateUsers); await a.exec(schema);
+await a.exec(migrateRoles); await a.exec(migrateUsers); await a.exec(migrateBank); await a.exec(schema);
 const mem = (await a.query('select u.email, m.role, m.apt from members m join users u on u.id = m.user_id order by 1, 2, 3')).rows.map((r) => `${r.email}:${r.role}:${r.apt ?? '-'}`).join(' | ');
 check('owner with apartment -> committee + apartment owner; owner without -> committee; tenant unchanged',
   mem === 'second@x.com:committee:- | tenant@x.com:tenant:8 | treasurer@x.com:apt_owner:18 | treasurer@x.com:committee:-', `(${mem})`);
@@ -51,8 +54,8 @@ const shape = async (d) => ({
   policies: (await d.query("select tablename, policyname, cmd, roles::text r, qual, with_check from pg_policies where schemaname = 'public' order by 1, 2")).rows,
   functions: (await d.query("select proname, prosecdef, pg_get_functiondef(oid) def from pg_proc where pronamespace = 'public'::regnamespace order by 1")).rows,
   grants: (await d.query("select table_name, privilege_type from information_schema.role_table_grants where table_schema = 'public' and grantee = 'authenticated' order by 1, 2")).rows,
-  columns: (await d.query("select table_name, column_name, data_type, is_nullable from information_schema.columns where table_schema = 'public' and table_name in ('members','users','residents','owners') order by 1, 2")).rows,
-  constraints: (await d.query("select conrelid::regclass::text t, conname, pg_get_constraintdef(oid) def from pg_constraint where conrelid in ('public.members'::regclass, 'public.users'::regclass, 'public.residents'::regclass, 'public.owners'::regclass) order by 1, 2")).rows,
+  columns: (await d.query("select table_name, column_name, data_type, is_nullable from information_schema.columns where table_schema = 'public' and table_name in ('members','users','residents','owners','bank_accounts') order by 1, 2")).rows,
+  constraints: (await d.query("select conrelid::regclass::text t, conname, pg_get_constraintdef(oid) def from pg_constraint where conrelid in ('public.members'::regclass, 'public.users'::regclass, 'public.bank_accounts'::regclass, 'public.residents'::regclass, 'public.owners'::regclass) order by 1, 2")).rows,
   indexes: (await d.query("select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename in ('members','super_users','users') order by 1")).rows,
 });
 const [s1, s2] = [await shape(a), await shape(fresh)];
@@ -60,7 +63,7 @@ for (const k of Object.keys(s1)) check(`migrated ${k} equal a fresh install`, JS
 
 // 4) the loaded fixture + a role check also work on the migrated database
 const b = await legacyDb();
-await b.exec(migrateRoles); await b.exec(migrateUsers); await b.exec(schema);
+await b.exec(migrateRoles); await b.exec(migrateUsers); await b.exec(migrateBank); await b.exec(schema);
 await b.exec('delete from members; delete from payments; delete from apartments; delete from buildings; delete from users');
 await loadFixture(b);
 const r2 = makeRunner(b);
@@ -95,9 +98,9 @@ async function v2Db() {
   return d;
 }
 const v = await v2Db();
-await v.exec(migrateUsers); await v.exec(schema);
+await v.exec(migrateUsers); await v.exec(migrateBank); await v.exec(schema);
 const un = async (sql) => (await v.query(sql)).rows;
-const people = (await un("select email, first_name, last_name, phone, bank_account from users order by id")).map((r) => `${r.email ?? '-'}:${r.first_name ?? '-'}:${r.last_name ?? '-'}:${r.phone ?? '-'}:${r.bank_account ?? '-'}`);
+const people = (await un("select email, first_name, last_name, phone, (select string_agg(account, ',') from bank_accounts b where b.user_id = users.id) bank_account from users order by id")).map((r) => `${r.email ?? '-'}:${r.first_name ?? '-'}:${r.last_name ?? '-'}:${r.phone ?? '-'}:${r.bank_account ?? '-'}`);
 check('users: logins first (split names), then each tenant, a second person or phone, and each owner',
   JSON.stringify([...people].sort()) === JSON.stringify([
     'me@x.com:Oren:Haim:-:-', 'ten@x.com:-:-:-:-', 'boss@x.com:-:-:-:-', 'mgr@x.com:-:-:-:-',
@@ -109,9 +112,9 @@ check('owners point at their person (an owner with no details points at nobody)'
 check('roles keep their rows (a person holds committee and owner of 18 at once)', (await un("select count(*)::int n from members m join users u on u.id = m.user_id where u.email = 'me@x.com'"))[0].n === 2);
 check('the old personal columns are gone', (await un("select count(*)::int n from information_schema.columns where table_schema = 'public' and ((table_name = 'residents' and column_name in ('first_name','last_name','first2','last2','phone1','phone2','account')) or (table_name = 'owners' and column_name in ('first_name','last_name','phone','account')) or (table_name = 'members' and column_name in ('email','name')))"))[0].n === 0);
 check('payments and snapshot untouched', (await un("select count(*)::int n from payments"))[0].n === 1 && (await un("select count(*)::int n from snapshot"))[0].n === 1);
-const before = JSON.stringify(await un('select * from users order by id'));
-await v.exec(migrateUsers); await v.exec(schema);
-check('running both scripts again changes nothing', JSON.stringify(await un('select * from users order by id')) === before);
+const before = JSON.stringify([await un('select * from users order by id'), await un('select user_id, account from bank_accounts order by 1, 2')]);
+await v.exec(migrateUsers); await v.exec(migrateBank); await v.exec(schema);
+check('running the scripts again changes nothing', JSON.stringify([await un('select * from users order by id'), await un('select user_id, account from bank_accounts order by 1, 2')]) === before);
 const s3 = await shape(v);
 for (const k of Object.keys(s3)) check(`v2-migrated ${k} equal a fresh install`, JSON.stringify(s3[k]) === JSON.stringify(s2[k]));
 {
@@ -119,6 +122,23 @@ for (const k of Object.keys(s3)) check(`v2-migrated ${k} equal a fresh install`,
   check('migrated committee member reads their building\'s people and payments', (await one3('me@x.com', 'select * from users')) === 8 && (await one3('me@x.com', 'select * from payments')) === 1);
   check('migrated tenant sees only their own user row', (await one3('ten@x.com', 'select * from users')) === 1);
   check('migrated owner of 18 sees the tenants of 18 (none) without error', (await one3('me@x.com', 'select * from public.apt_tenants(1)')) === 0);
+}
+
+// 7) accounts as one text field on users -> their own table, linked to the user
+{
+  const d = new PGlite(); await d.exec(STUB); await d.exec(oldSchemaV3);
+  await d.exec(`
+    insert into users(id, email, first_name, phone, bank_account) overriding system value values
+      (1,null,'A','a1','111'),(2,null,'B','b1','222, 333'),(3,null,'C','c1',null),(4,null,'D','d1',' 444 ;555,,  '),(5,null,'E','e1','');`);
+  await d.exec(migrateBank); await d.exec(schema);
+  const rows = (await d.query('select user_id, account from bank_accounts order by id')).rows.map((r) => `${r.user_id}:${r.account}`).join(' | ');
+  check('one account per row, in the order written, blanks dropped', rows === '1:111 | 2:222 | 2:333 | 4:444 | 4:555', `(${rows})`);
+  check('the column is gone from users', (await d.query("select count(*)::int n from information_schema.columns where table_schema = 'public' and table_name = 'users' and column_name = 'bank_account'")).rows[0].n === 0);
+  const snapA = JSON.stringify((await d.query('select * from bank_accounts order by id')).rows);
+  await d.exec(migrateBank); await d.exec(schema);
+  check('running again changes nothing', JSON.stringify((await d.query('select * from bank_accounts order by id')).rows) === snapA);
+  const s4 = await shape(d);
+  for (const k of Object.keys(s4)) check(`v3-migrated ${k} equal a fresh install`, JSON.stringify(s4[k]) === JSON.stringify(s2[k]));
 }
 
 console.log(bad ? `\n${bad} FAILED` : '\nall passed');

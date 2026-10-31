@@ -12,9 +12,10 @@
 -- A person can hold any mix of roles; they combine (union of what each allows).
 --
 -- PEOPLE AND ROLES ARE SEPARATE
---   users   : one row per person (first/last name, email, full phone, bank account). The email is optional: a tenant
+--   users   : one row per person (first/last name, email, full phone). The email is optional: a tenant
 --             without an email is still a user, he just can't log in. Only the super user edits users; the staff of a
 --             building (committee, managers) read the users of their building.
+--   bank_accounts : a person's bank accounts (none, one or several), linked to the user. Same read/write rules as users.
 --   members : the roles (user, building, role, apartment). One user can hold many rows, even in one building
 --             (owner of three apartments, tenant in one of them, committee member), and in other buildings too.
 --   residents / owners point at users (user_id, and user2_id for a second person on a tenancy).
@@ -50,8 +51,17 @@ create table if not exists public.users (
   email text unique check (email is null or email = lower(email)),
   first_name text, last_name text,
   phone text,            -- full phone number
-  bank_account text,     -- full bank account, if any
   created_at timestamptz not null default now()
+);
+
+-- a person may have no bank account, one, or several (they are used to recognise who paid in a bank file)
+create table if not exists public.bank_accounts (
+  id bigint generated always as identity primary key,
+  user_id bigint not null references public.users(id) on delete cascade,
+  account text not null check (length(trim(account)) > 0),
+  note text,
+  created_at timestamptz not null default now(),
+  unique (user_id, account)
 );
 
 create table if not exists public.members (
@@ -284,6 +294,7 @@ alter table public.super_users       enable row level security;
 alter table public.managers          enable row level security;
 alter table public.manager_buildings enable row level security;
 alter table public.users             enable row level security;
+alter table public.bank_accounts     enable row level security;
 alter table public.members           enable row level security;
 alter table public.apartments        enable row level security;
 alter table public.residents         enable row level security;
@@ -340,6 +351,12 @@ create policy staff_read on public.users for select to authenticated using (
   or exists (select 1 from public.owners o where o.user_id = users.id and public.can_manage(o.building_id)));
 create policy super_all  on public.users for all to authenticated using (public.is_super()) with check (public.is_super());
 grant select, insert, update, delete on public.users to authenticated;
+
+-- bank accounts follow the person: you read the accounts of the users you may read (your own, or your building's people);
+-- only the super user writes them
+create policy read_via_users on public.bank_accounts for select to authenticated using (exists (select 1 from public.users u where u.id = bank_accounts.user_id));
+create policy super_all      on public.bank_accounts for all to authenticated using (public.is_super()) with check (public.is_super());
+grant select, insert, update, delete on public.bank_accounts to authenticated;
 
 -- members: everyone reads their own rows; managers of a building read all its rows;
 -- granting follows the hierarchy: super (any) > manager (any role in their buildings) > committee (tenant, apt_owner only)

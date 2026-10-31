@@ -7,8 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const ORDER = ['users', 'apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot'];
-const IDENTITY = ['users', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'members']; // "generated always" id columns
+const ORDER = ['users', 'bank_accounts', 'apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot'];
+const IDENTITY = ['users', 'bank_accounts', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'members']; // "generated always" id columns
 
 function lit(v) {
   if (v === null || v === undefined) return 'null';
@@ -29,7 +29,7 @@ function buildRestoreSql(backup, { replace = false } = {}) {
     const cols = Object.keys(rows[0]);
     for (const r of rows) if (r.building_id !== undefined && Number(r.building_id) !== B) throw new Error(`row of another building in ${t}`);
     // people are shared across buildings: a person who already exists (same id) is kept as is
-    const tail = t === 'users' ? ' on conflict (id) do nothing' : '';
+    const tail = t === 'users' || t === 'bank_accounts' ? ' on conflict (id) do nothing' : '';
     const over = IDENTITY.includes(t) && cols.includes('id') ? ' overriding system value' : '';
     for (let i = 0; i < rows.length; i += 200) {
       sql += `insert into public.${t} (${cols.join(', ')})${over} values\n` +

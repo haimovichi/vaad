@@ -20,9 +20,10 @@ export async function loadFixture(db) {
     insert into users(email, first_name, last_name) values
       ('c1@x.com','C1',null),('c2@x.com','C2',null),('t8@x.com','T8',null),('t9@x.com','T9',null),('ao8@x.com','AO8',null),
       ('multi@x.com','Multi',null),('n@x.com','New',null);
-    insert into users(first_name, last_name, phone, bank_account) values
-      ('Cur','Tenant','050-8','111'),('Old','Tenant','050-0',null),('Nine','Nine','050-9',null),
-      ('Three','T','050-3',null),('Five','F','050-5',null),('One','O','050-1',null);
+    insert into users(first_name, last_name, phone) values
+      ('Cur','Tenant','050-8'),('Old','Tenant','050-0'),('Nine','Nine','050-9'),
+      ('Three','T','050-3'),('Five','F','050-5'),('One','O','050-1');
+    insert into bank_accounts(user_id, account) values (t_pid('050-8'),'111'),(t_pid('050-8'),'112'),(t_pid('050-9'),'999'),(t_uid('t8@x.com'),'777');
     insert into members(building_id, user_id, role, apt) values
       (1,t_uid('c1@x.com'),'committee',null),(2,t_uid('c2@x.com'),'committee',null),
       (1,t_uid('t8@x.com'),'tenant',8),(1,t_uid('t9@x.com'),'tenant',9),(1,t_uid('ao8@x.com'),'apt_owner',8),
@@ -217,7 +218,35 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   await rows('aptOwner8', 'ao8@x.com', 'users visible (own row only)', 'select * from users', 1);
   await rows('stranger', 'nobody@x.com', 'users visible', 'select * from users', 0);
   await blocked('anon', null, 'users visible', 'select * from users');
-  await value('committee1', 'c1@x.com', 'a tenant account and phone are readable by staff', "select bank_account from users where phone = '050-8'", '111');
+  await value('committee1', 'c1@x.com', 'a tenant has two bank accounts, both readable by staff', "select string_agg(account, ',' order by account) from bank_accounts where user_id = t_pid('050-8')", '111,112');
+
+  // bank accounts: a separate table linked to the user; read where the user is readable, written only by the super user
+  for (const [who, email, n] of [['super', 'super@x.com', 4], ['manager12', 'm12@x.com', 4], ['manager3', 'm3@x.com', 0], ['committee1', 'c1@x.com', 4], ['committee2', 'c2@x.com', 0],
+    ['tenant8', 't8@x.com', 1], ['aptOwner8', 'ao8@x.com', 0], ['multi', 'multi@x.com', 4], ['stranger', 'nobody@x.com', 0]]) {
+    await rows(who, email, 'bank accounts visible', 'select * from bank_accounts', n);
+  }
+  await blocked('anon', null, 'bank accounts visible', 'select * from bank_accounts');
+  await value('tenant8', 't8@x.com', 'a tenant reads his own account', "select account from bank_accounts", '777');
+  await rows('super', 'super@x.com', 'super adds an account', "insert into bank_accounts(user_id, account) values (t_pid('050-0'), '555')", 1);
+  await rows('super', 'super@x.com', 'super edits an account', "update bank_accounts set note = 'joint' where account = '111'", 1);
+  await rows('super', 'super@x.com', 'super removes an account', "delete from bank_accounts where account = '112'", 1);
+  await blocked('super', 'super@x.com', 'the same account twice for one person', "insert into bank_accounts(user_id, account) values (t_pid('050-8'), '111')");
+  await rows('super', 'super@x.com', 'two people may share an account (joint account)', "insert into bank_accounts(user_id, account) values (t_pid('050-0'), '111')", 1);
+  await blocked('super', 'super@x.com', 'an empty account', "insert into bank_accounts(user_id, account) values (t_pid('050-0'), '  ')");
+  for (const [who, email] of [['committee1', 'c1@x.com'], ['manager12', 'm12@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+    await blocked(who, email, 'add a bank account', "insert into bank_accounts(user_id, account) values (t_pid('050-8'), '333')");
+    await blocked(who, email, 'edit a bank account', "update bank_accounts set account = '1' where account = '111'");
+    await blocked(who, email, 'delete a bank account', "delete from bank_accounts where account = '111'");
+  }
+  {
+    const gone = await asUser('super@x.com', async (q) => {
+      await q("insert into users(first_name, phone) values ('Temp', '000-0')");
+      await q("insert into bank_accounts(user_id, account) values (t_pid('000-0'), '4242')");
+      await q("delete from users where phone = '000-0'");
+      return (await q("select count(*)::int n from bank_accounts where account = '4242'")).rows[0].n;
+    });
+    report(gone === 0, 'super', 'deleting a person deletes their bank accounts', 0, gone);
+  }
   await value('tenant8', 't8@x.com', 'a tenant cannot read another user', "select count(*)::int from users where phone = '050-8'", 0);
   await rows('super', 'super@x.com', 'super edits a user', "update users set last_name = 'X' where email = 't8@x.com'", 1);
   await rows('super', 'super@x.com', 'super adds a user', "insert into users(first_name) values ('Walk-in')", 1);

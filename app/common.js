@@ -123,18 +123,30 @@ window.Vaad = (function () {
   const toPayment = (p) => ({ key: p.key, apt: p.apt, y: p.y, m: p.m, amount: p.amount, method: p.method, paid_on: p.date || null, note: p.note, ref: p.ref || null, src: p.src, tx_key: p.txKey || null });
   // People live in the users table; tenancies and owners point at them. The app keeps its flat shape (first, last, phone1...).
   const fullName = (u) => [u && u.first_name, u && u.last_name].filter(Boolean).join(' ');
-  const fromResident = (r, users) => {
+  const acctText = (accts, uid) => ((accts && accts.get(uid)) || []).map((x) => x.account).join(', ');   // a person's accounts as one list: "111, 222"
+  const fromResident = (r, users, accts) => {
     const a = users.get(r.user_id) || {}; const b = users.get(r.user2_id) || {};
-    return { id: r.id, key: r.key, apt: r.apt, userId: r.user_id || null, user2Id: r.user2_id || null, first: a.first_name || '', last: a.last_name || '', first2: b.first_name || '', last2: b.last_name || '', phone1: a.phone || '', phone2: b.phone || '', role: r.role || '', status: r.status || '', entryMonth: r.entry_month, entryYear: r.entry_year, exitMonth: r.exit_month, exitYear: r.exit_year, account: a.bank_account || '' };
+    return { id: r.id, key: r.key, apt: r.apt, userId: r.user_id || null, user2Id: r.user2_id || null, first: a.first_name || '', last: a.last_name || '', first2: b.first_name || '', last2: b.last_name || '', phone1: a.phone || '', phone2: b.phone || '', role: r.role || '', status: r.status || '', entryMonth: r.entry_month, entryYear: r.entry_year, exitMonth: r.exit_month, exitYear: r.exit_year, account: acctText(accts, r.user_id) };
   };
-  const userOut = (u) => ({ id: u.id, email: u.email || '', first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: u.bank_account || '' });
-  const USER_COLS = { first: 'first_name', last: 'last_name', email: 'email', phone: 'phone', account: 'bank_account' };
+  const userOut = (u, accts) => ({ id: u.id, email: u.email || '', first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, u.id) });
+  const USER_COLS = { first: 'first_name', last: 'last_name', email: 'email', phone: 'phone' };
   const fromTenantRow = (r) => ({ apt: r.apt, key: r.key, first: r.first_name || '', last: r.last_name || '', first2: r.first2 || '', last2: r.last2 || '', phone1: r.phone1 || '', phone2: r.phone2 || '', role: r.role || '' });
 
   async function fetchUsers() { // every user this login may read (RLS decides), 1000 per request
     const out = [];
     for (let from = 0; ; from += 1000) {
       const { data, error } = await client().from('users').select('*').order('id').range(from, from + 999);
+      if (error) throw error;
+      out.push(...data);
+      if (data.length < 1000) break;
+    }
+    return out;
+  }
+
+  async function fetchBankAccounts() { // the accounts of every user this login may read (RLS decides)
+    const out = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await client().from('bank_accounts').select('*').order('id').range(from, from + 999);
       if (error) throw error;
       out.push(...data);
       if (data.length < 1000) break;
@@ -158,7 +170,24 @@ window.Vaad = (function () {
     const c = client();
     const ok = ({ error, data }) => { if (error) throw new Error(error.message); return data; };
     let users = new Map();   // id -> users row, as last read
-    const refreshUsers = async () => { users = new Map((await fetchUsers()).map((u) => [u.id, u])); };
+    let accts = new Map();   // user id -> [{ id, account }]
+    const refreshUsers = async () => {
+      const [us, bs] = await Promise.all([fetchUsers(), fetchBankAccounts()]);
+      users = new Map(us.map((u) => [u.id, u]));
+      accts = new Map(); for (const b of bs) { if (!accts.has(b.user_id)) accts.set(b.user_id, []); accts.get(b.user_id).push({ id: b.id, account: b.account }); }
+    };
+    // make a person's accounts equal this list ("111, 222"): removes the others, adds the new ones. Only the super user may (RLS).
+    const syncAccounts = async (uid, text) => {
+      const want = [...new Set(String(text || '').split(/[,;]+/).map((s) => s.trim()).filter(Boolean))];
+      const have = accts.get(uid) || [];
+      const drop = have.filter((h) => !want.includes(h.account)); const add = want.filter((w) => !have.some((h) => h.account === w));
+      if (!drop.length && !add.length) return;
+      for (const d of drop) { const { data, error } = await c.from('bank_accounts').delete().eq('id', d.id).select(); if (error || !data.length) throw denied(); }
+      let made = [];
+      if (add.length) { const { data, error } = await c.from('bank_accounts').insert(add.map((account) => ({ user_id: uid, account }))).select(); if (error) throw denied(); made = data.map((b) => ({ id: b.id, account: b.account })); }
+      const all = [...have.filter((h) => want.includes(h.account)), ...made];
+      accts.set(uid, want.map((w) => all.find((x) => x.account === w)));
+    };
     const memberOut = (m) => { const u = users.get(m.user_id); return { id: m.id, building_id: m.building_id, user_id: m.user_id, email: u ? u.email : null, role: m.role, apt: m.apt, name: fullName(u) }; };
     const setName = async (uid, name) => { // only the super user may; for anyone else the database refuses and this is ignored
       const [first, ...rest] = String(name || '').trim().split(/\s+/);
@@ -172,8 +201,8 @@ window.Vaad = (function () {
         const m = Object.fromEntries(meta.map((r) => [r.name, r.value]));
         return {
           apartments: apts.map((a) => ({ apt: a.apt, floor: a.floor || '', rooms: a.rooms, sqm: a.sqm })),
-          residents: res.map((r) => fromResident(r, users)),
-          owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: u.bank_account || '', note: o.note || '' }; }),
+          residents: res.map((r) => fromResident(r, users, accts)),
+          owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
           tariffs: tar.map((t) => ({ year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
           payments: pay.map(fromPayment), expenses: [],
           bankSeen: m.bankSeen || {}, refSeen: m.refSeen || {}, aliases: m.aliases || {}, ignored: m.ignored || {},
@@ -196,16 +225,19 @@ window.Vaad = (function () {
         const want = [...ids].filter(Boolean); tables.users = [];
         for (let i = 0; i < want.length; i += 100) tables.users.push(...ok(await c.from('users').select('*').in('id', want.slice(i, i + 100))));
         tables.users.sort((a, b) => a.id - b.id);
+        tables.bank_accounts = [];
+        for (let i = 0; i < want.length; i += 100) tables.bank_accounts.push(...ok(await c.from('bank_accounts').select('*').in('user_id', want.slice(i, i + 100))));
+        tables.bank_accounts.sort((a, b) => a.id - b.id);
         const b = ok(await c.from('buildings').select('*').eq('id', B).maybeSingle());
         return { building: { id: B, name: b ? b.name : String(B) }, tables };
       },
       async deletePayment(id) { ok(await c.from('payments').delete().eq('id', id).eq('building_id', B)); },
       async updateResident(r) { // status: the building's staff; a person's details: the super user (RLS enforces it)
         ok(await c.from('residents').update({ status: r.status }).eq('id', r.id).eq('building_id', B));
-        const save = async (uid, f) => {
+        const save = async (uid, f, force) => {
           const old = (uid && users.get(uid)) || null;
           if (!old) {
-            if (!Object.values(f).some(Boolean)) return null;
+            if (!Object.values(f).some(Boolean) && !force) return null;
             const { data, error } = await c.from('users').insert(f).select().single();
             if (error) throw denied();
             users.set(data.id, data); return data.id;
@@ -215,8 +247,10 @@ window.Vaad = (function () {
           if (error || !data.length) throw denied();
           users.set(uid, data[0]); return uid;
         };
-        const a = await save(r.userId || null, { first_name: r.first || null, last_name: r.last || null, phone: r.phone1 || null, bank_account: r.account || null });
+        const a = await save(r.userId || null, { first_name: r.first || null, last_name: r.last || null, phone: r.phone1 || null }, !!r.account);
         const b = await save(r.user2Id || null, { first_name: r.first2 || null, last_name: r.last2 || null, phone: r.phone2 || null });
+        if (a) await syncAccounts(a, r.account);
+        else if (r.account) throw denied();
         if (a !== (r.userId || null) || b !== (r.user2Id || null)) ok(await c.from('residents').update({ user_id: a, user2_id: b }).eq('id', r.id).eq('building_id', B));
         r.userId = a; r.user2Id = b;
       },
@@ -243,22 +277,29 @@ window.Vaad = (function () {
           if (data.length < 1000) break;
         }
         await refreshUsers();
-        return { members: members.map(memberOut), managers: await this.listManagers(), users: [...users.values()].map(userOut) };
+        return { members: members.map(memberOut), managers: await this.listManagers(), users: [...users.values()].map((u) => userOut(u, accts)) };
       },
       async addUser(u) { // the super user adds a person (with or without an email)
         const row = {}; for (const [k, col] of Object.entries(USER_COLS)) row[col] = String(u[k] || '').trim() || null;
         if (row.email) row.email = row.email.toLowerCase();
         const { data, error } = await c.from('users').insert(row).select().single();
         if (error) throw error.code === '23505' ? new Error('כתובת האימייל כבר קיימת') : denied();
-        users.set(data.id, data); return userOut(data);
+        users.set(data.id, data);
+        await syncAccounts(data.id, u.account);
+        return userOut(data, accts);
       },
       async updateUser(id, patch) {
         const row = {}; for (const [k, col] of Object.entries(USER_COLS)) if (k in patch) row[col] = String(patch[k] || '').trim() || null;
         if (row.email) row.email = row.email.toLowerCase();
-        const { data, error } = await c.from('users').update(row).eq('id', id).select();
-        if (error) throw error.code === '23505' ? new Error('כתובת האימייל כבר קיימת') : error;
-        if (!data.length) throw denied();
-        users.set(data[0].id, data[0]); return userOut(data[0]);
+        let cur = users.get(id);
+        if (Object.keys(row).length) {
+          const { data, error } = await c.from('users').update(row).eq('id', id).select();
+          if (error) throw error.code === '23505' ? new Error('כתובת האימייל כבר קיימת') : error;
+          if (!data.length) throw denied();
+          cur = data[0]; users.set(cur.id, cur);
+        }
+        if ('account' in patch) await syncAccounts(id, patch.account);
+        return userOut(cur, accts);
       },
       async addMember(m) {
         const uid = ok(await c.rpc('user_for_email', { e: m.email }));

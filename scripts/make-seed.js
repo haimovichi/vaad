@@ -39,9 +39,11 @@ const resUsers = db.residents.map((r) => [person(r.first, r.last, r.phone1, r.ac
 const ownUsers = db.owners.map((o) => person(o.first, o.last, o.phone, o.account));
 sql += 'create temp table seed_base as select coalesce(max(id), 0) as b from public.users;\n';
 for (let i = 0; i < people.length; i += 200) {
-  sql += 'insert into public.users (id, first_name, last_name, phone, bank_account) overriding system value values\n' +
-    people.slice(i, i + 200).map((p, k) => `  (${B0} + ${i + k + 1}, ${p.map(q).join(', ')})`).join(',\n') + ';\n';
+  sql += 'insert into public.users (id, first_name, last_name, phone) overriding system value values\n' +
+    people.slice(i, i + 200).map((p, k) => `  (${B0} + ${i + k + 1}, ${p.slice(0, 3).map(q).join(', ')})`).join(',\n') + ';\n';
 }
+const accts = []; people.forEach((p, i) => String(p[3] || '').split(/[,;]+/).map((a) => a.trim()).filter(Boolean).forEach((a) => accts.push(`(${B0} + ${i + 1}, ${q(a)})`)));
+if (accts.length) sql += `insert into public.bank_accounts (user_id, account) values\n  ${accts.join(',\n  ')}\non conflict do nothing;\n`;
 sql += `select setval(pg_get_serial_sequence('public.users', 'id'), greatest((select max(id) from public.users), 1));\n`;
 sql += `insert into public.users (email, first_name) values (${q(owner)}, 'ועד הבית') on conflict (email) do nothing;\n`;
 sql += ins('apartments', ['apt', 'floor', 'rooms', 'sqm'], db.apartments.map((a) => [q(a.apt), q(a.floor), q(a.rooms), q(a.sqm)]));

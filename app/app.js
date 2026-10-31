@@ -356,7 +356,7 @@ function renderPeople() {
     .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (a.u.last + ' ' + a.u.first).localeCompare(c.u.last + ' ' + c.u.first, 'he') || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
   $('#nuRow').classList.toggle('hide', !ME.isSuper);
-  const cell = (u, k, w, ltr) => (ME.isSuper && u.id ? `<input data-uid="${u.id}" data-k="${k}" value="${esc(u[k])}" style="width:${w}px${ltr ? ';direction:ltr' : ''}">` : `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`);
+  const cell = (u, k, w, ltr) => (ME.isSuper && u.id ? `<input data-uid="${u.id}" data-k="${k}" value="${esc(u[k])}" style="width:${w}px${ltr ? ';direction:ltr' : ''}"${k === 'account' ? ' title="כמה חשבונות — מופרדים בפסיק"' : ''}>` : `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`);
   const chip = (r, u) => {
     if (r.k === 'access') {
       const rm = r.b === BLD.id && BLD.grantable.includes(r.role) && u.email !== ME.email ? ` <a href="#" data-rm="${r.id}" title="הסר הרשאה" style="text-decoration:none">✕</a>` : '';
@@ -365,7 +365,7 @@ function renderPeople() {
     if (r.b && r.b !== BLD.id) return `<a href="#" class="chip" data-open="${r.b}">${esc(names[r.b] || 'בניין ' + r.b)}: ${esc(r.t)}</a>`;
     return `<span class="chip${r.k === 'old' ? ' mute' : ''}">${esc(r.t)}</span>`;
   };
-  $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבון בנק</th><th class="l">קשרים</th></tr>' + (list.map(({ u, rs }) =>
+  $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבונות בנק</th><th class="l">קשרים</th></tr>' + (list.map(({ u, rs }) =>
     `<tr><td class="l">${cell(u, 'first', 90)}</td><td class="l">${cell(u, 'last', 100)}</td><td class="l">${cell(u, 'email', 170, true)}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', 110, true)}</td><td class="l">${cell(u, 'account', 130, true)}</td><td class="l">` +
     (rs.length ? rs.map((r) => chip(r, u)).join(' ') : '<span class="mute">בלי קשרים</span>') + '</td></tr>').join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
