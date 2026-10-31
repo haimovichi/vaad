@@ -307,7 +307,21 @@ window.Vaad = (function () {
     let buildings = [{ id: 1, name: 'בניין לדוגמה' }];
     const ownedBy = (d) => new Set((me && me.building ? me.building.ownerApts : []));
     return {
-      async load() { if (!db) db = await (await fetch('demo-db.json')).json(); return db; },
+      async load() {
+        if (!db) {
+          db = await (await fetch('demo-db.json')).json();
+          // the same person (same name and phone) is one user, however many apartments they own or rent
+          const person = (first, last, phone, account) => {
+            if (!(first || last || phone)) return null;
+            let u = users.find((x) => x.first === first && x.last === last && (x.phone === phone || !x.phone || !phone) && !x.email);
+            if (!u) { u = { id: nextId++, email: '', first, last, phone, account: account || '' }; users = users.concat(u); } else if (account && !u.account.includes(account)) u.account = [u.account, account].filter(Boolean).join(', ');
+            return u.id;
+          };
+          for (const o of db.owners) o.userId = person(o.first, o.last, o.phone, o.account);
+          for (const r of db.residents) { r.userId = person(r.first, r.last, r.phone1, r.account); r.user2Id = person(r.first2, r.last2, r.phone2, ''); }
+        }
+        return db;
+      },
       async addPayments(rows) { return rows.map((r) => ({ ...r, id: nextId++ })); },
       async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},

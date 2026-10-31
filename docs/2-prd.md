@@ -37,7 +37,7 @@ Who gives which role: super user: any role, any building, and buildings managers
 **Access**
 - FR11 Login by emailed link, no passwords. Only emails listed for a building get access.
 - FR12 Roles and building isolation are enforced by the database (row-level security), not just the UI.
-- FR13 Role management in the "משתמשים" tab by whoever may give the role (see the hierarchy above); tenants' and apartment owners' apartment numbers are editable inline. Buildings managers are appointed by the super user only ("מנהלי בניינים" tab). The one super user cannot be added or changed even through the app's database access.
+- FR13 Role management in the people table ("אנשים") by whoever may give the role (see the hierarchy above); tenants' and apartment owners' apartment numbers are editable inline. Buildings managers are appointed by the super user only ("מנהלי בניינים" tab). The one super user cannot be added or changed even through the app's database access.
 - FR14 A tenant or apartment owner reads their own apartment's payments (month, amount, method, date) through one narrow database function: current tenancy only, never notes, bank descriptions, references or accounts. An apartment owner additionally reads the current tenant's names and phones, again only for their own apartments.
 
 **Compact view (home screen for everyone)**
@@ -46,7 +46,7 @@ Who gives which role: super user: any role, any building, and buildings managers
 - FR17 What tenants see about others is an allow-listed snapshot: apartment number, tag (current/former tenant), monthly status, and optionally last name and debt amount (owner setting). Rewritten after every change.
 - FR18 "הדירה שלי / הדירות שלי" comes only from the links set in the users tab (tenant or apartment-owner rows); no link means the button says so. An apartment owner who is not also a tenant sees only their own apartments, enforced by the database (a filtered view of the board), not by the screen.
 
-- FR21 People overview (super user and buildings managers): one list of every person with all their roles in every building they can see, with filters, so the same person can be committee in one building and tenant in another and it is visible in one place.
+- FR21 One people table for everyone who manages a building (committee: their building; managers: their buildings; super user: all): every person appears once, with all their ties (apartments owned, apartments rented, app access) in the row; with filters. Was: one list of every person with all their roles in every building they can see, with filters, so the same person can be committee in one building and tenant in another and it is visible in one place.
 
 - FR23 People are one main table (first name, last name, email, full phone, bank account if any; the email is optional, so tenants without one are still people who just can't log in). Roles are a separate table: a person may hold many roles, even in the same building (owner of three apartments, tenant in one, committee) and in other buildings. Only the super user edits people; the staff of a building read the people of that building.
 - FR22 One page, one menu for everyone (one flat ☰ menu on phones, side menu on computers, ← בית on every screen but Home), showing only the sections a person's roles allow. No separate detailed table screen: whoever manages the building gets the full detail (balance, exact paid/due per month, payments with dates, add and delete a payment) when drilling into an apartment card.

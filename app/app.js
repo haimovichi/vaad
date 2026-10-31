@@ -45,17 +45,17 @@ const SCREENS = [
   ['home', 'בית', '🏠', '', 'home'],
   ['import', 'ייבוא מהבנק', '📥', 'כספים', 'import', () => STAFF],
   ['backup', 'גיבוי נתונים', '💾', 'כספים', 'more', () => STAFF],
-  ['users', 'משתמשים', '🔑', 'אנשים', 'people', () => STAFF],
+  ['everyone', 'אנשים', '👥', 'אנשים', 'people', () => STAFF],
   ['apts', 'דירות ודיירים', '🏘️', 'אנשים', 'people', () => STAFF],
-  ['everyone', 'כל האנשים', '👥', 'אנשים', 'people', () => PLATFORM],
   ['list', 'הבניינים שלי', '🏢', 'בניינים', 'buildings', () => CREATE],
   ['managers', 'מנהלי בניינים', '🧑‍💼', 'בניינים', 'buildings', () => ME.isSuper],
   ['share', 'מה הדיירים רואים', '📢', 'הגדרות', 'more', () => STAFF],
 ];
-const PANE = { users: 'p-users', apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers: 'b-managers', share: 'm-share', backup: 'm-backup' };
-const LEGACY = { people: 'users', buildings: 'list', more: 'share' };   // old #people/users style addresses
+const PANE = { apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers: 'b-managers', share: 'm-share', backup: 'm-backup' };
+const LEGACY = { people: 'everyone', buildings: 'list', more: 'share' };   // old #people/users style addresses
+const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
-const LOAD = { home: () => renderHome(), import: () => {}, users: () => loadUsers(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+const LOAD = { home: () => renderHome(), import: () => {}, apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
 let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
@@ -80,7 +80,8 @@ let sec = 'home'; let sub = ''; let tab = homeTabs[0];
 function route() {
   const h = location.hash.replace(/^#\/?/, '').split('/');
   let s = h[0] || 'home'; let u = h[1] || '';
-  if (LEGACY[s] && (!u || PANE[u])) s = u || LEGACY[s];
+  if (LEGACY[s]) s = u && PANE[u] ? u : LEGACY[s];
+  if (ALIAS[s]) s = ALIAS[s];
   if (!screens.find((x) => x[0] === s)) s = 'home';
   if (s === 'home') { if (!homeTabs.includes(u)) u = homeTabs.includes(tab) ? tab : homeTabs[0]; tab = u; } else u = '';
   sec = s; sub = u;
@@ -311,55 +312,62 @@ $('#commit').onclick = async () => {
 /* ================= PEOPLE ================= */
 function syncAptField() { $('#uApt').style.display = $('#uRole').value === 'committee' ? 'none' : ''; }
 $('#uRole').onchange = syncAptField;
-async function loadUsers() {
+$('#uAdd').onclick = async () => {
+  try { await api('POST', '/api/member', { email: $('#uEmail').value, role: $('#uRole').value, apt: $('#uApt').value, name: $('#uName').value }); ['#uEmail', '#uApt', '#uName'].forEach((i) => { $(i).value = ''; }); toast('נוסף'); loadPeople(); } catch (e) { toast(e.message); }
+};
+
+/* One table of people: each person once, with every tie they have (apartments owned, apartments rented, app access) */
+let PEOPLE = null;
+async function loadPeople() {
   const g = BLD.grantable;
   $('#uRole').innerHTML = g.map((r) => `<option value="${r}">${ROLE[r]}</option>`).join('');
   syncAptField();
   $('#uName').style.display = ME.isSuper ? '' : 'none';   // names belong to the users table: only the super user sets them
   $('#grantNote').textContent = g.includes('committee') ? 'אתם יכולים לתת את כל שלושת התפקידים.' : 'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.';
-  const m = await api('GET', '/api/members');
-  $('#uTable').innerHTML = '<tr><th class="l">אימייל</th><th>תפקיד</th><th>דירה</th><th class="l">שם</th><th></th></tr>' +
-    m.map((x) => { const can = g.includes(x.role);
-      const aptCell = x.role === 'committee' ? '' : `<input type="number" min="1" style="width:70px" value="${x.apt || ''}" data-id="${x.id}" ${can && x.role !== 'apt_owner' ? '' : 'disabled'} title="הדירה המקושרת. לבעל דירה — מחיקה והוספה מחדש">`;
-      return `<tr><td class="l" dir="ltr">${esc(x.email || '—')}</td><td>${ROLE[x.role]}</td><td>${aptCell}</td><td class="l">${esc(x.name || '')}</td><td>${can && x.email !== ME.email ? `<button class="g" data-rm="${x.id}">הסר</button>` : ''}</td></tr>`; }).join('');
-}
-$('#uAdd').onclick = async () => {
-  try { await api('POST', '/api/member', { email: $('#uEmail').value, role: $('#uRole').value, apt: $('#uApt').value, name: $('#uName').value }); ['#uEmail', '#uApt', '#uName'].forEach((i) => { $(i).value = ''; }); toast('נוסף'); loadUsers(); } catch (e) { toast(e.message); }
-};
-$('#uTable').onchange = async (e) => { const i = e.target; if (!i.dataset.id) return; try { await api('PUT', '/api/member', { id: i.dataset.id, apt: i.value }); toast(i.value ? `קושרה דירה ${i.value}` : 'הקישור הוסר'); } catch (err) { toast(err.message); loadUsers(); } };
-$('#uTable').onclick = async (e) => { const r = e.target.dataset.rm; if (!r || !confirm('להסיר את התפקיד?')) return; try { await api('DELETE', '/api/member/' + r); loadUsers(); } catch (err) { toast(err.message); } };
-
-let PEOPLE = null;
-async function loadPeople() {
   PEOPLE = await api('GET', '/api/people');
-  $('#pB').innerHTML = '<option value="">כל הבניינים</option>' + ME.memberships.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
-  $('#peopleNote').textContent = ME.isSuper ? '' : ' כמנהל בניינים אתם רואים את האנשים בבניינים שלכם בלבד.';
+  $('#pB').innerHTML = (PLATFORM ? '<option value="">כל הבניינים</option>' : '') + ME.memberships.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  $('#pB').value = String(BLD.id);
+  $('#pB').classList.toggle('hide', !PLATFORM && ME.memberships.length < 2);
+  $('#peopleNote').textContent = PLATFORM && !ME.isSuper ? ' כמנהל בניינים אתם רואים את האנשים בבניינים שלכם בלבד.' : '';
   renderPeople();
 }
 function renderPeople() {
   const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name]));
-  const byUid = {}; const byEmail = {};
-  for (const m of PEOPLE.members) (byUid[m.user_id] = byUid[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` · דירה ${m.apt}` : ''), k: m.role });
+  const here = {};                      // user id -> ties in THIS building from the records (owners, tenancies)
+  const tie = (id, t) => { if (id) (here[id] = here[id] || []).push(t); };
+  DB.owners.forEach((o) => tie(o.userId, { b: BLD.id, t: `בעל דירה ${o.apt}`, k: 'owner' }));
+  DB.residents.forEach((r) => { const gone = r.status === 'עזב'; tie(r.userId, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant' }); tie(r.user2Id, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant' }); });
+  const access = {};                    // user id -> app-access roles (any building)
+  for (const m of PEOPLE.members) (access[m.user_id] = access[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` ${m.apt}` : '') + (m.role === 'committee' ? '' : ' (כניסה)'), k: 'access', id: m.id, role: m.role });
   const chipsFor = (u) => {
-    const rs = [...(byUid[u.id] || [])];
+    const rs = [...(here[u.id] || []), ...(access[u.id] || [])];
     const mg = u.email ? PEOPLE.managers.find((x) => x.email === u.email) : null;
     if (mg) { if (!mg.buildings.length) rs.push({ b: null, t: 'מנהל בניינים (עדיין בלי בניין)', k: 'manager' }); for (const b of mg.buildings) rs.push({ b, t: 'מנהל בניינים', k: 'manager' }); }
     if (ME.isSuper && u.email && u.email === ME.email) rs.push({ b: null, t: 'מנהל על · כל הבניינים', k: 'super' });
     return rs;
   };
+  const byEmail = {};
   const people = (PEOPLE.users || []).map((u) => { if (u.email) byEmail[u.email] = u; return { u, rs: chipsFor(u) }; });
   // logins that have no users row yet (a manager added by email, the super user): shown read-only
   for (const x of PEOPLE.managers) if (!byEmail[x.email]) { const u = { id: null, email: x.email, first: '', last: '', phone: '', account: '' }; byEmail[x.email] = u; people.push({ u, rs: chipsFor(u) }); }
   if (ME.isSuper && !byEmail[ME.email]) people.push({ u: { id: null, email: ME.email, first: '', last: '', phone: '', account: '' }, rs: [{ b: null, t: 'מנהל על · כל הבניינים', k: 'super' }] });
   const q = $('#pQ').value.trim().toLowerCase(); const fb = $('#pB').value; const multi = $('#pMulti').checked;
-  const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (!multi || rs.length > 1))
-    .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || c.rs.length - a.rs.length || (a.u.last + a.u.first + a.u.email).localeCompare(c.u.last + c.u.first + c.u.email, 'he'));
+  const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (!multi || rs.length > 1) && (rs.length || !fb))
+    .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (a.u.last + ' ' + a.u.first).localeCompare(c.u.last + ' ' + c.u.first, 'he') || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
   $('#nuRow').classList.toggle('hide', !ME.isSuper);
   const cell = (u, k, w, ltr) => (ME.isSuper && u.id ? `<input data-uid="${u.id}" data-k="${k}" value="${esc(u[k])}" style="width:${w}px${ltr ? ';direction:ltr' : ''}">` : `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`);
-  $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבון בנק</th><th class="l">תפקידים</th></tr>' + (list.map(({ u, rs }) =>
-    `<tr><td class="l">${cell(u, 'first', 90)}</td><td class="l">${cell(u, 'last', 100)}</td><td class="l">${cell(u, 'email', 170, true)}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', 110, true)}</td><td class="l">${cell(u, 'account', 100, true)}</td><td class="l">` +
-    (rs.length ? rs.map((r) => (r.b ? `<a href="#" class="chip" data-open="${r.b}">${esc(names[r.b] || 'בניין ' + r.b)}: ${esc(r.t)}</a>` : `<span class="chip">${r.t}</span>`)).join(' ') : '<span class="mute">בלי תפקיד</span>') + '</td></tr>').join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
+  const chip = (r, u) => {
+    if (r.k === 'access') {
+      const rm = r.b === BLD.id && BLD.grantable.includes(r.role) && u.email !== ME.email ? ` <a href="#" data-rm="${r.id}" title="הסר הרשאה" style="text-decoration:none">✕</a>` : '';
+      return `<span class="chip">${r.b === BLD.id ? '' : esc(names[r.b] || 'בניין ' + r.b) + ': '}${esc(r.t)}${rm}</span>`;
+    }
+    if (r.b && r.b !== BLD.id) return `<a href="#" class="chip" data-open="${r.b}">${esc(names[r.b] || 'בניין ' + r.b)}: ${esc(r.t)}</a>`;
+    return `<span class="chip${r.k === 'old' ? ' mute' : ''}">${esc(r.t)}</span>`;
+  };
+  $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבון בנק</th><th class="l">קשרים</th></tr>' + (list.map(({ u, rs }) =>
+    `<tr><td class="l">${cell(u, 'first', 90)}</td><td class="l">${cell(u, 'last', 100)}</td><td class="l">${cell(u, 'email', 170, true)}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', 110, true)}</td><td class="l">${cell(u, 'account', 130, true)}</td><td class="l">` +
+    (rs.length ? rs.map((r) => chip(r, u)).join(' ') : '<span class="mute">בלי קשרים</span>') + '</td></tr>').join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 $('#pTable').onchange = async (e) => {
   const i = e.target; if (!i.dataset.uid) return;
@@ -369,7 +377,11 @@ $('#nuAdd').onclick = async () => {
   try { await api('POST', '/api/user', { first: $('#nuFirst').value, last: $('#nuLast').value, email: $('#nuEmail').value, phone: $('#nuPhone').value, account: $('#nuAccount').value }); ['#nuFirst', '#nuLast', '#nuEmail', '#nuPhone', '#nuAccount'].forEach((s) => { $(s).value = ''; }); toast('נוסף'); loadPeople(); } catch (err) { toast(err.message); }
 };
 ['#pQ', '#pB', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
-$('#pTable').onclick = (e) => { const a = e.target.closest('a[data-open]'); if (!a) return; e.preventDefault(); Vaad.choose(a.dataset.open); location.href = 'app.html' + Vaad.keep + '#people/users'; };
+$('#pTable').onclick = async (e) => {
+  const rm = e.target.closest('a[data-rm]');
+  if (rm) { e.preventDefault(); if (!confirm('להסיר את הרשאת הכניסה?')) return; try { await api('DELETE', '/api/member/' + rm.dataset.rm); loadPeople(); } catch (err) { toast(err.message); } return; }
+  const a = e.target.closest('a[data-open]'); if (!a) return; e.preventDefault(); Vaad.choose(a.dataset.open); location.href = 'app.html' + Vaad.keep + '#everyone';
+};
 
 async function loadApts() {
   const d = await api('GET', '/api/apartments');

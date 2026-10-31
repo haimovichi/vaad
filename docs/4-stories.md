@@ -77,6 +77,7 @@
 | S8.1 Users table | One row per person: first/last name, optional unique email, phone, bank account; numeric id; RLS: own row, staff of the building read, super user writes | Done, tested (450 checks) |
 | S8.2 Roles table | `members` points at users; one user holds several roles in one building and in other buildings | Done, tested |
 | S8.3 Move the data | Tenants, second persons/phones and owners become users, old columns dropped; migration tested on both older schemas and equals a fresh install | Done; applied live 2026-10-31 (87 users from 33 tenancies, 26 owners, 1 login), copy in schema `bak` |
+| S8.7 One person, one record | The two lists ("משתמשים" roles, "כל האנשים") became one table; duplicates merged (live: 87 -> 62 users; same name+phone, phone-only records); several bank accounts per person; bank matching uses all | Done, tested (dedupe test); applied live 2026-10-31 |
 | S8.4 People screen | Main users table (super user edits, managers read) with roles per person; add a person with or without email | Done in demo mode; real-login check pending |
 | S8.5 Apartments and roles screens | Names/phones/accounts read-only unless super user; roles by email create the user | Done in demo mode; real-login check pending |
 | S8.6 Backup/restore and seed | Backups include the referenced users; restore and make-seed create users first | Done, tested |

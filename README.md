@@ -31,12 +31,14 @@ Everyone logs in with an emailed link (no passwords). Only emails that have a ro
 
 **2. GitHub Pages** — push this folder to a public repo (code only; `data/`, `seed.sql`, `*.xlsx`, backups are ignored). Settings → Pages → Source: **GitHub Actions**. `.github/workflows/pages.yml` publishes `app/` on every push to `main`.
 
-**3. Invite people** — in **אנשים → משתמשים** add each email with a role and, for tenants and apartment owners, the apartment number. The super user appoints buildings managers in **בניינים → מנהלי בניינים**. **אנשים → כל האנשים** (super user and managers) lists every person with their roles in all buildings.
+**3. Invite people** — in **אנשים** (the "app access" form under the title) add each email with a role and, for tenants and apartment owners, the apartment number. The super user appoints buildings managers in **בניינים → מנהלי בניינים**. **אנשים → כל האנשים** (super user and managers) lists every person with their roles in all buildings.
 
 ## People and roles are two tables
 **users** is the main people table: first name, last name, email, full phone, bank account if any. A person is a user even without an email (the tenants from the Excel have none); they just can't log in. The email, when there is one, is what logging in matches. **members** holds the roles: user, building, role, apartment. One user can hold many role rows, even in one building (owner of three apartments, tenant in one of them, committee) and in other buildings. Tenancies (`residents`) and owner records point at users (`user_id`, plus `user2_id` for a second person on a tenancy).
 
 Who may do what with people: the **super user** adds and edits every user (**אנשים** screen: name, email, phone, bank account). The staff of a building (committee, managers) **read** the people of their building (the payments screen, bank matching and the apartment list need names, phones and accounts) but cannot edit them. Everyone else sees only their own row, and apartment owners still see their tenant's name and phone through a narrow view. Giving someone a role by email creates their user (email only) if they have none; the super user can add the name afterwards.
+
+**One table of people.** The **אנשים** screen lists every person exactly once, with name, email, phone and bank account, and in the same row every tie they have: the apartments they own (`בעל דירה 8`, `בעל דירה 16`), the apartments they rent or rented (`דייר 16`), and their app access (`דייר 16 (כניסה)`, `ועד הבית`), across buildings. A person who owns two apartments and lives in one is still one row. One person may pay from several bank accounts: they are kept together, separated by commas, and bank matching uses all of them. Duplicates created by the first migration were merged with `supabase/dedupe-users.sql` (same name and phone, or a phone-only record with the same phone as a named person); same name with different phones is left for you to decide.
 
 ## Who can give out which role
 | | committee | tenant | apartment owner | buildings manager |
@@ -53,7 +55,7 @@ npm run seed:sql -- committee@email.com 2 "Building name"
 ```
 
 ## One page, one menu
-Everyone uses the same page (`app.html`). One flat menu (a ☰ button on a phone, a panel on the right on a computer) lists only the screens the person's roles allow, with no second level: **בית**; **ייבוא מהבנק**, **גיבוי נתונים**, **משתמשים**, **דירות ודיירים**, **מה הדיירים רואים** (whoever manages a building); **כל האנשים**, **הבניינים שלי** (super user and managers); **מנהלי בניינים** (super user). Every screen except Home has a **← בית** button, and the menu also has switch-building and sign-out. Tenants and apartment owners see just the home screen.
+Everyone uses the same page (`app.html`). One flat menu (a ☰ button on a phone, a panel on the right on a computer) lists only the screens the person's roles allow, with no second level: **בית**; **ייבוא מהבנק**, **גיבוי נתונים**, **אנשים**, **דירות ודיירים**, **מה הדיירים רואים** (whoever manages a building); **הבניינים שלי** (super user, managers and committee); **מנהלי בניינים** (super user). Every screen except Home has a **← בית** button, and the menu also has switch-building and sign-out. Tenants and apartment owners see just the home screen.
 
 **Home** has the buttons **הדירה שלי / הדירות שלי** (each apartment linked to you, with your payments with dates for the selected year; apartment owners also see the current tenant's name and phones), **חייבים** and **הכל**. Tenants and managers see the whole board; an apartment owner who is not also a tenant sees only their own apartments.
 
