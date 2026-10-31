@@ -158,16 +158,17 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
       <div class="box pad">
         <h3>מי יכול להיכנס</h3>
         <div class="mute">כל אחד נכנס עם קישור שנשלח לאימייל שלו. רק כתובות שרשומות כאן מקבלות גישה. אותה כתובת יכולה לקבל כמה תפקידים, והם מצטברים.<br>
-          <b>ועד הבית</b> — ניהול הבניין · <b>דייר</b> — מצב כל הדירות ופרטי הדירה שלו · <b>בעל דירה</b> — רק הדירות שלו, התשלומים של הדייר הנוכחי, ושם וטלפון של הדייר.<br><span id="grantNote"></span></div>
+          <b>ועד הבית</b> — ניהול הבניין · <b>דייר</b> — מצב כל הדירות ופרטי הדירה שלו · <b>בעל דירה</b> — רק הדירות שלו, התשלומים של הדייר הנוכחי, ושם וטלפון של הדייר. אדם אחד יכול להחזיק כמה תפקידים, גם באותו בניין (למשל בעל שלוש דירות ודייר באחת מהן). שמות וטלפונים נערכים בטבלת האנשים, על ידי מנהל העל.<br><span id="grantNote"></span></div>
         <div class="row"><input id="uEmail" type="email" placeholder="אימייל" style="width:210px;direction:ltr"><select id="uRole"></select><input id="uApt" type="number" min="1" placeholder="דירה" style="width:80px"><input id="uName" placeholder="שם (לא חובה)" style="width:140px"><button class="b" id="uAdd">הוסף</button></div>
       </div>
       <div class="box"><table class="t" id="uTable"></table></div>
     </div>
     <div id="p-everyone" class="hide">
       <div class="box pad">
-        <h3>אנשים ותפקידים</h3>
-        <div class="mute">כל אדם עם כל התפקידים שלו בכל הבניינים. לחיצה על תפקיד פותחת את רשימת המשתמשים של אותו בניין.<span id="peopleNote"></span></div>
-        <div class="row"><input id="pQ" type="search" placeholder="חפש אימייל" style="width:200px;margin:0;direction:ltr"><select id="pB"></select><label><input type="checkbox" id="pMulti"> רק עם כמה תפקידים</label><span class="mute" id="pCount"></span></div>
+        <h3>אנשים</h3>
+        <div class="mute">טבלת האנשים: שם, אימייל, טלפון וחשבון בנק לכל אדם, ומתחתיהם כל התפקידים שלו בכל הבניינים. לא חייבים אימייל — מי שאין לו לא יכול להיכנס לאפליקציה. לחיצה על תפקיד פותחת את רשימת התפקידים של אותו בניין.<span id="peopleNote"></span></div>
+        <div class="row"><input id="pQ" type="search" placeholder="חפש שם, אימייל או טלפון" style="width:220px;margin:0"><select id="pB"></select><label><input type="checkbox" id="pMulti"> רק עם כמה תפקידים</label><span class="mute" id="pCount"></span></div>
+        <div class="row hide" id="nuRow"><input id="nuFirst" placeholder="שם פרטי" style="width:110px"><input id="nuLast" placeholder="שם משפחה" style="width:120px"><input id="nuEmail" type="email" placeholder="אימייל (לא חובה)" style="width:190px;direction:ltr"><input id="nuPhone" placeholder="טלפון" style="width:120px;direction:ltr"><input id="nuAccount" placeholder="חשבון בנק" style="width:110px;direction:ltr"><button class="b" id="nuAdd">הוסף אדם</button></div>
       </div>
       <div class="box"><table class="t" id="pTable"></table></div>
     </div>

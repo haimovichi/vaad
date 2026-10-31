@@ -15,16 +15,19 @@ const src = await fresh();
 await src.exec(`
   insert into buildings(id, name) values (1, 'בניין א''  (with apostrophe)'), (2, 'Other');
   insert into apartments(building_id, apt, floor, rooms, sqm) values (1,8,'2',4,109),(1,9,'ק',5,null),(2,3,'1',4,100);
-  insert into residents(building_id, key, apt, first_name, last_name, phone1, status, entry_month, entry_year, account) values
-    (1,'8-קלדרו',8,'רועי','קלדרו','050-1','עזב',6,2022,'87086516'),(1,'8-עדות',8,'דני','עדות','050-2','פעיל',3,2026,null),(2,'3-x',3,'X','Y','050-3','פעיל',1,2026,null);
-  insert into owners(building_id, apt, first_name, last_name, phone, account, note) values (1,8,'אברהם','אבן-חן','054-1','111','note with ''quotes''');
+  insert into users(id, email, first_name, last_name, phone, bank_account) overriding system value values
+    (1,null,'רועי','קלדרו','050-1','87086516'),(2,null,'דני','עדות','050-2',null),(3,null,'X','Y','050-3',null),(4,null,'אברהם','אבן-חן','054-1','111'),
+    (5,'c@x.com','Committee',null,null,null),(6,'ao@x.com','Owner of 18',null,null,null),(7,'t@x.com',null,null,null,null),(8,'o2@x.com','O2',null,null,null),(9,null,'דנה','קלדרו','050-9',null);
+  insert into residents(building_id, key, apt, user_id, user2_id, status, entry_month, entry_year) values
+    (1,'8-קלדרו',8,1,9,'עזב',6,2022),(1,'8-עדות',8,2,null,'פעיל',3,2026),(2,'3-x',3,3,null,'פעיל',1,2026);
+  insert into owners(building_id, apt, user_id, note) values (1,8,4,'note with ''quotes''');
   insert into tariffs(building_id, year, month, apt, amount, note) values (1,2026,null,null,570.00,'base'),(1,2026,1,null,130.50,'surcharge');
   insert into payments(building_id, key, apt, y, m, amount, method, paid_on, note, ref, src, tx_key) values
     (1,'8-עדות',8,2026,3,570,'הוראת קבע','2026-03-15','בנק: מ''ש','975','bank','2026-03-15|975|570'),
     (1,'8-עדות',8,2026,4,1140.25,'העברה',null,'',null,'excel',null),(2,'3-x',3,2026,1,1,'x',null,'',null,'manual',null);
   insert into expenses(building_id, y, m, d, category, descr, amount) values (1,2026,5,3,'חשמל','חשבון',2934.33);
   insert into meta(building_id, name, value) values (1,'aliases','{"נפתלי נאור":26,"o''brien":3}'),(1,'bankSeen','{"k1":true}'),(1,'settings','{"title":"ועד","showNames":false,"showDebt":true}');
-  insert into members(building_id, email, role, apt, name) values (1,'c@x.com','committee',null,'Committee'),(1,'ao@x.com','apt_owner',18,'Owner of 18'),(1,'t@x.com','tenant',8,null),(2,'o2@x.com','committee',null,'O2');
+  insert into members(building_id, user_id, role, apt) values (1,5,'committee',null),(1,6,'apt_owner',18),(1,7,'tenant',8),(1,6,'tenant',9),(2,8,'committee',null);
   insert into snapshot(building_id, data) values (1,'{"updated":"2026-10-29","grids":{}}'),(2,'{}');
 `);
 
@@ -33,12 +36,15 @@ const tables = {};
 for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot']) {
   tables[t] = JSON.parse(JSON.stringify((await src.query(`select * from ${t} where building_id = 1 order by 1, 2`)).rows));
 }
+// the people this building refers to (users have no building of their own)
+const ref = new Set(); for (const r of tables.residents) { ref.add(r.user_id); ref.add(r.user2_id); } for (const o of tables.owners) ref.add(o.user_id); for (const m of tables.members) ref.add(m.user_id);
+tables.users = JSON.parse(JSON.stringify((await src.query(`select * from users where id = any($1::bigint[]) order by id`, [[...ref].filter(Boolean)])).rows));
 const backup = { app: 'vaad-backup', version: 1, exportedAt: '2026-10-29T00:00:00Z', building: { id: 1, name: (await src.query('select name from buildings where id = 1')).rows[0].name }, tables };
 
 const digest = async (d, b) => {
   const out = {};
   for (const t of Object.keys(tables)) {
-    const r = (await d.query(`select to_jsonb(x) j from ${t} x where building_id = ${b}`)).rows.map((x) => JSON.stringify(Object.fromEntries(Object.entries(x.j).sort())));
+    const r = (await d.query(t === 'users' ? `select to_jsonb(x) j from ${t} x where id = any(array[${tables.users.map((u) => u.id)}]::bigint[])` : `select to_jsonb(x) j from ${t} x where building_id = ${b}`)).rows.map((x) => JSON.stringify(Object.fromEntries(Object.entries(x.j).sort())));
     out[t] = r.sort();
   }
   return JSON.stringify(out);

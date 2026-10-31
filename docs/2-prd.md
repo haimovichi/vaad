@@ -48,6 +48,7 @@ Who gives which role: super user: any role, any building, and buildings managers
 
 - FR21 People overview (super user and buildings managers): one list of every person with all their roles in every building they can see, with filters, so the same person can be committee in one building and tenant in another and it is visible in one place.
 
+- FR23 People are one main table (first name, last name, email, full phone, bank account if any; the email is optional, so tenants without one are still people who just can't log in). Roles are a separate table: a person may hold many roles, even in the same building (owner of three apartments, tenant in one, committee) and in other buildings. Only the super user edits people; the staff of a building read the people of that building.
 - FR22 One page, one menu for everyone (one flat ☰ menu on phones, side menu on computers, ← בית on every screen but Home), showing only the sections a person's roles allow. No separate detailed table screen: whoever manages the building gets the full detail (balance, exact paid/due per month, payments with dates, add and delete a payment) when drilling into an apartment card.
 
 **Backup**

@@ -14,14 +14,23 @@ export async function loadFixture(db) {
     insert into super_users(email) values ('super@x.com');
     insert into managers(email) values ('m12@x.com'),('m3@x.com');
     insert into manager_buildings(building_id, email) values (1,'m12@x.com'),(2,'m12@x.com'),(3,'m3@x.com');
-    insert into members(building_id, email, role, apt, name) values
-      (1,'c1@x.com','committee',null,'C1'),(2,'c2@x.com','committee',null,'C2'),
-      (1,'t8@x.com','tenant',8,'T8'),(1,'t9@x.com','tenant',9,'T9'),(1,'ao8@x.com','apt_owner',8,'AO8'),
-      (1,'multi@x.com','committee',null,'Multi'),(2,'multi@x.com','tenant',3,'Multi'),(2,'multi@x.com','apt_owner',5,'Multi');
+    -- people: logins have an email; tenants from the old workbook have none (identified here by phone)
+    create function t_uid(e text) returns bigint language sql security definer set search_path = public as $f$ select id from public.users where email = e $f$;
+    create function t_pid(p text) returns bigint language sql security definer set search_path = public as $f$ select id from public.users where phone = p $f$;
+    insert into users(email, first_name, last_name) values
+      ('c1@x.com','C1',null),('c2@x.com','C2',null),('t8@x.com','T8',null),('t9@x.com','T9',null),('ao8@x.com','AO8',null),
+      ('multi@x.com','Multi',null),('n@x.com','New',null);
+    insert into users(first_name, last_name, phone, bank_account) values
+      ('Cur','Tenant','050-8','111'),('Old','Tenant','050-0',null),('Nine','Nine','050-9',null),
+      ('Three','T','050-3',null),('Five','F','050-5',null),('One','O','050-1',null);
+    insert into members(building_id, user_id, role, apt) values
+      (1,t_uid('c1@x.com'),'committee',null),(2,t_uid('c2@x.com'),'committee',null),
+      (1,t_uid('t8@x.com'),'tenant',8),(1,t_uid('t9@x.com'),'tenant',9),(1,t_uid('ao8@x.com'),'apt_owner',8),
+      (1,t_uid('multi@x.com'),'committee',null),(2,t_uid('multi@x.com'),'tenant',3),(2,t_uid('multi@x.com'),'apt_owner',5);
     insert into apartments(building_id, apt) values (1,8),(1,9),(2,3),(2,5),(3,1);
-    insert into residents(building_id, key, apt, first_name, last_name, phone1, status) values
-      (1,'8-a',8,'Cur','Tenant','050-8',null),(1,'8-old',8,'Old','Tenant','050-0','עזב'),(1,'9-a',9,'Nine','Nine','050-9','פעיל'),
-      (2,'3-a',3,'Three','T','050-3','פעיל'),(2,'5-a',5,'Five','F','050-5','פעיל'),(3,'1-a',1,'One','O','050-1','פעיל');
+    insert into residents(building_id, key, apt, user_id, status) values
+      (1,'8-a',8,t_pid('050-8'),null),(1,'8-old',8,t_pid('050-0'),'עזב'),(1,'9-a',9,t_pid('050-9'),'פעיל'),
+      (2,'3-a',3,t_pid('050-3'),'פעיל'),(2,'5-a',5,t_pid('050-5'),'פעיל'),(3,'1-a',1,t_pid('050-1'),'פעיל');
     insert into payments(building_id, key, apt, y, m, amount, note) values
       (1,'8-a',8,2026,10,570,'bank: secret 1'),(1,'8-old',8,2026,3,100,'previous tenant'),(1,'9-a',9,2026,10,570,'n9'),
       (2,'3-a',3,2026,10,570,'n3'),(2,'5-a',5,2026,10,570,'n5'),(3,'1-a',1,2026,10,570,'n1');
@@ -169,33 +178,83 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   await rows('stranger', 'nobody@x.com', 'members visible', 'select * from members', 0);
 
   // granting: super > manager > committee
-  const addM = (b, e, r, apt) => `insert into members(building_id,email,role,apt) values (${b},'${e}','${r}',${apt ?? 'null'})`;
+  const addM = (b, e, r, apt) => `insert into members(building_id,user_id,role,apt) values (${b},t_uid('${e}'),'${r}',${apt ?? 'null'})`;
   await rows('super', 'super@x.com', 'add a committee member to B3', addM(3, 'n@x.com', 'committee'), 1);
   await rows('super', 'super@x.com', 'add a tenant to B2', addM(2, 'n@x.com', 'tenant', 3), 1);
   await rows('manager12', 'm12@x.com', 'add committee to own B1', addM(1, 'n@x.com', 'committee'), 1);
   await rows('manager12', 'm12@x.com', 'add apartment owner to own B2', addM(2, 'n@x.com', 'apt_owner', 3), 1);
   await blocked('manager12', 'm12@x.com', 'add committee to B3 (not theirs)', addM(3, 'n@x.com', 'committee'));
   await blocked('manager3', 'm3@x.com', 'add a tenant to B1 (not theirs)', addM(1, 'n@x.com', 'tenant', 8));
-  await rows('manager12', 'm12@x.com', 'remove a committee member of own building', "delete from members where building_id = 1 and email = 'c1@x.com'", 1);
+  await rows('manager12', 'm12@x.com', 'remove a committee member of own building', "delete from members where building_id = 1 and user_id = t_uid('c1@x.com')", 1);
   await rows('committee1', 'c1@x.com', 'add a tenant to own building', addM(1, 'n@x.com', 'tenant', 8), 1);
   await rows('committee1', 'c1@x.com', 'add an apartment owner to own building', addM(1, 'n@x.com', 'apt_owner', 9), 1);
-  await rows('committee1', 'c1@x.com', 'relink a tenant to another apartment', "update members set apt = 9 where building_id = 1 and email = 't8@x.com'", 1);
-  await rows('committee1', 'c1@x.com', 'remove a tenant', "delete from members where building_id = 1 and email = 't9@x.com'", 1);
+  await rows('committee1', 'c1@x.com', 'relink a tenant to another apartment', "update members set apt = 9 where building_id = 1 and user_id = t_uid('t8@x.com')", 1);
+  await rows('committee1', 'c1@x.com', 'remove a tenant', "delete from members where building_id = 1 and user_id = t_uid('t9@x.com')", 1);
   await blocked('committee1', 'c1@x.com', 'add a committee member', addM(1, 'n@x.com', 'committee'));
-  await blocked('committee1', 'c1@x.com', 'promote a tenant to committee', "update members set role = 'committee', apt = null where building_id = 1 and email = 't8@x.com'");
-  await blocked('committee1', 'c1@x.com', 'remove another committee member', "delete from members where building_id = 1 and email = 'multi@x.com' and role = 'committee'");
-  await blocked('committee1', 'c1@x.com', 'remove own committee role', "delete from members where building_id = 1 and email = 'c1@x.com'");
+  await blocked('committee1', 'c1@x.com', 'promote a tenant to committee', "update members set role = 'committee', apt = null where building_id = 1 and user_id = t_uid('t8@x.com')");
+  await blocked('committee1', 'c1@x.com', 'remove another committee member', "delete from members where building_id = 1 and user_id = t_uid('multi@x.com') and role = 'committee'");
+  await blocked('committee1', 'c1@x.com', 'remove own committee role', "delete from members where building_id = 1 and user_id = t_uid('c1@x.com')");
   await blocked('committee1', 'c1@x.com', 'add a tenant to another building', addM(2, 'n@x.com', 'tenant', 3));
-  await blocked('committee1', 'c1@x.com', 'move a tenant row to another building', "update members set building_id = 2 where email = 't8@x.com'");
+  await blocked('committee1', 'c1@x.com', 'move a tenant row to another building', "update members set building_id = 2 where user_id = t_uid('t8@x.com')");
   await rows('multi', 'multi@x.com', 'committee of B1 adds a tenant to B1', addM(1, 'n@x.com', 'tenant', 8), 1);
   await blocked('multi', 'multi@x.com', 'tenant of B2 adds a tenant to B2', addM(2, 'n@x.com', 'tenant', 3));
   for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
     await blocked(who, email, 'add a member', addM(1, 'n@x.com', 'tenant', 8));
-    await blocked(who, email, 'relink own apartment', `update members set apt = 9 where email = '${email}'`);
-    await blocked(who, email, 'remove own membership', `delete from members where email = '${email}'`);
+    await blocked(who, email, 'relink own apartment', `update members set apt = 9 where user_id = t_uid('${email}')`);
+    await blocked(who, email, 'remove own membership', `delete from members where user_id = t_uid('${email}')`);
   }
   await blocked('tenant8', 't8@x.com', 'make self committee', addM(1, 't8@x.com', 'committee'));
   await blocked('committee2', 'c2@x.com', 'add a tenant to B1', addM(1, 'n@x.com', 'tenant', 8));
+
+  // users: one row per person; staff read their building's people, only the super user writes
+  await rows('super', 'super@x.com', 'users visible (all)', 'select * from users', 13);
+  await rows('manager12', 'm12@x.com', 'users visible (staff of B1 and B2)', 'select * from users', 11);
+  await rows('manager3', 'm3@x.com', 'users visible (staff of B3)', 'select * from users', 1);
+  await rows('committee1', 'c1@x.com', 'users visible (people of own building)', 'select * from users', 8);
+  await rows('committee2', 'c2@x.com', 'users visible (people of own building)', 'select * from users', 4);
+  await rows('multi', 'multi@x.com', 'users visible (committee of B1, tenant/owner of B2)', 'select * from users', 8);
+  await rows('tenant8', 't8@x.com', 'users visible (own row only)', 'select * from users', 1);
+  await rows('aptOwner8', 'ao8@x.com', 'users visible (own row only)', 'select * from users', 1);
+  await rows('stranger', 'nobody@x.com', 'users visible', 'select * from users', 0);
+  await blocked('anon', null, 'users visible', 'select * from users');
+  await value('committee1', 'c1@x.com', 'a tenant account and phone are readable by staff', "select bank_account from users where phone = '050-8'", '111');
+  await value('tenant8', 't8@x.com', 'a tenant cannot read another user', "select count(*)::int from users where phone = '050-8'", 0);
+  await rows('super', 'super@x.com', 'super edits a user', "update users set last_name = 'X' where email = 't8@x.com'", 1);
+  await rows('super', 'super@x.com', 'super adds a user', "insert into users(first_name) values ('Walk-in')", 1);
+  for (const [who, email] of [['committee1', 'c1@x.com'], ['manager12', 'm12@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+    await blocked(who, email, 'edit a user', "update users set first_name = 'hacked' where email = 't8@x.com'");
+    await blocked(who, email, 'edit own row', `update users set first_name = 'me' where email = '${email}'`);
+    await blocked(who, email, 'add a user directly', "insert into users(first_name) values ('x')");
+    await blocked(who, email, 'delete a user', "delete from users where email = 't9@x.com'");
+  }
+  await value('committee1', 'c1@x.com', 'user_for_email creates a user (email only)', "select public.user_for_email('brand.new@x.com') is not null", true);
+  {
+    const same = await asUser('c1@x.com', async (q) => { const a = (await q("select public.user_for_email('Same@X.com') as v")).rows[0].v; const b = (await q("select public.user_for_email('same@x.com') as v")).rows[0].v; return a === b; });
+    report(same === true, 'committee1', 'user_for_email finds the same user (case-insensitive)', true, same);
+  }
+  await value('manager12', 'm12@x.com', 'a manager may call user_for_email', "select public.user_for_email('m.new@x.com') is not null", true);
+  await value('super', 'super@x.com', 'super may call user_for_email', "select public.user_for_email('s.new@x.com') is not null", true);
+  await blocked('committee1', 'c1@x.com', 'user_for_email with a bad address', "select public.user_for_email('not-an-email')");
+  for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+    await blocked(who, email, 'user_for_email', "select public.user_for_email('x@y.com')");
+  }
+  {
+    const lonely = await asUser('c1@x.com', async (q) => {
+      const id = (await q("select public.user_for_email('plan@x.com') as v")).rows[0].v;
+      await q(`insert into members(building_id,user_id,role,apt) values (1,${id},'tenant',8)`);
+      return (await q("select count(*)::int n from users where email = 'plan@x.com'")).rows[0].n;
+    });
+    report(lonely === 1, 'committee1', 'a person created through user_for_email can be given a role and is then visible', 1, lonely);
+  }
+  {
+    const many = await asUser('super@x.com', async (q) => {  // the same person: owns three apartments, is tenant in one, and is committee
+      await q("insert into apartments(building_id, apt) values (1,20),(1,21),(1,22)");
+      const id = (await q("select public.user_for_email('many@x.com') as v")).rows[0].v;
+      for (const [role, apt] of [['apt_owner', 20], ['apt_owner', 21], ['apt_owner', 22], ['tenant', 20], ['committee', null]]) await q(`insert into members(building_id,user_id,role,apt) values (1,${id},'${role}',${apt})`);
+      return (await q(`select count(*)::int n from members where user_id = ${id} and building_id = 1`)).rows[0].n;
+    });
+    report(many === 5, 'super', 'one user holds five roles in one building (owner x3, tenant, committee)', 5, many);
+  }
 
   // super user and manager tables
   for (const [who, [email]] of Object.entries(people)) {
@@ -238,7 +297,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   }
   const comMade = await asUser('c1@x.com', async (q) => {
     const id = (await q("select public.create_building('Com') as id")).rows[0].id;
-    const role = (await q(`select role from members where building_id = ${id} and email = 'c1@x.com'`)).rows.map((r) => r.role).join();
+    const role = (await q(`select role from members where building_id = ${id} and user_id = t_uid('c1@x.com')`)).rows.map((r) => r.role).join();
     const mgr = (await q(`select * from manager_buildings where building_id = ${id}`)).rows.length;
     return `${role}/${mgr}`;
   });

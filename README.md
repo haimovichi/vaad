@@ -17,7 +17,7 @@ Everyone logs in with an emailed link (no passwords). Only emails that have a ro
 ## One-time setup
 
 **1. Supabase (free)** — https://supabase.com → New project.
-1. SQL Editor → paste `supabase/schema.sql` → Run. (Re-runnable. If you are upgrading a database from the earlier owner/admin/tenant version, run `supabase/migrate-roles.sql` first, then `schema.sql`.)
+1. SQL Editor → paste `supabase/schema.sql` → Run. (Re-runnable. Upgrading an older database: from the owner/admin/tenant version run `supabase/migrate-roles.sql`, then `supabase/migrate-users.sql`, then `schema.sql`; from the five-role version that still keeps names on tenants and owners run `migrate-users.sql`, then `schema.sql`. Copy `members`, `residents` and `owners` to a backup schema first.)
 2. Make yourself the super user (once, in the SQL editor; your email is deliberately not in the repository):
    ```sql
    insert into public.super_users (email) values ('you@example.com');
@@ -32,6 +32,11 @@ Everyone logs in with an emailed link (no passwords). Only emails that have a ro
 **2. GitHub Pages** — push this folder to a public repo (code only; `data/`, `seed.sql`, `*.xlsx`, backups are ignored). Settings → Pages → Source: **GitHub Actions**. `.github/workflows/pages.yml` publishes `app/` on every push to `main`.
 
 **3. Invite people** — in **אנשים → משתמשים** add each email with a role and, for tenants and apartment owners, the apartment number. The super user appoints buildings managers in **בניינים → מנהלי בניינים**. **אנשים → כל האנשים** (super user and managers) lists every person with their roles in all buildings.
+
+## People and roles are two tables
+**users** is the main people table: first name, last name, email, full phone, bank account if any. A person is a user even without an email (the tenants from the Excel have none); they just can't log in. The email, when there is one, is what logging in matches. **members** holds the roles: user, building, role, apartment. One user can hold many role rows, even in one building (owner of three apartments, tenant in one of them, committee) and in other buildings. Tenancies (`residents`) and owner records point at users (`user_id`, plus `user2_id` for a second person on a tenancy).
+
+Who may do what with people: the **super user** adds and edits every user (**אנשים** screen: name, email, phone, bank account). The staff of a building (committee, managers) **read** the people of their building (the payments screen, bank matching and the apartment list need names, phones and accounts) but cannot edit them. Everyone else sees only their own row, and apartment owners still see their tenant's name and phone through a narrow view. Giving someone a role by email creates their user (email only) if they have none; the super user can add the name afterwards.
 
 ## Who can give out which role
 | | committee | tenant | apartment owner | buildings manager |

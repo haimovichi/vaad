@@ -1,14 +1,14 @@
 // Turns a backup file (downloaded from the admin console, "גיבוי") into SQL for the Supabase SQL editor.
 // Usage:  node scripts/restore-backup.js vaad-backup-b1-2026-10-29.json [--replace]
 //   (default)  restore into a database that does not have this building yet (fails safely if rows exist)
-// Backups taken before the five-role model (members with role owner/admin) cannot be restored as they are.
+// Backups taken before the five-role model (members with role owner/admin) or before the users table cannot be restored as they are.
 //   --replace  first delete this building's rows (other buildings are untouched), then restore
 // Output: supabase/restore.sql  (contains personal data; git-ignored — never commit or share it)
 const fs = require('fs');
 const path = require('path');
 
-const ORDER = ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot'];
-const IDENTITY = ['residents', 'owners', 'tariffs', 'payments', 'expenses', 'members']; // "generated always" id columns
+const ORDER = ['users', 'apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot'];
+const IDENTITY = ['users', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'members']; // "generated always" id columns
 
 function lit(v) {
   if (v === null || v === undefined) return 'null';
@@ -28,10 +28,12 @@ function buildRestoreSql(backup, { replace = false } = {}) {
     if (!rows.length) continue;
     const cols = Object.keys(rows[0]);
     for (const r of rows) if (r.building_id !== undefined && Number(r.building_id) !== B) throw new Error(`row of another building in ${t}`);
+    // people are shared across buildings: a person who already exists (same id) is kept as is
+    const tail = t === 'users' ? ' on conflict (id) do nothing' : '';
     const over = IDENTITY.includes(t) && cols.includes('id') ? ' overriding system value' : '';
     for (let i = 0; i < rows.length; i += 200) {
       sql += `insert into public.${t} (${cols.join(', ')})${over} values\n` +
-        rows.slice(i, i + 200).map((r) => `  (${cols.map((c) => lit(r[c])).join(', ')})`).join(',\n') + ';\n';
+        rows.slice(i, i + 200).map((r) => `  (${cols.map((c) => lit(r[c])).join(', ')})`).join(',\n') + tail + ';\n';
     }
   }
   for (const t of IDENTITY) sql += `select setval(pg_get_serial_sequence('public.${t}', 'id'), greatest((select coalesce(max(id), 1) from public.${t}), 1));\n`;

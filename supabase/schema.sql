@@ -8,8 +8,16 @@
 --   building committee: members.role = 'committee'. Manages one building (bank import, payments, tenants, backup...).
 --   tenant            : members.role = 'tenant' (+ apt). Sees the building board; payment details only for their own apartment.
 --   apartment owner   : members.role = 'apt_owner' (+ apt). Sees only their apartments: status, the current tenant's
---                       payments with dates, and the tenant's name and phones.
+--                       payments with dates, and the tenant's name and phone.
 -- A person can hold any mix of roles; they combine (union of what each allows).
+--
+-- PEOPLE AND ROLES ARE SEPARATE
+--   users   : one row per person (first/last name, email, full phone, bank account). The email is optional: a tenant
+--             without an email is still a user, he just can't log in. Only the super user edits users; the staff of a
+--             building (committee, managers) read the users of their building.
+--   members : the roles (user, building, role, apartment). One user can hold many rows, even in one building
+--             (owner of three apartments, tenant in one of them, committee member), and in other buildings too.
+--   residents / owners point at users (user_id, and user2_id for a second person on a tenancy).
 --
 -- WHO CAN GRANT WHAT (enforced on public.members)
 --   super user: any building, committee/tenant/apt_owner (and managers, in the app)
@@ -37,13 +45,21 @@ create table if not exists public.manager_buildings (
 );
 
 -- building level --------------------------------------------------------------------------------
+create table if not exists public.users (
+  id bigint generated always as identity primary key,
+  email text unique check (email is null or email = lower(email)),
+  first_name text, last_name text,
+  phone text,            -- full phone number
+  bank_account text,     -- full bank account, if any
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.members (
   id bigint generated always as identity primary key,
   building_id bigint not null references public.buildings(id) on delete cascade,
-  email text not null check (email = lower(email)),
+  user_id bigint not null references public.users(id) on delete cascade,
   role  text not null,
-  apt   int,
-  name  text
+  apt   int
 );
 alter table public.members drop constraint if exists members_role_check;
 alter table public.members add  constraint members_role_check check (role in ('committee','tenant','apt_owner'));
@@ -51,8 +67,8 @@ alter table public.members drop constraint if exists members_apt_owner_apt;
 alter table public.members add  constraint members_apt_owner_apt check (role <> 'apt_owner' or apt is not null);
 alter table public.members drop constraint if exists members_committee_no_apt;
 alter table public.members add  constraint members_committee_no_apt check (role <> 'committee' or apt is null);
-create unique index if not exists members_unique on public.members (building_id, email, role, coalesce(apt, 0));
-create index if not exists members_email_idx on public.members(email);
+create unique index if not exists members_unique on public.members (building_id, user_id, role, coalesce(apt, 0));
+create index if not exists members_user_idx on public.members(user_id);
 
 create table if not exists public.apartments (
   building_id bigint not null references public.buildings(id) on delete cascade,
@@ -65,10 +81,9 @@ create table if not exists public.residents (
   building_id bigint not null references public.buildings(id) on delete cascade,
   key text not null,
   apt int not null,
-  first_name text, last_name text, first2 text, last2 text,
-  phone1 text, phone2 text, role text, status text,
+  user_id bigint references public.users(id), user2_id bigint references public.users(id),   -- the tenant, and a second person on the tenancy
+  role text, status text,
   entry_month int, entry_year int, exit_month int, exit_year int,
-  account text,
   unique (building_id, key),
   foreign key (building_id, apt) references public.apartments(building_id, apt)
 );
@@ -77,7 +92,7 @@ create table if not exists public.owners (
   id bigint generated always as identity primary key,
   building_id bigint not null references public.buildings(id) on delete cascade,
   apt int not null,
-  first_name text, last_name text, phone text, account text, note text,
+  user_id bigint references public.users(id), note text,
   foreign key (building_id, apt) references public.apartments(building_id, apt)
 );
 
@@ -122,6 +137,12 @@ create table if not exists public.snapshot (
 create or replace function public.me() returns text
 language sql stable set search_path = public as $$ select lower(coalesce(auth.jwt() ->> 'email', '')) $$;
 
+-- the users row of the caller (by login email), null when there is none
+create or replace function public.my_uid() returns bigint
+language sql stable security definer set search_path = public as $$
+  select id from public.users where email = public.me()
+$$;
+
 create or replace function public.is_super() returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.super_users where email = public.me())
@@ -134,7 +155,7 @@ $$;
 
 create or replace function public.has_role(b bigint, r text) returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.members where building_id = b and email = public.me() and role = r)
+  select exists (select 1 from public.members where building_id = b and user_id = public.my_uid() and role = r)
 $$;
 
 -- full management of one building: super user, its manager, or its committee
@@ -167,7 +188,7 @@ language sql stable security definer set search_path = public as $$
       public.can_manage(b)
       or (
         exists (select 1 from public.members mm
-                where mm.building_id = b and mm.apt = a and mm.email = public.me()
+                where mm.building_id = b and mm.apt = a and mm.user_id = public.my_uid()
                   and mm.role in ('tenant', 'apt_owner'))
         and exists (select 1 from public.residents r
                     where r.building_id = b and r.key = p.key and coalesce(r.status, '') <> 'עזב')
@@ -186,7 +207,7 @@ begin
   if s is null then return null; end if;
   if public.can_see_board(b) then return s; end if;
   select array_agg(distinct apt) into apts from public.members
-   where building_id = b and email = public.me() and role = 'apt_owner';
+   where building_id = b and user_id = public.my_uid() and role = 'apt_owner';
   if apts is null then return null; end if;
   return jsonb_set(s, '{grids}', coalesce((
     select jsonb_object_agg(y.key, (
@@ -198,11 +219,13 @@ end $$;
 create or replace function public.apt_tenants(b bigint)
 returns table (apt int, key text, first_name text, last_name text, first2 text, last2 text, phone1 text, phone2 text, role text)
 language sql stable security definer set search_path = public as $$
-  select r.apt, r.key, r.first_name, r.last_name, r.first2, r.last2, r.phone1, r.phone2, r.role
+  select r.apt, r.key, u1.first_name, u1.last_name, u2.first_name, u2.last_name, u1.phone, u2.phone, r.role
   from public.residents r
+  left join public.users u1 on u1.id = r.user_id
+  left join public.users u2 on u2.id = r.user2_id
   where r.building_id = b and coalesce(r.status, '') <> 'עזב'
     and exists (select 1 from public.members mm
-                where mm.building_id = b and mm.email = public.me() and mm.role = 'apt_owner' and mm.apt = r.apt)
+                where mm.building_id = b and mm.user_id = public.my_uid() and mm.role = 'apt_owner' and mm.apt = r.apt)
   order by r.apt
 $$;
 
@@ -213,7 +236,7 @@ language plpgsql security definer set search_path = public as $$
 declare nid bigint; mgr boolean; com boolean;
 begin
   mgr := exists (select 1 from public.managers where email = public.me());
-  com := exists (select 1 from public.members where email = public.me() and role = 'committee');
+  com := exists (select 1 from public.members where user_id = public.my_uid() and role = 'committee');
   if not (public.is_super() or mgr or com) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
@@ -221,9 +244,25 @@ begin
   insert into public.buildings (name) values (trim(nm)) returning id into nid;
   if public.is_super() then null;
   elsif mgr then insert into public.manager_buildings (building_id, email) values (nid, public.me());
-  else insert into public.members (building_id, email, role) values (nid, public.me(), 'committee');
+  else insert into public.members (building_id, user_id, role) values (nid, public.my_uid(), 'committee');
   end if;
   return nid;
+end $$;
+
+-- the users row for an email, created (email only) when missing. Granting a role to a person who is not a user yet
+-- goes through this: the super user, buildings managers and committee members may call it.
+create or replace function public.user_for_email(e text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare uid bigint; em text := lower(trim(coalesce(e, '')));
+begin
+  if not (public.is_super() or exists (select 1 from public.managers where email = public.me())
+          or exists (select 1 from public.members where user_id = public.my_uid() and role = 'committee')) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  if em !~ '^\S+@\S+\.\S+$' then raise exception 'invalid email'; end if;
+  select id into uid from public.users where email = em;
+  if uid is null then insert into public.users (email) values (em) returning id into uid; end if;
+  return uid;
 end $$;
 
 -- every function is callable only by logged-in users
@@ -232,7 +271,7 @@ declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);
@@ -244,6 +283,7 @@ alter table public.buildings         enable row level security;
 alter table public.super_users       enable row level security;
 alter table public.managers          enable row level security;
 alter table public.manager_buildings enable row level security;
+alter table public.users             enable row level security;
 alter table public.members           enable row level security;
 alter table public.apartments        enable row level security;
 alter table public.residents         enable row level security;
@@ -291,9 +331,19 @@ create policy self_read  on public.manager_buildings for select to authenticated
 create policy super_all  on public.manager_buildings for all    to authenticated using (public.is_super()) with check (public.is_super());
 grant select, insert, update, delete on public.managers, public.manager_buildings to authenticated;
 
+-- users: everyone reads their own row; the staff of a building read the users who hold a role there or are its
+-- tenants and owners; only the super user writes (everything else goes through user_for_email)
+create policy self_read  on public.users for select to authenticated using (email = public.me());
+create policy staff_read on public.users for select to authenticated using (
+  exists (select 1 from public.members m where m.user_id = users.id and public.can_manage(m.building_id))
+  or exists (select 1 from public.residents r where (r.user_id = users.id or r.user2_id = users.id) and public.can_manage(r.building_id))
+  or exists (select 1 from public.owners o where o.user_id = users.id and public.can_manage(o.building_id)));
+create policy super_all  on public.users for all to authenticated using (public.is_super()) with check (public.is_super());
+grant select, insert, update, delete on public.users to authenticated;
+
 -- members: everyone reads their own rows; managers of a building read all its rows;
 -- granting follows the hierarchy: super (any) > manager (any role in their buildings) > committee (tenant, apt_owner only)
-create policy own_rows  on public.members for select to authenticated using (email = public.me() or public.can_manage(building_id));
+create policy own_rows  on public.members for select to authenticated using (user_id = public.my_uid() or public.can_manage(building_id));
 create policy grant_roles on public.members for all to authenticated
   using      (public.is_super() or public.is_manager_of(building_id) or (public.has_role(building_id, 'committee') and role in ('tenant', 'apt_owner')))
   with check (public.is_super() or public.is_manager_of(building_id) or (public.has_role(building_id, 'committee') and role in ('tenant', 'apt_owner')));

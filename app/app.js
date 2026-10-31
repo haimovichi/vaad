@@ -315,12 +315,13 @@ async function loadUsers() {
   const g = BLD.grantable;
   $('#uRole').innerHTML = g.map((r) => `<option value="${r}">${ROLE[r]}</option>`).join('');
   syncAptField();
+  $('#uName').style.display = ME.isSuper ? '' : 'none';   // names belong to the users table: only the super user sets them
   $('#grantNote').textContent = g.includes('committee') ? 'אתם יכולים לתת את כל שלושת התפקידים.' : 'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.';
   const m = await api('GET', '/api/members');
   $('#uTable').innerHTML = '<tr><th class="l">אימייל</th><th>תפקיד</th><th>דירה</th><th class="l">שם</th><th></th></tr>' +
     m.map((x) => { const can = g.includes(x.role);
       const aptCell = x.role === 'committee' ? '' : `<input type="number" min="1" style="width:70px" value="${x.apt || ''}" data-id="${x.id}" ${can && x.role !== 'apt_owner' ? '' : 'disabled'} title="הדירה המקושרת. לבעל דירה — מחיקה והוספה מחדש">`;
-      return `<tr><td class="l" dir="ltr">${esc(x.email)}</td><td>${ROLE[x.role]}</td><td>${aptCell}</td><td class="l">${esc(x.name || '')}</td><td>${can && x.email !== ME.email ? `<button class="g" data-rm="${x.id}">הסר</button>` : ''}</td></tr>`; }).join('');
+      return `<tr><td class="l" dir="ltr">${esc(x.email || '—')}</td><td>${ROLE[x.role]}</td><td>${aptCell}</td><td class="l">${esc(x.name || '')}</td><td>${can && x.email !== ME.email ? `<button class="g" data-rm="${x.id}">הסר</button>` : ''}</td></tr>`; }).join('');
 }
 $('#uAdd').onclick = async () => {
   try { await api('POST', '/api/member', { email: $('#uEmail').value, role: $('#uRole').value, apt: $('#uApt').value, name: $('#uName').value }); ['#uEmail', '#uApt', '#uName'].forEach((i) => { $(i).value = ''; }); toast('נוסף'); loadUsers(); } catch (e) { toast(e.message); }
@@ -337,21 +338,36 @@ async function loadPeople() {
 }
 function renderPeople() {
   const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name]));
-  const by = {}; const add = (e, r) => { (by[e] = by[e] || []).push(r); };
-  for (const m of PEOPLE.members) add(m.email, { b: m.building_id, t: ROLE[m.role] + (m.apt ? ` · דירה ${m.apt}` : ''), k: m.role });
-  for (const x of PEOPLE.managers) {
-    if (!x.buildings.length) add(x.email, { b: null, t: 'מנהל בניינים (עדיין בלי בניין)', k: 'manager' });
-    for (const b of x.buildings) add(x.email, { b, t: 'מנהל בניינים', k: 'manager' });
-  }
-  if (ME.isSuper) add(ME.email, { b: null, t: 'מנהל על · כל הבניינים', k: 'super' });
+  const byUid = {}; const byEmail = {};
+  for (const m of PEOPLE.members) (byUid[m.user_id] = byUid[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` · דירה ${m.apt}` : ''), k: m.role });
+  const chipsFor = (u) => {
+    const rs = [...(byUid[u.id] || [])];
+    const mg = u.email ? PEOPLE.managers.find((x) => x.email === u.email) : null;
+    if (mg) { if (!mg.buildings.length) rs.push({ b: null, t: 'מנהל בניינים (עדיין בלי בניין)', k: 'manager' }); for (const b of mg.buildings) rs.push({ b, t: 'מנהל בניינים', k: 'manager' }); }
+    if (ME.isSuper && u.email && u.email === ME.email) rs.push({ b: null, t: 'מנהל על · כל הבניינים', k: 'super' });
+    return rs;
+  };
+  const people = (PEOPLE.users || []).map((u) => { if (u.email) byEmail[u.email] = u; return { u, rs: chipsFor(u) }; });
+  // logins that have no users row yet (a manager added by email, the super user): shown read-only
+  for (const x of PEOPLE.managers) if (!byEmail[x.email]) { const u = { id: null, email: x.email, first: '', last: '', phone: '', account: '' }; byEmail[x.email] = u; people.push({ u, rs: chipsFor(u) }); }
+  if (ME.isSuper && !byEmail[ME.email]) people.push({ u: { id: null, email: ME.email, first: '', last: '', phone: '', account: '' }, rs: [{ b: null, t: 'מנהל על · כל הבניינים', k: 'super' }] });
   const q = $('#pQ').value.trim().toLowerCase(); const fb = $('#pB').value; const multi = $('#pMulti').checked;
-  const list = Object.entries(by).filter(([e, rs]) => (!q || e.includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (!multi || rs.length > 1))
-    .sort((a, b) => (a[0] === ME.email ? -1 : b[0] === ME.email ? 1 : 0) || b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (!multi || rs.length > 1))
+    .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || c.rs.length - a.rs.length || (a.u.last + a.u.first + a.u.email).localeCompare(c.u.last + c.u.first + c.u.email, 'he'));
   $('#pCount').textContent = `${list.length} אנשים`;
-  $('#pTable').innerHTML = '<tr><th class="l">אימייל</th><th class="l">תפקידים</th></tr>' + (list.map(([e, rs]) =>
-    `<tr><td class="l" dir="ltr">${esc(e)}${e === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">` +
-    rs.map((r) => (r.b ? `<a href="#" class="chip" data-open="${r.b}">${esc(names[r.b] || 'בניין ' + r.b)}: ${esc(r.t)}</a>` : `<span class="chip">${r.t}</span>`)).join(' ') + '</td></tr>').join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
+  $('#nuRow').classList.toggle('hide', !ME.isSuper);
+  const cell = (u, k, w, ltr) => (ME.isSuper && u.id ? `<input data-uid="${u.id}" data-k="${k}" value="${esc(u[k])}" style="width:${w}px${ltr ? ';direction:ltr' : ''}">` : `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`);
+  $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבון בנק</th><th class="l">תפקידים</th></tr>' + (list.map(({ u, rs }) =>
+    `<tr><td class="l">${cell(u, 'first', 90)}</td><td class="l">${cell(u, 'last', 100)}</td><td class="l">${cell(u, 'email', 170, true)}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', 110, true)}</td><td class="l">${cell(u, 'account', 100, true)}</td><td class="l">` +
+    (rs.length ? rs.map((r) => (r.b ? `<a href="#" class="chip" data-open="${r.b}">${esc(names[r.b] || 'בניין ' + r.b)}: ${esc(r.t)}</a>` : `<span class="chip">${r.t}</span>`)).join(' ') : '<span class="mute">בלי תפקיד</span>') + '</td></tr>').join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
+$('#pTable').onchange = async (e) => {
+  const i = e.target; if (!i.dataset.uid) return;
+  try { await api('PUT', '/api/user', { id: i.dataset.uid, patch: { [i.dataset.k]: i.value } }); const u = PEOPLE.users.find((x) => String(x.id) === i.dataset.uid); if (u) u[i.dataset.k] = i.value.trim(); toast('נשמר'); } catch (err) { toast(err.message); loadPeople(); }
+};
+$('#nuAdd').onclick = async () => {
+  try { await api('POST', '/api/user', { first: $('#nuFirst').value, last: $('#nuLast').value, email: $('#nuEmail').value, phone: $('#nuPhone').value, account: $('#nuAccount').value }); ['#nuFirst', '#nuLast', '#nuEmail', '#nuPhone', '#nuAccount'].forEach((s) => { $(s).value = ''; }); toast('נוסף'); loadPeople(); } catch (err) { toast(err.message); }
+};
 ['#pQ', '#pB', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
 $('#pTable').onclick = (e) => { const a = e.target.closest('a[data-open]'); if (!a) return; e.preventDefault(); Vaad.choose(a.dataset.open); location.href = 'app.html' + Vaad.keep + '#people/users'; };
 
@@ -362,8 +378,8 @@ async function loadApts() {
     const rs = d.residents.map((r, i) => ({ r, i })).filter((x) => x.r.apt === a.apt && x.r.status !== 'עזב');
     h += `<tr><td><b>${a.apt}</b></td><td>${esc(a.floor)}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td>` +
       `<td class="l">${rs.map((x) => `${esc(x.r.first)} ${esc(x.r.last)}${x.r.first2 ? ' ו' + esc(x.r.first2) : ''} <span class="mute">(${esc(x.r.role)})</span>`).join('<br>')}</td>` +
-      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="phone1" value="${esc(x.r.phone1)}" style="width:110px">`).join('<br>')}</td>` +
-      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="account" value="${esc(x.r.account)}" style="width:100px" title="מספר חשבון בנק של הדייר — משמש לזיהוי אוטומטי">`).join('<br>')}</td></tr>`;
+      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="phone1" value="${esc(x.r.phone1)}" style="width:110px" ${ME.isSuper ? '' : 'disabled'}>`).join('<br>')}</td>` +
+      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="account" value="${esc(x.r.account)}" style="width:100px" ${ME.isSuper ? '' : 'disabled'} title="מספר חשבון בנק של הדייר — משמש לזיהוי אוטומטי">`).join('<br>')}</td></tr>`;
   });
   $('#aptTable').innerHTML = h;
 }
