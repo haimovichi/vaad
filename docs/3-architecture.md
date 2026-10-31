@@ -64,6 +64,12 @@ web/index.html  admin SPA
 - **Migration:** `supabase/migrate-roles.sql` then `schema.sql` (idempotent). `scripts/test-migration.mjs` runs it on the previous schema and proves the result equals a fresh install (policies, functions, grants, constraints).
 - **Known gaps:** a new building is empty (no in-app entry of apartments and tenants yet); helper functions are callable through the API but only reveal the caller's own roles (Supabase linter warnings, accepted).
 
+## Revision 6 — bank accounts in their own table (2026-10-31)
+- `bank_accounts(id, user_id → users, account, note, unique(user_id, account))`; `users.bank_account` is gone. A person has none, one or several accounts; two people may share one (joint account).
+- RLS: you read the accounts of the users you may read (policy via a subquery on `users`, so the user rules apply), only the super user writes. Deleting a user deletes their accounts.
+- The app joins a person's accounts into one list for the flat resident/owner shape, so bank matching (which splits the list) is unchanged. Backups and restore carry `bank_accounts` next to `users`.
+- Migration: `supabase/migrate-bank-accounts.sql` (splits the old text on commas), tested from the previous schema and equal to a fresh install. `supabase/dedupe-users.sql` works before or after it.
+
 ## Revision 5 — one table for people, one for roles (2026-10-31)
 - **`users(id, email unique nullable, first_name, last_name, phone, bank_account)`** is the master list of people. A numeric id (not the email) so tenants without an email are users too; the email is the login identity (`my_uid()` = the users row whose email is the JWT email).
 - **`members(id, building_id, user_id, role, apt)`** are the roles; the email and name columns are gone. `residents.user_id / user2_id` and `owners.user_id` replace the name, phone and account columns.
