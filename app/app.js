@@ -44,6 +44,7 @@ Vaad.mountSwitcher($('#bsel'), ME);
 const SCREENS = [
   ['home', 'בית', '🏠', '', 'home'],
   ['import', 'ייבוא מהבנק', '📥', 'כספים', 'import', () => STAFF],
+  ['bank', 'תנועות בנק', '🏦', 'כספים', 'bank', () => STAFF],
   ['summary', 'גבייה מול הוצאות', '📊', 'כספים', 'summary', () => STAFF],
   ['expenses', 'הוצאות', '🧾', 'כספים', 'expenses', () => STAFF],
   ['tariffs', 'תעריפים', '💰', 'כספים', 'tariffs', () => STAFF],
@@ -59,7 +60,7 @@ const PANE = { apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers:
 const LEGACY = { people: 'everyone', buildings: 'list', more: 'share' };   // old #people/users style addresses
 const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
-const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), summary: () => renderSummary(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), bank: () => loadBank(), summary: () => renderSummary(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
 let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
@@ -91,7 +92,7 @@ function route() {
   sec = s; sub = u;
   const def = screens.find((x) => x[0] === s);
   $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
-  ['home', 'import', 'pending', 'summary', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
+  ['home', 'import', 'pending', 'bank', 'summary', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
   Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
   $('#scr').textContent = s === 'home' ? 'בית' : def[1];
   $('#homeBtn').classList.toggle('hide', s === 'home');
@@ -359,6 +360,39 @@ function renderSummary() {
   const n = DB.pending.length;
   $('#sumNote').innerHTML = n ? `${n} ${n === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} לאישור ולכן לא נספרים בסיכום. <a href="#pending">לאישור</a>` : '';
 }
+
+/* ================= BANK RECORDS (every uploaded row, as the bank wrote it) ================= */
+let bList = [];
+const B_KIND = { payment: 'נרשמה כתשלום', pending: 'ממתינה לאישור', expense: 'נרשמה כהוצאה', ignored: 'הותעלמה', earlier: 'נרשמה קודם (אקסל)', none: 'עוד לא יובאה' };
+async function loadBank() {
+  bList = await api('GET', '/api/bank');
+  const years = [...new Set(bList.map((r) => +r.date.slice(0, 4)))].sort((a, b) => b - a);
+  const keep = { y: $('#bYear').value, m: $('#bMonth').value, k: $('#bKind').value };
+  $('#bYear').innerHTML = '<option value="">כל השנים</option>' + years.map((y) => `<option>${y}</option>`).join('');
+  $('#bMonth').innerHTML = '<option value="">כל החודשים</option>' + MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+  $('#bKind').innerHTML = '<option value="">כל המצבים</option>' + Object.entries(B_KIND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('#bYear').value = keep.y && years.includes(+keep.y) ? keep.y : ''; $('#bMonth').value = keep.m || ''; $('#bKind').value = keep.k || '';
+  renderBank();
+}
+const fmt2 = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+function renderBank() {
+  const y = $('#bYear').value; const m = $('#bMonth').value; const k = $('#bKind').value; const dir = $('#bDir').value; const q = $('#bQ').value.trim();
+  const rows = bList.filter((r) => (!y || r.date.slice(0, 4) === y) && (!m || +r.date.slice(5, 7) === +m) && (!k || r.status.kind === k)
+    && (!dir || (dir === 'in' ? r.amount > 0 : r.amount < 0)) && (!q || r.desc.includes(q) || String(r.ref).includes(q)));
+  const sum = (f) => rows.filter(f).reduce((s, r) => s + r.amount, 0);
+  $('#bTotal').textContent = bList.length ? `${rows.length} מתוך ${bList.length} שורות · זכויות ${fmt2(sum((r) => r.amount > 0))} ₪ · חובות ${fmt2(-sum((r) => r.amount < 0))} ₪` : '';
+  const what = (s) => {
+    if (s.kind === 'payment') return `${B_KIND.payment}: דירה ${s.apts.join(', ')} <span class="mute">(${s.months.join(', ')})</span>`;
+    if (s.kind === 'pending') return `<a href="#pending">${B_KIND.pending}</a>`;
+    if (s.kind === 'expense') return `<a href="#expenses">${B_KIND.expense}</a>`;
+    return s.kind === 'none' ? `<b class="bad">${B_KIND.none}</b>` : B_KIND[s.kind];
+  };
+  const dm = (d) => (d ? d.split('-').reverse().join('/') : '');
+  $('#bTable').innerHTML = '<tr><th>תאריך</th><th>יום ערך</th><th class="l">תיאור</th><th>זכות/חובה</th><th>יתרה</th><th>אסמכתא</th><th>עמלה</th><th>ערוץ</th><th class="l">מה קרה</th></tr>' +
+    (rows.length ? rows.map((r) => `<tr title="הועלה ${esc((r.uploadedAt || '').slice(0, 10))} ${esc(r.uploadedBy || '')}"><td>${dm(r.date)}</td><td>${dm(r.valueDate)}</td><td class="l">${esc(r.desc)}</td><td class="n"><b class="${r.amount < 0 ? 'bad' : 'good'}">${r.amount < 0 ? '−' : ''}${fmt2(Math.abs(r.amount))}</b></td><td class="n">${r.balance === null || r.balance === undefined ? '' : fmt2(r.balance)}</td><td>${esc(r.ref)}</td><td>${esc(r.fee)}</td><td>${esc(r.channel)}</td><td class="l">${what(r.status)}</td></tr>`).join('')
+      : `<tr><td colspan="9" class="empty">${bList.length ? 'אין שורות שמתאימות לסינון.' : 'עוד לא הועלה קובץ בנק. שורות נשמרות כאן ברגע שמעלים קובץ במסך ״ייבוא מהבנק״.'}</td></tr>`);
+}
+['#bYear', '#bMonth', '#bKind', '#bDir'].forEach((id) => { $(id).onchange = renderBank; }); $('#bQ').oninput = renderBank;
 
 /* ================= EXPENSES (read-only) ================= */
 let xList = [];

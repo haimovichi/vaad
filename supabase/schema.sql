@@ -152,6 +152,23 @@ create table if not exists public.pending_payments (
 create index if not exists pending_payments_building_idx on public.pending_payments(building_id);
 alter table public.pending_payments add column if not exists payer text;   -- payer_key of the bank description: what "remember" stores as an alias
 
+-- Every row of every bank file that was uploaded, exactly as the bank wrote it (date, value date, description, amount,
+-- balance, reference, fee column, channel; `raw` keeps all the cells of the row). What became of a row (payment, waiting
+-- credit, expense, ignored) is not stored here: the screen reads it from the other tables through tx_key. Written only by
+-- record_bank_rows(), never changed or deleted through the app.
+create table if not exists public.bank_transactions (
+  id bigint generated always as identity primary key,
+  building_id bigint not null references public.buildings(id) on delete cascade,
+  tx_key text not null,
+  tx_date date not null, value_date date,
+  descr text not null default '', amount numeric not null, balance numeric,
+  ref text, fee text, channel text,
+  raw jsonb,
+  uploaded_at timestamptz not null default now(),
+  uploaded_by text
+);
+create unique index if not exists bank_transactions_key on public.bank_transactions(building_id, tx_key);
+
 create table if not exists public.expenses (
   id bigint generated always as identity primary key,
   building_id bigint not null references public.buildings(id) on delete cascade,
@@ -655,6 +672,26 @@ begin
   return jsonb_build_object('added', added, 'pending', pcount, 'ignored', ign, 'expenses', xcount);
 end $$;
 
+-- Keep every row of an uploaded bank file, as written. A row whose key is already stored is left as it was (so a later
+-- file that overlaps an earlier one adds only what is new). Returns how many rows were new.
+create or replace function public.record_bank_rows(b bigint, rows jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare r jsonb; n int := 0; c int;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if jsonb_typeof(rows) is distinct from 'array' then raise exception 'rows must be a list'; end if;
+  for r in select * from jsonb_array_elements(rows) loop
+    if nullif(r ->> 'key', '') is null or nullif(r ->> 'date', '') is null or nullif(r ->> 'amount', '') is null then raise exception 'each bank row needs a key, a date and an amount'; end if;
+    insert into public.bank_transactions (building_id, tx_key, tx_date, value_date, descr, amount, balance, ref, fee, channel, raw, uploaded_by)
+    values (b, r ->> 'key', (r ->> 'date')::date, nullif(r ->> 'valueDate', '')::date, left(coalesce(r ->> 'desc', ''), 500), (r ->> 'amount')::numeric,
+            nullif(r ->> 'balance', '')::numeric, left(nullif(r ->> 'ref', ''), 60), left(nullif(r ->> 'fee', ''), 100), left(nullif(r ->> 'channel', ''), 100),
+            r -> 'raw', public.me())
+    on conflict (building_id, tx_key) do nothing;
+    get diagnostics c = row_count; n := n + c;
+  end loop;
+  return n;
+end $$;
+
 -- ---------- tenants: who lives in an apartment, and when ----------
 -- Add a tenancy (a tenant or an owner who lives there) to apartment a of building b: entry month, and optionally an exit
 -- month. The tenancies of an apartment must not overlap (FR3). The person is created, or an existing one is reused when
@@ -793,7 +830,7 @@ declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','add_tenancy','end_tenancy','edit_person','add_owner','remove_owner')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','add_tenancy','end_tenancy','edit_person','add_owner','remove_owner')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);
@@ -816,6 +853,7 @@ alter table public.owners            enable row level security;
 alter table public.tariffs           enable row level security;
 alter table public.payments          enable row level security;
 alter table public.pending_payments  enable row level security;
+alter table public.bank_transactions enable row level security;
 alter table public.expenses          enable row level security;
 alter table public.meta              enable row level security;
 alter table public.snapshot          enable row level security;
@@ -853,6 +891,11 @@ create policy manage_comment on public.expenses for update to authenticated usin
 revoke insert, update, delete on public.expenses from authenticated;
 grant select on public.expenses to authenticated;
 grant update (comment) on public.expenses to authenticated;   -- column grant: nothing but the comment
+
+-- bank rows: whoever manages the building reads them; they are added only by record_bank_rows() and never changed or deleted
+create policy manage_read on public.bank_transactions for select to authenticated using (public.can_manage(building_id));
+revoke insert, update, delete on public.bank_transactions from authenticated;
+grant select on public.bank_transactions to authenticated;
 
 -- buildings: you see the ones you belong to; super user sees all. The name is the address; only the super user changes it. Create/delete: functions / SQL editor only
 create policy member_read  on public.buildings for select to authenticated using (public.is_super() or public.is_manager_of(id) or public.is_member_any(id));

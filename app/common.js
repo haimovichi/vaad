@@ -217,7 +217,7 @@ window.Vaad = (function () {
       },
       async exportAll() { // every table of this building, as stored (the format scripts/restore-backup.js reads)
         const tables = {};
-        for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'pending_payments', 'expenses', 'meta', 'snapshot']) tables[t] = await fetchAll(t, B);
+        for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'pending_payments', 'expenses', 'bank_transactions', 'meta', 'snapshot']) tables[t] = await fetchAll(t, B);
         tables.members = ok(await c.from('members').select('*').eq('building_id', B).order('id'));
         const ids = new Set(); // the people this building refers to (users belong to no building)
         for (const r of tables.residents) { ids.add(r.user_id); ids.add(r.user2_id); }
@@ -266,6 +266,8 @@ window.Vaad = (function () {
       },
       async proposeCredits(list) { return ok(await c.rpc('propose_credits', { b: B, credits: list.map((t) => ({ key: t.key, date: t.date, desc: t.desc, amount: t.amount, apt: t.apt || null })) })); },
       async saveImport(items) { return ok(await c.rpc('save_import', { b: B, items })); },
+      async recordBank(rows) { return ok(await c.rpc('record_bank_rows', { b: B, rows: rows.map((t) => ({ key: t.key, date: t.date, valueDate: t.valueDate, desc: t.desc, amount: t.amount, balance: t.balance, ref: t.ref, fee: t.fee, channel: t.channel, raw: t.raw })) })); },
+      async bankRows() { return (await fetchAll('bank_transactions', B)).map((r) => ({ id: r.id, key: r.tx_key, date: r.tx_date, valueDate: r.value_date, desc: r.descr, amount: num(r.amount), balance: r.balance === null ? null : num(r.balance), ref: r.ref || '', fee: r.fee || '', channel: r.channel || '', raw: r.raw, uploadedAt: r.uploaded_at, uploadedBy: r.uploaded_by || '' })); },
       async approvePending(id, apt, learn) { ok(await c.rpc('approve_pending', { pid: id, a: apt, learn })); },
       async ignorePending(id) { ok(await c.rpc('ignore_pending', { pid: id })); },
       async updateResident(r) { // status: the building's staff; a person's details: the super user (RLS enforces it)
@@ -432,6 +434,12 @@ window.Vaad = (function () {
         const items = M.propose({ ...d, bankSeen: {}, refSeen: {}, ignored: {} }, JSON.parse(JSON.stringify(list))).items;
         return items.map((it) => ({ key: it.key, apt: it.apt, how: it.how, sure: it.sure, candidates: it.candidates || [], tenancy: it.tenancy || null, allocations: it.allocations }));
       },
+      async recordBank(rows) { // demo mode: kept in memory for this visit
+        const d = await this.load(); d.bankRows = d.bankRows || []; let n = 0;
+        for (const t of rows) if (!d.bankRows.some((r) => r.key === t.key)) { d.bankRows.push({ id: nextId++, key: t.key, date: t.date, valueDate: t.valueDate, desc: t.desc, amount: t.amount, balance: t.balance, ref: t.ref, fee: t.fee || '', channel: t.channel || '', raw: t.raw, uploadedAt: new Date().toISOString(), uploadedBy: 'demo' }); n++; }
+        return n;
+      },
+      async bankRows() { const d = await this.load(); return d.bankRows || []; },
       async saveImport(items) {
         const d = await this.load(); const M = window.VaadLib.match; const out = { added: 0, pending: 0, ignored: 0, expenses: 0 };
         for (const it of items) {

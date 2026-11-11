@@ -1054,6 +1054,64 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // every row of an uploaded bank file is kept (record_bank_rows) and readable only by whoever manages the building
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,61);
+      insert into bank_transactions(building_id, tx_key, tx_date, descr, amount) values (2, 'other-building', '2026-01-02', 'x', 5);`;
+    const as = async (email, fn) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        return await fn((sql, params) => db.query(sql, params));
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const J = (o) => JSON.stringify(o);
+    const row = (key, date, amount, extra = {}) => ({ key, date, valueDate: date, desc: 'העברה מדוגמה', amount, balance: 1234.56, ref: '988', fee: 'ערוץ ישיר', channel: 'יזום מחשב', raw: [date, date, 'העברה מדוגמה', amount, 1234.56, '988      ', 'ערוץ ישיר', 'יזום מחשב'], ...extra });
+    const rec = (q, rows) => q('select public.record_bank_rows(1, $1::jsonb) as n', [J(rows)]).then((r) => r.rows[0].n);
+
+    const r1 = await as('c1@x.com', async (q) => {
+      const first = await rec(q, [row('k1', '2026-10-28', 1710), row('k2', '2026-10-29', -49.15)]);
+      const again = await rec(q, [row('k1', '2026-10-28', 1710, { desc: 'changed' }), row('k3', '2026-10-30', 570)]);
+      const rows = (await q("select tx_key, tx_date::text d, value_date::text vd, descr, amount::float amount, balance::float balance, ref, fee, channel, raw, uploaded_by from bank_transactions where building_id = 1 order by tx_key")).rows;
+      return { first, again, rows };
+    });
+    report(r1 !== 'ERR' && r1.first === 2 && r1.again === 1 && r1.rows.length === 3, 'committee1', 'uploaded rows are kept; a row already kept is not added twice', '2, 1, 3 rows', r1 === 'ERR' ? r1 : J([r1.first, r1.again, r1.rows.length]));
+    const k1 = r1 !== 'ERR' && r1.rows.find((x) => x.tx_key === 'k1');
+    report(r1 !== 'ERR' && k1 && k1.d === '2026-10-28' && k1.vd === '2026-10-28' && k1.amount === 1710 && k1.balance === 1234.56 && k1.ref === '988' && k1.fee === 'ערוץ ישיר' && k1.channel === 'יזום מחשב' && k1.descr === 'העברה מדוגמה', 'committee1', 'all the original columns are stored, and a repeated row keeps its first values', 'ok', r1 === 'ERR' ? r1 : J(k1));
+    report(r1 !== 'ERR' && k1 && Array.isArray(k1.raw) && k1.raw.length === 8 && k1.uploaded_by === 'c1@x.com', 'committee1', 'the whole row (raw) and who uploaded it are stored', 'ok', r1 === 'ERR' ? r1 : J([k1 && k1.raw, k1 && k1.uploaded_by]));
+    const neg = r1 !== 'ERR' && r1.rows.find((x) => x.tx_key === 'k2');
+    report(r1 !== 'ERR' && neg && neg.amount === -49.15, 'committee1', 'a debit is stored with its negative amount', -49.15, r1 === 'ERR' ? r1 : neg && neg.amount);
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await as(email, (q) => rec(q, [row('km', '2026-10-28', 5)]));
+      report(r === 1, who, 'keeps uploaded rows', 1, r);
+    }
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const r = await as(email, (q) => rec(q, [row('kx', '2026-10-28', 5)]));
+      report(r === 'ERR', who, 'cannot keep rows in this building', 'ERR', r === 'ERR' ? r : 'ok');
+    }
+    const bad = await as('c1@x.com', async (q) => { try { await rec(q, [{ key: 'z', date: '2026-01-01' }]); return 'saved'; } catch (e) { return 'refused'; } });
+    report(bad === 'refused', 'committee1', 'a row without an amount is refused', 'refused', bad);
+    // reading
+    for (const [who, email, want] of [['committee1', 'c1@x.com', 1], ['manager12', 'm12@x.com', 1], ['super', 'super@x.com', 2], ['committee2', 'c2@x.com', 1], ['tenant8', 't8@x.com', 0], ['aptOwner8', 'ao8@x.com', 0], ['stranger', 'nobody@x.com', 0], ['anon', null, 0]]) {
+      const r = await as(email, async (q) => { if (['committee1', 'manager12', 'super'].includes(who)) await rec(q, [row('rd', '2026-10-28', 1)]); return q('select count(*)::int n from bank_transactions'); });
+      const n = r === 'ERR' ? 0 : r.rows[0].n;
+      if (who === 'committee1' || who === 'manager12') report(n >= want, who, 'reads the bank rows of their building', `>= ${want}`, n);
+      else if (who === 'super') report(n >= 2, who, 'reads the bank rows of every building', '>= 2', n);
+      else if (who === 'committee2') report(n === 1, who, 'reads only the rows of their own building', 1, n);
+      else report(n === 0, who, 'reads no bank rows', 0, n);
+    }
+    // nobody changes or deletes a kept row through the app
+    for (const [what, sql] of [['insert', "insert into bank_transactions(building_id, tx_key, tx_date, amount) values (1,'zz','2026-01-01',1)"], ['update', "update bank_transactions set amount = 1 where tx_key = 'other-building' or building_id = 1"], ['delete', 'delete from bank_transactions'], ['truncate', 'truncate bank_transactions']]) {
+      for (const [who, email] of [['committee1', 'c1@x.com'], ['super', 'super@x.com']]) {
+        const r = await as(email, async (q) => { await rec(q, [row('lock', '2026-10-28', 7)]); return q(`${sql} returning 1`.replace(' returning 1', what === 'truncate' ? '' : ' returning 1')); });
+        report(r === 'ERR' || (r.rows && r.rows.length === 0), who, `cannot ${what} bank rows directly`, 'BLOCKED', r === 'ERR' ? r : r.rows && r.rows.length);
+      }
+    }
+  }
+
   // no table privilege beyond reading and writing rows is left for the app's roles
   {
     const extra = (await db.query("select table_name, grantee, privilege_type from information_schema.role_table_grants where table_schema = 'public' and grantee in ('anon', 'authenticated') and privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES')")).rows;

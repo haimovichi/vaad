@@ -177,6 +177,17 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
     <div class="box"><table class="t" id="sumTable"></table></div>
   </section>
 
+  <!-- ===== bank records: every row of every uploaded bank file, as the bank wrote it ===== -->
+  <section id="sec-bank" class="hide">
+    <div class="box pad">
+      <h3>תנועות בנק</h3>
+      <div class="mute">כל השורות של כל קובץ בנק שהועלה, כפי שהבנק כתב אותן, ולצד כל שורה מה קרה לה: נרשמה כתשלום, ממתינה לאישור, נרשמה כהוצאה, הותעלמה, נרשמה קודם באקסל, או עוד לא יובאה. שורות נשמרות כבר בהעלאת הקובץ, גם אם לא שמרתם את הייבוא.</div>
+      <div class="row"><select id="bYear" aria-label="שנה"></select><select id="bMonth" aria-label="חודש"></select><select id="bKind" aria-label="מה קרה"></select><select id="bDir" aria-label="סוג"><option value="">זכות וחובה</option><option value="in">זכויות</option><option value="out">חובות</option></select><input id="bQ" type="search" placeholder="חפש בתיאור או באסמכתא" style="width:200px;margin:0"></div>
+      <div class="mute" id="bTotal"></div>
+    </div>
+    <div class="box" style="overflow-x:auto"><table class="t" id="bTable"></table></div>
+  </section>
+
   <!-- ===== expenses: what the building spent (read-only: they come from the workbook and the bank report) ===== -->
   <section id="sec-expenses" class="hide">
     <div class="box pad">
