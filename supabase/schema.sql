@@ -13,8 +13,9 @@
 --
 -- PEOPLE AND ROLES ARE SEPARATE
 --   users   : one row per person (first/last name, email, full phone). The email is optional: a tenant
---             without an email is still a user, he just can't log in. Only the super user edits users; the staff of a
---             building (committee, managers) read the users of their building.
+--             without an email is still a user, he just can't log in. Only the super user edits users directly; the staff of a
+--             building (committee, managers) read the users of their building, and add tenants / edit a person's name and
+--             phone through the functions add_tenancy and edit_person (people tied only to buildings they manage).
 --   bank_accounts : a person's bank accounts (none, one or several), linked to the user. Same read/write rules as users.
 --   members : the roles (user, building, role, apartment). One user can hold many rows, even in one building
 --             (owner of three apartments, tenant in one of them, committee member), and in other buildings too.
@@ -615,13 +616,94 @@ begin
   return jsonb_build_object('added', added, 'pending', pcount, 'ignored', ign);
 end $$;
 
+-- ---------- tenants: who lives in an apartment, and when ----------
+-- Add a tenancy (a tenant or an owner who lives there) to apartment a of building b: entry month, and optionally an exit
+-- month. The tenancies of an apartment must not overlap (FR3). The person is created, or an existing one is reused when
+-- name and phone match and the person is already tied to this building or to no building at all. Returns the tenancy key.
+-- The committee (and managers) may do this for their own building; people tied to other buildings stay out of reach.
+create or replace function public.add_tenancy(b bigint, a int, p_first text, p_last text, p_phone text, p_role text,
+                                              entry_y int, entry_m int, exit_y int default null, exit_m int default null) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  f int; t int; fn text := nullif(btrim(p_first), ''); ln text := nullif(btrim(p_last), ''); ph text := nullif(btrim(p_phone), '');
+  uid bigint; k text; n int := 1;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if not exists (select 1 from public.apartments x where x.building_id = b and x.apt = a) then raise exception 'no such apartment'; end if;
+  if ln is null then raise exception 'last name required'; end if;
+  if p_role is null or p_role not in ('בעלים', 'שוכר') then raise exception 'role must be owner or tenant'; end if;
+  if entry_y is null or entry_y not between 2000 and 2100 or entry_m is null or entry_m not between 1 and 12 then raise exception 'bad entry month'; end if;
+  if (exit_y is null) <> (exit_m is null) then raise exception 'exit needs a year and a month'; end if;
+  f := entry_y * 12 + entry_m - 1;
+  if exit_y is not null then
+    if exit_y not between 2000 and 2100 or exit_m not between 1 and 12 then raise exception 'bad exit month'; end if;
+    t := exit_y * 12 + exit_m - 1;
+    if t < f then raise exception 'exit before entry'; end if;
+  else t := 2147483647; end if;
+  if exists (
+    select 1 from public.residents r where r.building_id = b and r.apt = a
+      and f <= (case when r.status = 'עזב' and coalesce(r.exit_year, 0) <> 0 then r.exit_year * 12 + coalesce(nullif(r.exit_month, 0), 12) - 1 else 2147483647 end)
+      and (case when coalesce(r.entry_year, 0) <> 0 then r.entry_year * 12 + coalesce(nullif(r.entry_month, 0), 1) - 1 else 2022 * 12 + 5 end) <= t)
+  then raise exception 'the dates overlap another tenancy of this apartment'; end if;
+
+  select u.id into uid from public.users u
+   where u.first_name is not distinct from fn and u.last_name = ln and u.phone is not distinct from ph and u.email is null
+     and (exists (select 1 from public.residents r where r.building_id = b and u.id in (r.user_id, r.user2_id))
+          or exists (select 1 from public.owners o where o.building_id = b and o.user_id = u.id)
+          or not (exists (select 1 from public.residents r where u.id in (r.user_id, r.user2_id))
+                  or exists (select 1 from public.owners o where o.user_id = u.id)
+                  or exists (select 1 from public.members m where m.user_id = u.id)))
+   order by u.id limit 1;
+  if uid is null then insert into public.users (first_name, last_name, phone) values (fn, ln, ph) returning id into uid; end if;
+
+  k := a || '-' || ln;
+  while exists (select 1 from public.residents r where r.building_id = b and r.key = k) loop n := n + 1; k := a || '-' || ln || '-' || n; end loop;
+  insert into public.residents (building_id, key, apt, user_id, role, status, entry_month, entry_year, exit_month, exit_year)
+  values (b, k, a, uid, p_role, case when exit_y is null then 'פעיל' else 'עזב' end, entry_m, entry_y, exit_m, exit_y);
+  return k;
+end $$;
+
+-- The tenant moved out: set the exit month of a current tenancy. The committee (and managers) of the building only.
+create or replace function public.end_tenancy(b bigint, tenancy_key text, exit_y int, exit_m int) returns void
+language plpgsql security definer set search_path = public as $$
+declare r record;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  select * into r from public.residents x where x.building_id = b and x.key = tenancy_key;
+  if not found then raise exception 'no such tenancy'; end if;
+  if r.status = 'עזב' then raise exception 'the tenancy has already ended'; end if;
+  if exit_y is null or exit_y not between 2000 and 2100 or exit_m is null or exit_m not between 1 and 12 then raise exception 'bad exit month'; end if;
+  if exit_y * 12 + exit_m - 1 < coalesce(nullif(r.entry_year, 0) * 12 + coalesce(nullif(r.entry_month, 0), 1) - 1, 2022 * 12 + 5) then raise exception 'exit before entry'; end if;
+  update public.residents set status = 'עזב', exit_year = exit_y, exit_month = exit_m where id = r.id;
+end $$;
+
+-- Change the name or phone of a person tied to this building. Not for people who are also tied to a building the
+-- caller does not manage, and never the email (logins are granted elsewhere). Whoever manages the building.
+create or replace function public.edit_person(b bigint, uid bigint, p_first text, p_last text, p_phone text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if not (exists (select 1 from public.residents r where r.building_id = b and uid in (r.user_id, r.user2_id))
+          or exists (select 1 from public.owners o where o.building_id = b and o.user_id = uid)
+          or exists (select 1 from public.members m where m.building_id = b and m.user_id = uid)) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  if exists (select 1 from public.residents r where r.building_id <> b and uid in (r.user_id, r.user2_id) and not public.can_manage(r.building_id))
+     or exists (select 1 from public.owners o where o.building_id <> b and o.user_id = uid and not public.can_manage(o.building_id))
+     or exists (select 1 from public.members m where m.building_id <> b and m.user_id = uid and not public.can_manage(m.building_id)) then
+    raise exception 'the person is also tied to another building' using errcode = '42501';
+  end if;
+  if nullif(btrim(p_last), '') is null then raise exception 'last name required'; end if;
+  update public.users set first_name = nullif(btrim(p_first), ''), last_name = btrim(p_last), phone = nullif(btrim(p_phone), '') where id = uid;
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','add_tenancy','end_tenancy','edit_person')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);

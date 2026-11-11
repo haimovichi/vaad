@@ -463,18 +463,36 @@ $('#aAdd').onclick = async () => {
     toast('הדירה נוספה'); loadApts();
   } catch (e) { toast(e.message); }
 };
+$('#rEM').innerHTML = MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+$('#rXM').innerHTML += MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+$('#rAdd').onclick = async () => {
+  try {
+    await api('POST', '/api/tenancy', { apt: $('#rApt').value, first: $('#rFirst').value, last: $('#rLast').value, phone: $('#rPhone').value, role: $('#rRole').value, entryMonth: $('#rEM').value, entryYear: $('#rEY').value, exitMonth: $('#rXM').value, exitYear: $('#rXY').value });
+    ['#rFirst', '#rLast', '#rPhone', '#rXY'].forEach((i) => { $(i).value = ''; }); $('#rXM').value = '';
+    toast('הדייר נוסף'); loadApts();
+  } catch (e) { toast(e.message); }
+};
 async function loadApts() {
   const d = await api('GET', '/api/apartments');
-  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">דיירים (פעילים)</th><th>טלפון</th><th>חשבון בנק</th></tr>';
+  $('#rApt').innerHTML = '<option value="">בחרו דירה</option>' + d.apartments.map((a) => `<option>${a.apt}</option>`).join('');
+  if (!$('#rEY').value) $('#rEY').value = now.y;
+  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">דיירים (פעילים)</th><th>טלפון</th><th>חשבון בנק</th><th></th></tr>';
   d.apartments.forEach((a) => {
     const rs = d.residents.map((r, i) => ({ r, i })).filter((x) => x.r.apt === a.apt && x.r.status !== 'עזב');
     h += `<tr><td><b>${a.apt}</b></td><td>${esc(a.floor)}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td>` +
       `<td class="l">${rs.map((x) => `${esc(x.r.first)} ${esc(x.r.last)}${x.r.first2 ? ' ו' + esc(x.r.first2) : ''} <span class="mute">(${esc(x.r.role)})</span>`).join('<br>')}</td>` +
-      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="phone1" value="${esc(x.r.phone1)}" style="width:110px" ${ME.isSuper ? '' : 'disabled'}>`).join('<br>')}</td>` +
-      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="account" value="${esc(x.r.account)}" style="width:100px" ${ME.isSuper ? '' : 'disabled'} title="מספר חשבון בנק של הדייר — משמש לזיהוי אוטומטי">`).join('<br>')}</td></tr>`;
+      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="phone1" value="${esc(x.r.phone1)}" style="width:110px">`).join('<br>')}</td>` +
+      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="account" value="${esc(x.r.account)}" style="width:100px" ${ME.isSuper ? '' : 'disabled'} title="מספר חשבון בנק של הדייר — משמש לזיהוי אוטומטי">`).join('<br>')}</td><td>${rs.map((x) => `<button class="g" data-end="${esc(x.r.key)}">עזב</button>`).join('<br>')}</td></tr>`;
   });
   $('#aptTable').innerHTML = h;
 }
+$('#aptTable').onclick = async (e) => {
+  const b = e.target.closest('[data-end]'); if (!b) return;
+  const v = prompt('באיזה חודש הדייר עזב? (חודש/שנה, למשל 8/2026)'); if (!v) return;
+  const m = /^\s*(\d{1,2})\s*[\/.-]\s*(\d{4})\s*$/.exec(v);
+  if (!m) return toast('פורמט: חודש/שנה, למשל 8/2026');
+  try { await api('POST', '/api/tenancy/end', { key: b.dataset.end, exitMonth: m[1], exitYear: m[2] }); toast('הדיירות הסתיימה'); loadApts(); } catch (err) { toast(err.message); }
+};
 $('#aptTable').onchange = async (e) => { const i = e.target.dataset.i; if (i === undefined) return; try { await api('PUT', '/api/resident', { index: +i, patch: { [e.target.dataset.k]: e.target.value } }); toast('נשמר'); } catch (err) { toast(err.message); } };
 
 /* ================= BUILDINGS (super user, managers) ================= */

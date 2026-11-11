@@ -758,6 +758,92 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // add_tenancy, end_tenancy, edit_person: the committee records tenants of its own building
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,30),(1,31),(2,30);
+      insert into users(first_name, last_name, phone) values ('דוד','כהן','050-30'),('דנה','לוי','050-99');
+      insert into residents(building_id, key, apt, user_id, role, status, entry_month, entry_year) values
+        (1,'30-כהן',30,(select id from users where phone='050-30'),'בעלים','פעיל',1,2026);
+      insert into residents(building_id, key, apt, user_id, role, status, entry_month, entry_year) values
+        (2,'30-לוי',30,(select id from users where phone='050-99'),'שוכר','פעיל',1,2026);`;
+    const as = async (email, fn) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        return await fn((sql, params) => db.query(sql, params));
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const add = (q, apt, first, last, phone, role, ey, em, xy = null, xm = null, b = 1) =>
+      q('select public.add_tenancy($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) as k', [b, apt, first, last, phone, role, ey, em, xy, xm]).then((r) => r.rows[0].k);
+
+    const r1 = await as('c1@x.com', async (q) => {
+      const k = await add(q, 31, 'רונית', 'שמש', '052-31', 'שוכר', 2026, 3);
+      const row = (await q('select r.apt, r.role, r.status, r.entry_month, r.entry_year, u.first_name, u.last_name, u.phone from residents r join users u on u.id = r.user_id where r.key = $1', [k])).rows[0];
+      return { k, row };
+    });
+    report(r1 !== 'ERR' && r1.k === '31-שמש' && r1.row.apt === 31 && r1.row.status === 'פעיל' && r1.row.entry_year === 2026 && r1.row.entry_month === 3 && r1.row.first_name === 'רונית' && r1.row.phone === '052-31', 'committee1', 'adds a tenant: a person and a tenancy from the entry month', '31-שמש active', r1 === 'ERR' ? r1 : JSON.stringify(r1));
+
+    const ovl = await as('c1@x.com', (q) => add(q, 30, 'אחר', 'חדש', '050-1', 'שוכר', 2026, 6));
+    report(ovl === 'ERR', 'committee1', 'a tenancy overlapping the current one is refused', 'ERR', ovl === 'ERR' ? ovl : ovl);
+    const ovl2 = await as('c1@x.com', (q) => add(q, 30, 'אחר', 'חדש', '050-1', 'שוכר', 2025, 1, 2026, 2));
+    report(ovl2 === 'ERR', 'committee1', 'a tenancy whose end overlaps the start of another is refused', 'ERR', ovl2 === 'ERR' ? ovl2 : ovl2);
+    const before = await as('c1@x.com', (q) => add(q, 30, 'אחר', 'חדש', '050-1', 'שוכר', 2025, 1, 2025, 12));
+    report(before === '30-חדש', 'committee1', 'a tenancy that ended before the current one starts is allowed', '30-חדש', before);
+    const reuse = await as('c1@x.com', async (q) => { await add(q, 31, 'דוד', 'כהן', '050-30', 'שוכר', 2026, 1); return (await q("select count(*)::int n from users where first_name = 'דוד' and last_name = 'כהן' and phone = '050-30'")).rows[0].n; });
+    report(reuse === 1, 'committee1', 'a person of the building with the same name and phone is reused, not duplicated', 1, reuse);
+    const other = await as('c1@x.com', async (q) => { await add(q, 31, 'דנה', 'לוי', '050-99', 'שוכר', 2026, 1); await db.exec('reset role'); return (await q("select count(*)::int n from users where first_name = 'דנה' and last_name = 'לוי' and phone = '050-99'")).rows[0].n; });
+    report(other === 2, 'committee1', "a person tied only to another building is not reused: a new person is created", 2, other);
+    const orphan = await as('c1@x.com', async (q) => { await db.exec('reset role'); await db.exec("insert into users(first_name, last_name, phone) values ('אורי','ללא','050-0')"); await db.exec('set local role authenticated'); await add(q, 31, 'אורי', 'ללא', '050-0', 'שוכר', 2026, 1); return (await q("select count(*)::int n from users where last_name = 'ללא'")).rows[0].n; });
+    report(orphan === 1, 'committee1', 'a person tied to no building yet is reused', 1, orphan);
+    const same = await as('c1@x.com', async (q) => [await add(q, 31, 'א', 'זהה', '1', 'שוכר', 2026, 1, 2026, 2), await add(q, 31, 'ב', 'זהה', '2', 'שוכר', 2026, 5)].join());
+    report(same === '31-זהה,31-זהה-2', 'committee1', 'two tenancies with the same last name get distinct keys', '31-זהה,31-זהה-2', same);
+    for (const [what, args] of [['no last name', [31, 'א', '', '1', 'שוכר', 2026, 1]], ['a bad role', [31, 'א', 'ב', '1', 'דייר', 2026, 1]], ['month 13', [31, 'א', 'ב', '1', 'שוכר', 2026, 13]], ['an exit before the entry', [31, 'א', 'ב', '1', 'שוכר', 2026, 5, 2026, 4]], ['a missing apartment', [99, 'א', 'ב', '1', 'שוכר', 2026, 1]], ['an exit year without a month', [31, 'א', 'ב', '1', 'שוכר', 2026, 1, 2026, null]]]) {
+      const r = await as('c1@x.com', (q) => add(q, ...args));
+      report(r === 'ERR', 'committee1', `add_tenancy refuses ${what}`, 'ERR', r === 'ERR' ? r : r);
+    }
+    const ended = await as('c1@x.com', async (q) => {
+      await q("select public.end_tenancy(1, '30-כהן', 2026, 8)");
+      const row = (await q("select status, exit_year, exit_month from residents where key = '30-כהן'")).rows[0];
+      const next = await add(q, 30, 'חדש', 'יותר', '1', 'שוכר', 2026, 9);
+      return { row, next };
+    });
+    report(ended !== 'ERR' && ended.row.status === 'עזב' && ended.row.exit_year === 2026 && ended.row.exit_month === 8 && ended.next === '30-יותר', 'committee1', 'ending a tenancy frees the apartment for the next tenant', 'ended, next 30-יותר', ended === 'ERR' ? ended : JSON.stringify(ended));
+    const endTwice = await as('c1@x.com', async (q) => { await q("select public.end_tenancy(1, '30-כהן', 2026, 8)"); await q("select public.end_tenancy(1, '30-כהן', 2026, 9)"); });
+    report(endTwice === 'ERR', 'committee1', 'a tenancy that already ended cannot be ended again', 'ERR', endTwice === 'ERR' ? endTwice : 'ok');
+    const endBefore = await as('c1@x.com', (q) => q("select public.end_tenancy(1, '30-כהן', 2025, 12)"));
+    report(endBefore === 'ERR', 'committee1', 'an exit before the entry is refused', 'ERR', endBefore === 'ERR' ? endBefore : 'ok');
+
+    const edit = await as('c1@x.com', async (q) => {
+      const uid = (await q("select user_id from residents where key = '30-כהן'")).rows[0].user_id;
+      await q("select public.edit_person(1, $1, 'דוד', 'כהן-לוי', '050-77')", [uid]);
+      return (await q('select last_name, phone from users where id = $1', [uid])).rows[0];
+    });
+    report(edit !== 'ERR' && edit.last_name === 'כהן-לוי' && edit.phone === '050-77', 'committee1', 'edits the name and phone of a person of the building', 'changed', edit === 'ERR' ? edit : JSON.stringify(edit));
+    const editOther = await as('c1@x.com', async (q) => { const uid = (await q("select user_id from residents where key = '30-לוי'")).rows[0]?.user_id; return q("select public.edit_person(1, $1, 'x', 'y', 'z')", [uid]); });
+    report(editOther === 'ERR', 'committee1', "cannot edit a person who is not tied to this building", 'ERR', editOther === 'ERR' ? editOther : 'ok');
+    const shared = await as('c1@x.com', async (q) => {
+      await db.exec('reset role');
+      await db.exec("insert into residents(building_id, key, apt, user_id, role, status, entry_month, entry_year) values (2,'30-כהן2',30,(select id from users where phone='050-30'),'שוכר','פעיל',1,2027)");
+      await db.exec('set local role authenticated');
+      return q("select public.edit_person(1, (select id from users where phone='050-30'), 'x', 'y', 'z')");
+    });
+    report(shared === 'ERR', 'committee1', 'cannot edit a person who is also tied to a building they do not manage', 'ERR', shared === 'ERR' ? shared : 'ok');
+
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await as(email, (q) => add(q, 31, 'א', 'בדיקה', '1', 'שוכר', 2026, 1));
+      report(r === '31-בדיקה', who, 'add_tenancy: allowed', '31-בדיקה', r);
+    }
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const a = await as(email, (q) => add(q, 31, 'א', 'בדיקה', '1', 'שוכר', 2026, 1));
+      const e = await as(email, (q) => q("select public.end_tenancy(1, '30-כהן', 2026, 8)"));
+      const p = await as(email, (q) => q("select public.edit_person(1, (select id from users where phone='050-30'), 'x', 'y', 'z')"));
+      report(a === 'ERR' && e === 'ERR' && p === 'ERR', who, 'add_tenancy, end_tenancy and edit_person are refused', 'ERR x3', `${a === 'ERR' ? 'ERR' : 'ok'} ${e === 'ERR' ? 'ERR' : 'ok'} ${p === 'ERR' ? 'ERR' : 'ok'}`);
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

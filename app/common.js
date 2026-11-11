@@ -233,6 +233,17 @@ window.Vaad = (function () {
         return { building: { id: B, name: b ? b.name : String(B) }, tables };
       },
       async deletePayment(id) { ok(await c.from('payments').delete().eq('id', id).eq('building_id', B)); },
+      async addTenancy(t) {
+        const { data, error } = await c.rpc('add_tenancy', { b: B, a: t.apt, p_first: t.first, p_last: t.last, p_phone: t.phone, p_role: t.role, entry_y: t.entryYear, entry_m: t.entryMonth, exit_y: t.exitYear, exit_m: t.exitMonth });
+        if (error) throw new Error(/overlap/.test(error.message) ? 'התאריכים חופפים לדיירות אחרת בדירה' : error.code === '42501' ? 'אין לך הרשאה להוסיף דיירים' : error.message);
+        return data;
+      },
+      async endTenancy(key, y, m) { ok(await c.rpc('end_tenancy', { b: B, tenancy_key: key, exit_y: y, exit_m: m })); },
+      async editPerson(uid, first, last, phone) {
+        if (!uid) throw new Error('אין אדם רשום בדיירות הזו');
+        const { error } = await c.rpc('edit_person', { b: B, uid, p_first: first, p_last: last, p_phone: phone });
+        if (error) throw new Error(error.code === '42501' ? 'אי אפשר לערוך אדם שקשור גם לבניין אחר' : error.message);
+      },
       async addTariff(t) {
         const row = ok(await c.from('tariffs').insert({ building_id: B, year: t.year, month: t.month, apt: t.apt, amount: t.amount, note: t.note || null }).select().single());
         return { id: row.id, year: row.year, month: row.month, apt: row.apt, amount: num(row.amount), note: row.note || '' };
@@ -385,6 +396,14 @@ window.Vaad = (function () {
       async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
       async addApartment() {},
+      async addTenancy(t) {
+        const d = await this.load();
+        let key = `${t.apt}-${t.last}`; let n = 1; while (d.residents.some((r) => r.key === key)) key = `${t.apt}-${t.last}-${++n}`;
+        d.residents.push({ id: nextId++, key, apt: t.apt, userId: null, user2Id: null, first: t.first, last: t.last, first2: '', last2: '', phone1: t.phone, phone2: '', role: t.role, status: t.exitYear ? 'עזב' : 'פעיל', entryMonth: t.entryMonth, entryYear: t.entryYear, exitMonth: t.exitMonth, exitYear: t.exitYear, account: '' });
+        return key;
+      },
+      async endTenancy(key, y, m) { const r = (await this.load()).residents.find((x) => x.key === key); r.status = 'עזב'; r.exitYear = y; r.exitMonth = m; },
+      async editPerson() {},
       async addTariff(t) { return { ...t, id: nextId++ }; }, async updateTariff() {}, async deleteTariff() {},
       // demo mode only: the same rules as the server functions propose_credits and save_import, in memory
       async proposeCredits(list) {
