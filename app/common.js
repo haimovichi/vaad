@@ -383,6 +383,7 @@ window.Vaad = (function () {
       async load() {
         if (!db) {
           db = await (await fetch('demo-db.json')).json();
+          if (params.get('empty')) for (const k of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses']) db[k] = [];   // demo of a building nobody has set up yet
           // the same person (same name and phone) is one user, however many apartments they own or rent
           const person = (first, last, phone, account) => {
             if (!(first || last || phone)) return null;

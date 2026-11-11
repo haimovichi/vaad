@@ -194,10 +194,30 @@ function tenantsBox(list, apt) {
 }
 
 let seq = 0;
+// what a committee enters first in a new building; it disappears when all four are done
+function renderChecklist() {
+  const box = $('#checklist');
+  const steps = STAFF ? [
+    ['הוסיפו את דירות הבניין', DB.apartments.length > 0, '#apts'],
+    ['הגדירו תעריף חודשי', DB.tariffs.some((t) => !t.month && !t.apt), '#tariffs'],
+    ['הוסיפו את הדיירים', DB.residents.length > 0, '#apts'],
+    ['רשמו את בעלי הדירות', DB.owners.length > 0, '#apts'],
+  ] : [];
+  box.classList.toggle('hide', !steps.length || steps.every((x) => x[1]));
+  box.classList.add('checklist');
+  box.innerHTML = '<h3>להתחיל להפעיל את הבניין</h3><div class="mute">ארבעה צעדים ראשונים, אחד אחרי השני:</div><ul style="padding-inline-start:20px;margin:8px 0 0">' +
+    steps.map((x) => `<li class="${x[1] ? 'done' : ''}">${x[1] ? '✅' : '⬜'} <a href="${x[2]}">${x[0]}</a></li>`).join('') + '</ul>';
+}
 async function renderHome() {
   updatePend();
+  renderChecklist();
   $$('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
-  const all = rowsFor(year); const current = all.filter((r) => !r.left && !r.vacant); const idx = now.m - 1;
+  const all = rowsFor(year); const listed = all.filter((r) => !r.left); const current = listed.filter((r) => !r.vacant); const idx = now.m - 1;
+  if (!STAFF && !all.length) {   // a building nobody has set up yet
+    $('#sum').innerHTML = ''; $('#q').hidden = true; $('#mlabels').style.display = 'none'; $('#oldBox').style.display = 'none';
+    $('#list').innerHTML = '<div class="empty">הבניין עוד לא הוגדר במערכת.<br>כשהוועד ישלים את ההגדרה תוכלו לראות כאן את התשלומים.</div>';
+    return;
+  }
   const paidNow = current.filter((r) => ['paid', 'prepaid'].includes(r.months[idx])).length;
   const owing = new Set(all.filter(isOwing).map((r) => r.apt)).size;
   $('#sum').innerHTML = BOARD && year === now.y ? `<div><small>שילמו ${MF[idx]}</small><b>${paidNow} מתוך ${current.length}</b></div><div><small>דירות עם חוב</small><b class="${owing ? 'bad' : ''}">${owing}</b></div>` : '';
@@ -208,7 +228,7 @@ async function renderHome() {
 
   if (tab === 'mine') {
     if (!myApts.length) { $('#list').innerHTML = `<div class="empty">אין דירה מקושרת לחשבון הזה.<br>${BLD.grantable.includes('tenant') ? 'אפשר לקשר דירה בתפריט "אנשים".' : 'בקשו מוועד הבית לקשר את הדירה שלכם.'}</div>`; return; }
-    const rowOf = (a) => current.find((r) => r.apt === a);
+    const rowOf = (a) => listed.find((r) => r.apt === a);
     $('#list').innerHTML = myApts.map((a) => `<div class="aptsec" data-apt="${a}">${rowOf(a) ? card(rowOf(a), false) : `<div class="empty">דירה ${a} לא נמצאה</div>`}<div class="tn"></div><div class="pp"><div class="pays foot">טוען תשלומים…</div></div></div>`).join('');
     let tenants = []; let tenErr = '';
     try { tenants = await tenantsOfMyApartments(); } catch (e) { tenErr = e.message; }
@@ -230,7 +250,7 @@ async function renderHome() {
   }
   const q = $('#q').value.trim();
   const match = (r) => !q || String(r.apt) === q || (r.name || '').includes(q);
-  const cur = current.filter(match).sort((a, b) => (isOwing(b) ? 1 : 0) - (isOwing(a) ? 1 : 0) || a.apt - b.apt);
+  const cur = listed.filter(match).sort((a, b) => (isOwing(b) ? 1 : 0) - (isOwing(a) ? 1 : 0) || a.apt - b.apt);
   $('#list').innerHTML = cur.map((r) => card(r, true)).join('') || '<div class="empty">לא נמצאו דירות</div>';
   const old = all.filter((r) => r.left && match(r));
   $('#oldBox').style.display = old.length ? '' : 'none';

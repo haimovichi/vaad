@@ -107,6 +107,7 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 .legend span{display:flex;align-items:center;gap:5px}
 .legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
 .empty{color:var(--mute);text-align:center;padding:24px 0}
+.checklist a{color:var(--acc);text-decoration:none}.checklist li{padding:4px 0}.checklist .done{color:var(--mute);text-decoration:line-through}
 .pendbadge{display:block;background:var(--warnbg);color:#a67700;border:1px solid var(--partial);border-radius:12px;padding:10px 14px;margin:10px 0;text-decoration:none;font-weight:600}
 #msg{position:fixed;bottom:16px;left:16px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:20}
 </style>
@@ -121,6 +122,7 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 
   <!-- ===== home: my apartment / debtors / all ===== -->
   <section id="sec-home">
+    <div id="checklist" class="box pad hide"></div>
     <a id="pendBadge" class="pendbadge hide" href="#pending"></a>
     <div class="sum" id="sum"></div>
     <div class="tabs">
