@@ -333,6 +333,58 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   report(comMade === 'committee/0', 'committee1', 'creates a building and becomes its committee', 'committee/0', comMade);
   await blocked('manager3', 'm3@x.com', 'create a building with an empty name', "select public.create_building('   ')");
 
+  // match_payer: the bank-matching cascade of lib/match.js, in the database
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,10),(1,11),(1,12),(1,13);
+      insert into users(first_name, last_name, phone) values ('דוד','כהן','m-10'),('שרה','כהן','m-11'),('משה','לוי','m-12'),('רות','לוי','m-12b'),('דוד','כהן','m-13'),('יוסי','פרץ','m-left');
+      insert into residents(building_id, key, apt, user_id, status) values
+        (1,'10-a',10,(select id from users where phone='m-10'),null),(1,'11-a',11,(select id from users where phone='m-11'),'פעיל'),
+        (1,'12-a',12,(select id from users where phone='m-12'),'פעיל'),(1,'13-a',13,(select id from users where phone='m-13'),'פעיל'),
+        (1,'12-old',12,(select id from users where phone='m-left'),'עזב');
+      insert into owners(building_id, apt, user_id) values (1,12,(select id from users where phone='m-12b'));
+      insert into bank_accounts(user_id, account) values ((select id from users where phone='m-10'),'0012345');
+      insert into meta(building_id, name, value) values (1,'aliases','{"ישראל ישראלי": 11}');`;
+    const call = async (email, descr, b = 1) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        const r = await db.query('select * from public.match_payer($1, $2)', [b, descr]);
+        const x = r.rows[0];
+        return `${x.apt ?? '-'}|${x.how}|${x.sure}|${(x.candidates || []).join(',')}`;
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    // two people are named דוד כהן here (apartments 10 and 13), so "full name" is only unambiguous with another first name
+    const cases = [
+      ['account number', 'העברה חשבון 10-800-1234-0012345 תשלום', '10|מספר חשבון|true|'],
+      ['alias beats account', 'העברה ישראל ישראלי חשבון 10-800-1234-0012345', '11|זכור מתיקון קודם|true|'],
+      ['apartment hint', 'תשלום דירה 12', '12|הערה בהעברה|true|'],
+      ['hint to a missing apartment falls through to the name', 'דירה 99 משה לוי', '12|שם מלא|true|'],
+      ['full name, one apartment', 'העברה שרה כהן ועד', '11|שם מלא|true|'],
+      ['last name only', 'העברה לוי', '12|שם משפחה בלבד|false|'],
+      ['shared last name lists candidates', 'העברה כהן', '-|כמה דירות לאותו שם|false|10,11,13'],
+      ['shared full name lists candidates', 'העברה דוד כהן', '-|כמה דירות לאותו שם|false|10,13'],
+      ['unknown payer', 'העברה אלמוני', '-|לא זוהה|false|'],
+      ['a former tenant is not matched', 'העברה יוסי פרץ', '-|לא זוהה|false|'],
+    ];
+    for (const [what, descr, expect] of cases) {
+      const got = await call('c1@x.com', descr);
+      report(got === expect, 'committee1', `match_payer: ${what}`, expect, got);
+    }
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const got = await call(email, 'תשלום דירה 12');
+      report(got === '12|הערה בהעברה|true|', who, 'match_payer: allowed', 'ok', got);
+    }
+    for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['committee2', 'c2@x.com'], ['anon', null]]) {
+      const got = await call(email, 'תשלום דירה 12');
+      report(got === 'ERR', who, 'match_payer: refused', 'ERR', got);
+    }
+    const key = (await db.query('select public.payer_key($1) as k', ['העברה  דוד "כהן" 123-45 חשבון 10-800-1234-0012345'])).rows[0].k;
+    report(key === 'דוד כהן', 'sql', 'payer_key strips words, quotes, digits and the account text', 'דוד כהן', key);
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

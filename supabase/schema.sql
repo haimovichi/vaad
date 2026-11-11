@@ -275,13 +275,81 @@ begin
   return uid;
 end $$;
 
+-- ---------- bank matching (same rules as lib/match.js) ----------
+-- the payer part of a bank description: quotes dropped, leading transfer words, account text and digits removed
+create or replace function public.payer_key(descr text) returns text
+language sql immutable set search_path = public as $$
+  select btrim(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+    btrim(regexp_replace(regexp_replace(coalesce(descr, ''), '["''׳״]', '', 'g'), '\s+', ' ', 'g')),
+    '^(העברה|הוק)\s+', ''), 'חשבון.*$', ''), '\d[\d-]*', '', 'g'), '\s+', ' ', 'g'))
+$$;
+
+-- Match one bank credit to an apartment of building b. Order: learned alias, account number, "דירה N" hint,
+-- full name, last name only. sure = false when the match is a guess (last name only, or a name or account
+-- shared by several apartments: then apt is null and candidates lists them). Managers of the building only.
+create or replace function public.match_payer(b bigint, descr text)
+returns table (apt int, how text, sure boolean, candidates int[])
+language plpgsql stable security definer set search_path = public as $$
+declare
+  k text; al int; acc text; hint int; txt text; full_apts int[]; last_apts int[];
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  k := public.payer_key(descr);
+
+  select (m.value ->> k)::int into al from public.meta m where m.building_id = b and m.name = 'aliases';
+  if al is not null then return query select al, 'זכור מתיקון קודם'::text, true, '{}'::int[]; return; end if;
+
+  acc := regexp_replace(regexp_replace(substring(coalesce(descr, '') from '\d{2,3}-\d{3}-\d{4}-(\d{5,9})'), '\D', '', 'g'), '^0+', '');
+  if acc is not null and length(acc) >= 5 then
+    select coalesce(array_agg(distinct x.a order by x.a), '{}') into full_apts from (
+      select o.apt a from public.owners o join public.bank_accounts ba on ba.user_id = o.user_id
+       where o.building_id = b and regexp_replace(regexp_replace(ba.account, '\D', '', 'g'), '^0+', '') = acc
+      union
+      select r.apt from public.residents r join public.bank_accounts ba on ba.user_id in (r.user_id, r.user2_id)
+       where r.building_id = b and regexp_replace(regexp_replace(ba.account, '\D', '', 'g'), '^0+', '') = acc) x;
+    if cardinality(full_apts) = 1 then return query select full_apts[1], 'מספר חשבון'::text, true, '{}'::int[]; return; end if;
+    if cardinality(full_apts) > 1 then return query select null::int, 'כמה דירות לאותו חשבון'::text, false, full_apts; return; end if;
+  end if;
+
+  hint := substring(coalesce(descr, '') from 'דירה\s*(\d{1,2})')::int;
+  if hint is not null and exists (select 1 from public.apartments a where a.building_id = b and a.apt = hint) then
+    return query select hint, 'הערה בהעברה'::text, true, '{}'::int[]; return;
+  end if;
+
+  txt := btrim(regexp_replace(regexp_replace(coalesce(descr, ''), '["''׳״]', '', 'g'), '\s+', ' ', 'g'));
+  select coalesce(array_agg(distinct p.a order by p.a) filter (where p.full_hit), '{}'),
+         coalesce(array_agg(distinct p.a order by p.a) filter (where not p.full_hit), '{}')
+    into full_apts, last_apts
+  from (
+    select q.a, q.fn <> '' and position(q.fn in txt) > 0 as full_hit
+    from (
+      select r.apt a, u.first_name fn, u.last_name ln
+        from public.residents r join public.users u on u.id in (r.user_id, r.user2_id)
+       where r.building_id = b and coalesce(r.status, '') <> 'עזב'
+      union all
+      select o.apt, u.first_name, u.last_name
+        from public.owners o join public.users u on u.id = o.user_id
+       where o.building_id = b) raw,
+    lateral (select raw.a, btrim(regexp_replace(regexp_replace(coalesce(raw.fn, ''), '["''׳״]', '', 'g'), '\s+', ' ', 'g')) fn,
+                    btrim(regexp_replace(regexp_replace(coalesce(raw.ln, ''), '["''׳״]', '', 'g'), '\s+', ' ', 'g')) ln) q
+    where length(q.ln) >= 3 and position(q.ln in txt) > 0) p;
+  -- an apartment that has a full-name hit is not also a last-name-only candidate
+  last_apts := array(select x from unnest(last_apts) x where x <> all(full_apts));
+
+  if cardinality(full_apts) = 1 then return query select full_apts[1], 'שם מלא'::text, true, '{}'::int[]; return; end if;
+  if cardinality(full_apts) > 1 then return query select null::int, 'כמה דירות לאותו שם'::text, false, full_apts; return; end if;
+  if cardinality(last_apts) = 1 then return query select last_apts[1], 'שם משפחה בלבד'::text, false, '{}'::int[]; return; end if;
+  if cardinality(last_apts) > 1 then return query select null::int, 'כמה דירות לאותו שם'::text, false, last_apts; return; end if;
+  return query select null::int, 'לא זוהה'::text, false, '{}'::int[];
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);
