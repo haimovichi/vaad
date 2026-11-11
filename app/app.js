@@ -92,6 +92,7 @@ function route() {
   $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
   ['home', 'bank', 'summary', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
   Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
+  document.body.classList.toggle('wide', s === 'bank');   // the bank table has many columns: it may use the whole width
   $('#scr').textContent = s === 'home' ? 'בית' : def[1];
   $('#homeBtn').classList.toggle('hide', s === 'home');
   setMenu(false);

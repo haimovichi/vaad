@@ -26,6 +26,8 @@ jobs:
         with:
           node-version: 20
       - run: node scripts/build-app.js
+      # script URLs carry the commit, so a browser never keeps running an old app.js after a deploy
+      - run: sed -i -E 's#src="(config|vaad-lib|common|app)\.js"#src="\1.js?v='"${GITHUB_SHA}"'"#' app/*.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

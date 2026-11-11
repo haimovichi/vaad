@@ -27,6 +27,9 @@ button.g{background:none;border:1px solid var(--line);color:var(--ink);border-ra
 table.t{border-collapse:collapse;width:100%}
 table.t th,table.t td{padding:6px;text-align:center;border-bottom:1px solid var(--line);font-size:14px}
 table.t th{color:var(--mute);font-weight:600}
+#bankFilters{position:sticky;top:56px;z-index:6;margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0}
+#bankBox{max-height:calc(100vh - 230px);border-top-left-radius:0;border-top-right-radius:0;border-top:0}
+#bankTable th{position:sticky;top:0;z-index:2;background:var(--card)}
 table.t td.actrow{background:rgba(127,127,127,.1);white-space:nowrap;text-align:start}
 td.l,th.l{text-align:right}
 tr.warn{background:rgba(224,161,0,.15)}
@@ -56,6 +59,7 @@ body.staff.mopen #menu{display:block}
   #menu a{font-size:14px;padding:8px 10px}
   body.staff #banner,body.staff #bar,body.staff .wrap{margin-inline-end:190px}
   body.staff .wrap{max-width:860px;margin-inline-start:auto}
+  body.staff.wide .wrap{max-width:none}
 }
 
 /* ---- sub tabs ---- */
@@ -166,11 +170,11 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
     <div class="box hide" id="impCard"><div class="pad"><b>הפקדות חדשות מהקובץ</b> <span class="mute">(סמנו מה לשמור ואשרו בכפתור למטה)</span></div><table class="t" id="impTable"></table></div>
     <div class="box hide" id="expCard"><div class="pad"><b>חיובים בבנק שיירשמו כהוצאות</b> <span class="mute">(כל הפרטים נשארים כפי שבדוח הבנק; אפשר להוסיף הערה אחר כך במסך ההוצאות)</span></div><table class="t" id="expTable"></table></div>
     <div class="row hide" id="impActions"><button class="b" id="commit">שמור את הנבחרות</button></div>
-    <div class="box pad">
+    <div class="box pad" id="bankFilters">
       <div class="row"><select id="bYear" aria-label="שנה"></select><select id="bMonth" aria-label="חודש"></select><select id="bKind" aria-label="מה קרה"></select><select id="bDir" aria-label="הכנסות והוצאות"><option value="">הכנסות והוצאות</option><option value="in">הכנסות</option><option value="out">הוצאות</option></select><input id="bQ" type="search" placeholder="חפש בתיאור או באסמכתא" style="width:200px;margin:0"></div>
       <div class="mute" id="bTotal"></div>
     </div>
-    <div class="box" style="overflow-x:auto"><table class="t" id="bankTable"></table></div>
+    <div class="box" id="bankBox" style="overflow:auto"><table class="t" id="bankTable"></table></div>
   </section>
 
   <!-- ===== expenses: what the building spent (read-only: they come from the workbook and the bank report) ===== -->
