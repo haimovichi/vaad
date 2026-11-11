@@ -167,6 +167,16 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
     <div class="empty hide" id="pendEmpty">אין תשלומים ממתינים.</div>
   </section>
 
+  <!-- ===== collected versus spent, by year ===== -->
+  <section id="sec-summary" class="hide">
+    <div class="box pad">
+      <h3>גבייה מול הוצאות</h3>
+      <div class="mute">לכל שנה: כמה נגבה מהדיירים, כמה הוצא, וההפרש. תשלומים שממתינים לאישור עוד לא נספרים.</div>
+      <div id="sumNote" class="mute"></div>
+    </div>
+    <div class="box"><table class="t" id="sumTable"></table></div>
+  </section>
+
   <!-- ===== expenses: what the building spent (read-only: they come from the workbook and the bank report) ===== -->
   <section id="sec-expenses" class="hide">
     <div class="box pad">

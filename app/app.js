@@ -44,6 +44,7 @@ Vaad.mountSwitcher($('#bsel'), ME);
 const SCREENS = [
   ['home', 'בית', '🏠', '', 'home'],
   ['import', 'ייבוא מהבנק', '📥', 'כספים', 'import', () => STAFF],
+  ['summary', 'גבייה מול הוצאות', '📊', 'כספים', 'summary', () => STAFF],
   ['expenses', 'הוצאות', '🧾', 'כספים', 'expenses', () => STAFF],
   ['tariffs', 'תעריפים', '💰', 'כספים', 'tariffs', () => STAFF],
   ['pending', 'תשלומים ממתינים', '⏳', 'כספים', 'pending', () => STAFF],
@@ -58,7 +59,7 @@ const PANE = { apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers:
 const LEGACY = { people: 'everyone', buildings: 'list', more: 'share' };   // old #people/users style addresses
 const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
-const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), summary: () => renderSummary(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
 let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
@@ -90,7 +91,7 @@ function route() {
   sec = s; sub = u;
   const def = screens.find((x) => x[0] === s);
   $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
-  ['home', 'import', 'pending', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
+  ['home', 'import', 'pending', 'summary', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
   Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
   $('#scr').textContent = s === 'home' ? 'בית' : def[1];
   $('#homeBtn').classList.toggle('hide', s === 'home');
@@ -345,6 +346,19 @@ $('#commit').onclick = async () => {
     await preview(); updatePend();
   } catch (e) { toast(e.message); }
 };
+
+/* ================= COLLECTED VERSUS SPENT ================= */
+function renderSummary() {
+  const rows = calc.yearlySummary(DB);
+  const tot = rows.reduce((t, r) => ({ collected: t.collected + r.collected, spent: t.spent + r.spent }), { collected: 0, spent: 0 });
+  const bal = (n) => `<b class="${n < 0 ? 'bad' : 'good'}">${n < 0 ? '−' : ''}${fmt(Math.abs(n))} ₪</b>`;
+  $('#sumTable').innerHTML = '<tr><th>שנה</th><th>נגבה</th><th>הוצא</th><th>הפרש</th></tr>' +
+    (rows.length ? rows.map((r) => `<tr><td>${r.y}${r.y > now.y ? ' <span class="mute" title="שנה עתידית: כנראה טעות הקלדה בתשלום">⚠️</span>' : ''}</td><td class="n">${fmt(r.collected)} ₪</td><td class="n">${fmt(r.spent)} ₪</td><td class="n">${bal(r.collected - r.spent)}</td></tr>`).join('') +
+      `<tr class="tot"><td>סה״כ</td><td class="n">${fmt(tot.collected)} ₪</td><td class="n">${fmt(tot.spent)} ₪</td><td class="n">${bal(tot.collected - tot.spent)}</td></tr>`
+      : '<tr><td colspan="4" class="empty">עוד אין תשלומים או הוצאות.</td></tr>');
+  const n = DB.pending.length;
+  $('#sumNote').innerHTML = n ? `${n} ${n === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} לאישור ולכן לא נספרים בסיכום. <a href="#pending">לאישור</a>` : '';
+}
 
 /* ================= EXPENSES (read-only) ================= */
 let xList = [];
