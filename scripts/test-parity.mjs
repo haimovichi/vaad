@@ -126,6 +126,15 @@ const reasons = new Set();
 { const b = propose(JSON.parse(JSON.stringify({ ...synthetic, bankSeen: {}, refSeen: {}, ignored: {} })), JSON.parse(JSON.stringify(syntheticTxs))).items; b.forEach((x) => reasons.add(x.how)); }
 check('the synthetic rows exercise every rule', ['זכור מתיקון קודם', 'מספר חשבון', 'הערה בהעברה', 'שם מלא', 'שם משפחה בלבד', 'כמה דירות לאותו שם', 'לא זוהה'].every((r) => reasons.has(r)), `(${[...reasons].join(' | ')})`);
 
+// debits: the browser proposes them as expenses, unless they are known, ignored or before the cut-off
+{
+  const { freshCredits } = require('../lib/match');
+  const txs = [T('2026-02-10', -300, 'חיוב א'), T('2026-02-11', -100, 'חיוב ידוע'), T('2026-01-05', -50, 'חיוב ישן'), T('2026-02-12', 570, 'העברה דירה 3'), T('2026-02-13', -20, 'חיוב התעלם')];
+  const db = { bankSeen: { [txs[1].key]: true }, refSeen: {}, ignored: { [txs[4].key]: true } };
+  const r = freshCredits(db, txs, '2026-02-01');
+  check('debits become expense proposals (positive amounts); known, ignored and pre-cut-off rows are set aside', r.expenses.length === 1 && r.expenses[0].amount === 300 && r.fresh.length === 1 && r.debits === 4, JSON.stringify([r.expenses.length, r.fresh.length, r.debits]));
+}
+
 // the documented difference: an account held by two apartments is not guessed by the server
 const sh = await compare(sharedAcctDb, [T('2026-02-04', 570, 'העברה 10-800-1234-12345678')]);
 check('shared bank account: the one documented difference (browser picks one apartment, server lists both and is not sure)',

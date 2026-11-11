@@ -205,7 +205,7 @@ window.Vaad = (function () {
           residents: res.map((r) => fromResident(r, users, accts)),
           owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { id: o.id, apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
           tariffs: tar.map((t) => ({ id: t.id, year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
-          payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: exp.map((e) => ({ id: e.id, y: e.y, m: e.m, d: e.d, category: e.category || '', desc: e.descr || '', amount: num(e.amount), method: e.method || '', note: e.note || '', comment: e.comment || '' })),
+          payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: exp.map((e) => ({ id: e.id, y: e.y, m: e.m, d: e.d, category: e.category || '', desc: e.descr || '', amount: num(e.amount), method: e.method || '', note: e.note || '', comment: e.comment || '', source: e.source || 'workbook', txKey: e.tx_key || undefined })),
           bankSeen: m.bankSeen || {}, refSeen: m.refSeen || {}, aliases: m.aliases || {}, ignored: m.ignored || {},
           settings: Object.assign({ title: 'ועד הבית', showNames: false, showDebt: true }, m.settings || {}),
         };
@@ -433,10 +433,16 @@ window.Vaad = (function () {
         return items.map((it) => ({ key: it.key, apt: it.apt, how: it.how, sure: it.sure, candidates: it.candidates || [], tenancy: it.tenancy || null, allocations: it.allocations }));
       },
       async saveImport(items) {
-        const d = await this.load(); const M = window.VaadLib.match; const out = { added: 0, pending: 0, ignored: 0 };
+        const d = await this.load(); const M = window.VaadLib.match; const out = { added: 0, pending: 0, ignored: 0, expenses: 0 };
         for (const it of items) {
-          if (d.bankSeen[it.key] || d.ignored[it.key] || d.payments.some((p) => p.txKey === it.key) || d.pending.some((p) => p.txKey === it.key)) continue;
+          if (d.bankSeen[it.key] || d.ignored[it.key] || (it.refKey && d.refSeen[it.refKey]) || d.payments.some((p) => p.txKey === it.key) || d.pending.some((p) => p.txKey === it.key) || d.expenses.some((e) => e.txKey === it.key)) continue;
           if (it.ignore) { d.ignored[it.key] = true; out.ignored++; continue; }
+          if (it.expense) {
+            const [y, mo, dd] = it.date.split('-').map(Number);
+            d.expenses.push({ id: nextId++, y, m: mo, d: dd, category: '', desc: it.desc.slice(0, 200), amount: it.amount, method: 'העברה בנקאית', note: '', comment: '', source: 'bank', txKey: it.key });
+            d.bankSeen[it.key] = true; if (it.refKey) d.refSeen[it.refKey] = true;
+            out.expenses++; continue;
+          }
           if (it.apt) {
             const total = it.allocations.reduce((a, x) => a + x.amount, 0);
             if (Math.abs(total - it.amount) > 0.01) throw new Error('החלוקה לחודשים לא מתאימה לסכום');

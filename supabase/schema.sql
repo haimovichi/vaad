@@ -159,6 +159,12 @@ create table if not exists public.expenses (
 );
 -- the committee's own remark on an expense: the only column anyone can change
 alter table public.expenses add column if not exists comment text not null default '';
+-- where the row came from: the workbook migration, or the bank report (then tx_key is its bank key: one expense per bank row)
+alter table public.expenses add column if not exists source text not null default 'workbook';
+alter table public.expenses add column if not exists tx_key text;
+alter table public.expenses drop constraint if exists expenses_source_chk;
+alter table public.expenses add  constraint expenses_source_chk check (source in ('workbook', 'bank'));
+create unique index if not exists expenses_tx_key on public.expenses (building_id, tx_key) where tx_key is not null;
 -- every other column is imported (workbook, bank report) and locked: not even the SQL editor edits it by accident
 create or replace function public.expenses_lock() returns trigger
 language plpgsql set search_path = public as $$
@@ -574,13 +580,14 @@ end $$;
 --   apt + parts    : normal payments on that apartment's tenancy (the parts must add up to the amount); with learn,
 --                    the payer is remembered as an alias for that apartment
 --   no apartment   : saved as a pending credit with a suggestion (save_pending_credits)
--- A bank row that is already recorded is skipped, so saving twice adds nothing. Returns {added, pending, ignored}.
+--   expense        : a debit of the bank report becomes an expense (source 'bank', empty category and comment, all locked)
+-- A bank row that is already recorded is skipped, so saving twice adds nothing. Returns {added, pending, ignored, expenses}.
 -- Managers of the building only.
 create or replace function public.save_import(b bigint, items jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
   it jsonb; k text; rk text; amt numeric; d date; ap int; tk text; a jsonb; total numeric; pend jsonb := '[]';
-  added int := 0; ign int := 0; pcount int := 0;
+  added int := 0; ign int := 0; pcount int := 0; xcount int := 0;
 begin
   if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
   if jsonb_typeof(items) is distinct from 'array' then raise exception 'items must be a list'; end if;
@@ -590,12 +597,29 @@ begin
     if exists (select 1 from public.meta s where s.building_id = b and s.name in ('bankSeen', 'ignored') and s.value ? k)
        or exists (select 1 from public.payments p where p.building_id = b and p.tx_key = k)
        or exists (select 1 from public.pending_payments p where p.building_id = b and p.tx_key = k)
+       or exists (select 1 from public.expenses e where e.building_id = b and e.tx_key = k)
+       or (rk is not null and exists (select 1 from public.meta s where s.building_id = b and s.name = 'refSeen' and s.value ? rk))
     then continue; end if;
 
     if coalesce((it ->> 'ignore')::boolean, false) then
       insert into public.meta (building_id, name, value) values (b, 'ignored', jsonb_build_object(k, true))
         on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(k, true);
       ign := ign + 1; continue;
+    end if;
+
+    -- a debit of the bank report: an expense (amount as a positive number), imported fields only, category and comment empty
+    if coalesce((it ->> 'expense')::boolean, false) then
+      d := (it ->> 'date')::date; amt := (it ->> 'amount')::numeric;
+      if d is null or amt is null or amt <= 0 then raise exception 'each expense needs a date and a positive amount'; end if;
+      insert into public.expenses (building_id, y, m, d, category, descr, amount, method, note, source, tx_key)
+      values (b, extract(year from d)::int, extract(month from d)::int, extract(day from d)::int, '', left(btrim(coalesce(it ->> 'desc', '')), 200), amt, 'העברה בנקאית', '', 'bank', k);
+      insert into public.meta (building_id, name, value) values (b, 'bankSeen', jsonb_build_object(k, true))
+        on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(k, true);
+      if rk is not null then
+        insert into public.meta (building_id, name, value) values (b, 'refSeen', jsonb_build_object(rk, true))
+          on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(rk, true);
+      end if;
+      xcount := xcount + 1; continue;
     end if;
 
     ap := nullif(it ->> 'apt', '')::int;
@@ -628,7 +652,7 @@ begin
     added := added + 1;
   end loop;
   if jsonb_array_length(pend) > 0 then pcount := public.save_pending_credits(b, pend); end if;
-  return jsonb_build_object('added', added, 'pending', pcount, 'ignored', ign);
+  return jsonb_build_object('added', added, 'pending', pcount, 'ignored', ign, 'expenses', xcount);
 end $$;
 
 -- ---------- tenants: who lives in an apartment, and when ----------

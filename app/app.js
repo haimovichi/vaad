@@ -294,13 +294,16 @@ async function preview() {
   if (!from && IMP.from) $('#fromDate').value = IMP.from;
   // a credit the server is not sure about waits for approval unless an apartment is picked here: the suggestion is only shown
   for (const it of IMP.items) if (!it.sure) { it.suggest = it.apt; it.apt = null; it.tenancy = null; it.tenant = ''; it.allocations = []; }
-  $('#impInfo').textContent = `בקובץ ${IMP.total} תנועות · כבר רשומות: ${IMP.known} · לפני ${IMP.from || '—'} (נחשבות כרשומות): ${IMP.before} · הפקדות חדשות לבדיקה: ${IMP.items.length}`;
+  $('#impInfo').textContent = `בקובץ ${IMP.total} תנועות · כבר רשומות: ${IMP.known} · לפני ${IMP.from || '—'} (נחשבות כרשומות): ${IMP.before} · הפקדות חדשות לבדיקה: ${IMP.items.length} · חיובים להוצאות: ${IMP.expenses.length}`;
   renderImp();
 }
 const allocText = (a) => a.map((x) => `${x.m}/${x.y}:${x.amount}`).join(', ');
 function parseAlloc(t) { return t.split(',').map((s) => s.trim()).filter(Boolean).map((s) => { const m = /^(\d{1,2})\/(\d{4}):(\d+(?:\.\d+)?)$/.exec(s); if (!m) throw new Error('פורמט חלוקה: 9/2026:570, 10/2026:570'); return { m: +m[1], y: +m[2], amount: +m[3] }; }); }
 function renderImp() {
-  $('#impCard').classList.toggle('hide', !IMP.items.length); $('#impActions').classList.toggle('hide', !IMP.items.length);
+  $('#impCard').classList.toggle('hide', !IMP.items.length); $('#impActions').classList.toggle('hide', !IMP.items.length && !IMP.expenses.length);
+  $('#expCard').classList.toggle('hide', !IMP.expenses.length);
+  $('#expTable').innerHTML = '<tr><th>✓</th><th>תאריך</th><th class="l">תיאור בבנק</th><th>סכום</th></tr>' +
+    IMP.expenses.map((x, i) => `<tr data-x="${i}"><td><input type="checkbox" class="xsel" checked></td><td>${fdate(x.date)}</td><td class="l">${esc(x.desc.slice(0, 90))}</td><td class="n">${fmt(x.amount)} ₪</td></tr>`).join('');
   $('#impTable').innerHTML = '<tr><th>✓</th><th>תאריך</th><th class="l">תיאור</th><th>סכום</th><th>דירה</th><th class="l">חלוקה לחודשים</th><th>זכור</th></tr>' +
     IMP.items.map((it, i) => `<tr class="${it.sure ? '' : 'warn'}" data-i="${i}">
     <td><input type="checkbox" class="sel" checked></td>
@@ -332,8 +335,13 @@ $('#commit').onclick = async () => {
       if (!it.apt) { items.push({ key: it.key, date: it.date, desc: it.desc, amount: it.amount, ref: it.ref, refKey: it.refKey }); return; }   // no apartment: waits for approval
       items.push({ key: it.key, date: it.date, desc: it.desc, amount: it.amount, ref: it.ref, refKey: it.refKey, apt: it.apt, allocations: parseAlloc(tr.querySelector('.al').value), learn: tr.querySelector('.learn').checked });
     });
+    $$('#expTable tr[data-x]').forEach((tr) => {
+      if (!tr.querySelector('.xsel').checked) return;
+      const x = IMP.expenses[tr.dataset.x];
+      items.push({ key: x.key, refKey: x.refKey, ref: x.ref, date: x.date, desc: x.desc, amount: x.amount, expense: true });
+    });
     const r = await api('POST', '/api/import/commit', { items });
-    toast(`נשמרו ${r.added} תשלומים, ${r.pending} ממתינים לאישור, ${r.ignored} הותעלמו`);
+    toast(`נשמרו ${r.added} תשלומים, ${r.pending} ממתינים לאישור, ${r.expenses} הוצאות, ${r.ignored} הותעלמו`);
     await preview(); updatePend();
   } catch (e) { toast(e.message); }
 };
@@ -363,7 +371,7 @@ function renderExpenses() {
   for (let m = 1; m <= 12; m++) {
     const ms = rows.filter((e) => e.m === m); if (!ms.length) continue;
     h += `<tr><td colspan="6" class="l"><b>${MF[m - 1]}</b> <span class="mute">· ${fmt(sum(ms))} ₪</span></td></tr>`;
-    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l">${esc(e.category)}</td><td class="l">${esc(e.desc)}</td><td class="n">${fmt(e.amount)} ₪</td><td>${esc(e.method)}</td><td class="l"><input class="xc" data-id="${e.id}" value="${esc(e.comment)}" placeholder="הערה" style="width:170px"></td></tr>`).join('');
+    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l">${esc(e.category)}</td><td class="l">${esc(e.desc)}${e.source === 'bank' ? ' 🏦' : ''}</td><td class="n">${fmt(e.amount)} ₪</td><td>${esc(e.method)}</td><td class="l"><input class="xc" data-id="${e.id}" value="${esc(e.comment)}" placeholder="הערה" style="width:170px"></td></tr>`).join('');
   }
   $('#xTable').innerHTML = rows.length ? h : '<tr><td class="empty">אין הוצאות בשנה ובקטגוריה שנבחרו.</td></tr>';
 }

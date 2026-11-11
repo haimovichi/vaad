@@ -989,6 +989,71 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     report(colDefault && colDefault.is_nullable === 'NO' && /''/.test(colDefault.column_default), 'sql', 'the comment column exists and is empty by default', "''", colDefault ? colDefault.column_default : 'none');
   }
 
+  // debits of the bank report become expenses (save_import with expense items)
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,60);
+      insert into residents(building_id, key, apt, entry_year, entry_month) values (1,'60-a',60,2026,1);
+      insert into tariffs(building_id, year, month, apt, amount) values (1,2026,null,null,570);
+      insert into expenses(building_id, y, m, d, category, descr, amount, method, note) values (1, 2026, 1, 3, 'חשמל', 'מהאקסל', 100, 'העברה', '');`;
+    const as = async (email, fn) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        return await fn((sql, params) => db.query(sql, params));
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const J = (o) => JSON.stringify(o);
+    const save = (q, items) => q('select public.save_import(1, $1::jsonb) as r', [J(items)]).then((r) => r.rows[0].r);
+    const ex = (key, date, amount, desc, extra = {}) => ({ key, refKey: `2026|${key}`, ref: key, date, amount, desc, expense: true, ...extra });
+
+    const r1 = await as('c1@x.com', async (q) => {
+      const first = await save(q, [ex('d1', '2026-02-14', 250.5, 'חשבון חשמל חברת חשמל')]);
+      const row = (await q("select y, m, d, category, descr, amount::float amount, method, note, comment, source, tx_key from expenses where tx_key = 'd1'")).rows[0];
+      const seen = (await q("select value from meta where building_id = 1 and name = 'bankSeen'")).rows[0].value;
+      const again = await save(q, [ex('d1', '2026-02-14', 250.5, 'חשבון חשמל חברת חשמל')]);
+      const sameRef = await save(q, [ex('d1-other-key', '2026-02-14', 250.5, 'x', { refKey: '2026|d1' })]);
+      const total = (await q("select count(*)::int n from expenses where source = 'bank'")).rows[0].n;
+      const workbook = (await q("select source, tx_key from expenses where descr = 'מהאקסל'")).rows[0];
+      return { first, row, seen, again, sameRef, total, workbook };
+    });
+    report(r1 !== 'ERR' && r1.first.expenses === 1 && r1.first.added === 0, 'committee1', 'a debit is saved as an expense', 'expenses 1', r1 === 'ERR' ? r1 : J(r1.first));
+    report(r1 !== 'ERR' && r1.row.y === 2026 && r1.row.m === 2 && r1.row.d === 14 && r1.row.amount === 250.5 && r1.row.descr === 'חשבון חשמל חברת חשמל' && r1.row.method === 'העברה בנקאית' && r1.row.source === 'bank', 'committee1', 'it keeps the date, a positive amount and the bank description, with source bank', 'ok', r1 === 'ERR' ? r1 : J(r1.row));
+    report(r1 !== 'ERR' && r1.row.category === '' && r1.row.comment === '' && r1.row.note === '', 'committee1', 'category, comment and note start empty', "''", r1 === 'ERR' ? r1 : J([r1.row.category, r1.row.comment, r1.row.note]));
+    report(r1 !== 'ERR' && r1.seen.d1 === true, 'committee1', 'the bank row is marked as seen for the next import', 'seen', r1 === 'ERR' ? r1 : J(r1.seen));
+    report(r1 !== 'ERR' && r1.again.expenses === 0 && r1.sameRef.expenses === 0 && r1.total === 1, 'committee1', 'saving the same debit twice, or one with the same reference, adds nothing', '0/0, 1 row', r1 === 'ERR' ? r1 : J([r1.again, r1.sameRef, r1.total]));
+    report(r1 !== 'ERR' && r1.workbook.source === 'workbook' && r1.workbook.tx_key === null, 'sql', 'rows that were already there are workbook rows', 'workbook', r1 === 'ERR' ? r1 : J(r1.workbook));
+
+    const mixed = await as('c1@x.com', (q) => save(q, [
+      { key: 'c1', refKey: '2026|c1', ref: 'c1', date: '2026-02-03', amount: 570, desc: 'העברה דירה 60', apt: 60, allocations: [{ y: 2026, m: 2, amount: 570 }] },
+      { key: 'c2', refKey: '2026|c2', ref: 'c2', date: '2026-02-04', amount: 50, desc: 'העברה אלמוני' },
+      ex('d2', '2026-02-05', 80, 'עמלה'), ex('d3', '2026-02-06', 90, 'ארנונה')]));
+    report(mixed !== 'ERR' && mixed.added === 1 && mixed.pending === 1 && mixed.expenses === 2, 'committee1', 'credits, a waiting credit and debits are saved in one go', '1/1/2', mixed === 'ERR' ? mixed : J(mixed));
+    const atomic = await as('c1@x.com', async (q) => {
+      await q('savepoint s1');
+      let failed = false;
+      try { await save(q, [ex('d4', '2026-02-05', 10, 'ok'), ex('d5', '2026-02-05', -5, 'bad')]); } catch (e) { failed = true; }
+      await q('rollback to savepoint s1');
+      return { failed, n: (await q("select count(*)::int n from expenses where tx_key in ('d4','d5')")).rows[0].n };
+    });
+    report(atomic !== 'ERR' && atomic.failed && atomic.n === 0, 'committee1', 'a bad debit stops the whole save, nothing is kept', 'failed, 0', atomic === 'ERR' ? atomic : J(atomic));
+    // the saved expense is locked like every imported expense
+    for (const [what, sql] of [['amount', 'amount = 1'], ['source', "source = 'workbook'"], ['tx_key', "tx_key = 'zzz'"], ['category', "category = 'x'"]]) {
+      const r = await as('c1@x.com', async (q) => { await save(q, [ex('d6', '2026-02-05', 10, 'x')]); return q(`update expenses set ${sql} where tx_key = 'd6' returning id`); });
+      report(r === 'ERR' || r.rows.length === 0, 'committee1', `a bank expense cannot be changed (${what})`, 'BLOCKED', r === 'ERR' ? r : r.rows.length);
+    }
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await as(email, (q) => save(q, [ex('d7', '2026-02-05', 10, 'x')]));
+      report(r !== 'ERR' && r.expenses === 1, who, 'saves debits as expenses', 1, r === 'ERR' ? r : r.expenses);
+    }
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const r = await as(email, (q) => save(q, [ex('d8', '2026-02-05', 10, 'x')]));
+      report(r === 'ERR', who, 'cannot save an expense', 'ERR', r === 'ERR' ? r : 'ok');
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }
