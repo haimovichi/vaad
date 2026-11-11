@@ -393,9 +393,9 @@ function renderBank() {
     return s.kind === 'none' ? `<b class="bad">${B_KIND.none}</b>` : B_KIND[s.kind];
   };
   const dm = (d) => (d ? d.split('-').reverse().join('/') : '');
-  $('#bankTable').innerHTML = '<tr><th>תאריך</th><th>יום ערך</th><th class="l">תיאור</th><th>זכות/חובה</th><th>יתרה</th><th>אסמכתא</th><th>עמלה</th><th>ערוץ</th><th class="l">מה קרה</th><th class="l">קישור לדירה</th></tr>' +
-    (rows.length ? rows.map((r) => `<tr data-k="${esc(r.key)}" title="הועלה ${esc((r.uploadedAt || '').slice(0, 10))} ${esc(r.uploadedBy || '')}"><td>${dm(r.date)}</td><td>${dm(r.valueDate)}</td><td class="l">${esc(r.desc)}</td><td class="n"><b class="${r.amount < 0 ? 'bad' : 'good'}">${r.amount < 0 ? '−' : ''}${fmt2(Math.abs(r.amount))}</b></td><td class="n">${r.balance === null || r.balance === undefined ? '' : fmt2(r.balance)}</td><td>${esc(r.ref)}</td><td>${esc(r.fee)}</td><td>${esc(r.channel)}</td><td class="l">${what(r.status)}</td><td class="l act">${bankAct(r)}</td></tr>`).join('')
-      : `<tr><td colspan="10" class="empty">${bList.length ? 'אין שורות שמתאימות לסינון.' : 'עוד לא הועלה קובץ בנק. שורות נשמרות כאן ברגע שמעלים קובץ בכפתור למעלה.'}</td></tr>`);
+  $('#bankTable').innerHTML = '<tr><th>תאריך</th><th>יום ערך</th><th class="l">תיאור</th><th>זכות/חובה</th><th>יתרה</th><th>אסמכתא</th><th>עמלה</th><th>ערוץ</th><th class="l">מה קרה</th></tr>' +
+    (rows.length ? rows.map((r) => `<tr data-k="${esc(r.key)}" title="הועלה ${esc((r.uploadedAt || '').slice(0, 10))} ${esc(r.uploadedBy || '')}"><td>${dm(r.date)}</td><td>${dm(r.valueDate)}</td><td class="l">${esc(r.desc)}</td><td class="n"><b class="${r.amount < 0 ? 'bad' : 'good'}">${r.amount < 0 ? '−' : ''}${fmt2(Math.abs(r.amount))}</b></td><td class="n">${r.balance === null || r.balance === undefined ? '' : fmt2(r.balance)}</td><td>${esc(r.ref)}</td><td>${esc(r.fee)}</td><td>${esc(r.channel)}</td><td class="l">${what(r.status)}</td></tr>${bankAct(r) ? `<tr data-k="${esc(r.key)}"><td colspan="9" class="l actrow">${bankAct(r)}</td></tr>` : ''}`).join('')
+      : `<tr><td colspan="9" class="empty">${bList.length ? 'אין שורות שמתאימות לסינון.' : 'עוד לא הועלה קובץ בנק. שורות נשמרות כאן ברגע שמעלים קובץ בכפתור למעלה.'}</td></tr>`);
 }
 
 // what can be done to a row: a waiting credit is approved or ignored; an unlinked credit is linked to an apartment (months split like in the upload review);
