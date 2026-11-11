@@ -896,3 +896,8 @@ create policy manage_write on public.snapshot for all    to authenticated using 
 grant select, insert, update, delete on public.snapshot to authenticated;
 
 grant usage on all sequences in schema public to authenticated;
+
+-- Supabase hands every privilege on every new table to logged-in users. The app only needs reading and writing rows
+-- (which the policies above then limit), so the rest goes: TRUNCATE in particular would skip the row policies.
+revoke truncate, references, trigger on all tables in schema public from anon, authenticated;
+alter default privileges in schema public revoke truncate, references, trigger on tables from anon, authenticated;

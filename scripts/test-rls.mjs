@@ -1054,6 +1054,18 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // no table privilege beyond reading and writing rows is left for the app's roles
+  {
+    const extra = (await db.query("select table_name, grantee, privilege_type from information_schema.role_table_grants where table_schema = 'public' and grantee in ('anon', 'authenticated') and privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES')")).rows;
+    report(extra.length === 0, 'sql', 'logged-in and anonymous users hold no TRUNCATE, TRIGGER or REFERENCES on any table', 0, extra.length);
+    // the privileges are explicitly handed out in a database where they are the default, then taken away by the schema
+    const d2 = await makeDb('create table public.t_extra (id int);');
+    await d2.exec('grant all on public.t_extra to authenticated;');
+    await d2.exec(schemaSql);
+    const left = (await d2.query("select privilege_type from information_schema.role_table_grants where table_name = 't_extra' and grantee = 'authenticated' and privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES')")).rows.length;
+    report(left === 0, 'sql', 'a table that was granted everything loses TRUNCATE, TRIGGER and REFERENCES when the schema runs', 0, left);
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }
