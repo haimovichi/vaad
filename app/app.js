@@ -391,6 +391,7 @@ function renderBank() {
     if (s.kind === 'payment') return `${B_KIND.payment}: דירה ${s.apts.join(', ')} <span class="mute">(${s.months.join(', ')})</span>`;
     if (s.kind === 'pending') return `<b class="bad">${B_KIND.pending}</b>`;
     if (s.kind === 'expense') return `<a href="#expenses">${B_KIND.expense}</a>`;
+    if (s.kind === 'earlier' && s.expense) return `${B_KIND.earlier}: הוצאה${s.expense.category ? ' — ' + esc(s.expense.category) : ''}`;
     return s.kind === 'none' ? `<b class="bad">${B_KIND.none}</b>` : B_KIND[s.kind];
   };
   const dm = (d) => (d ? d.split('-').reverse().join('/') : '');
