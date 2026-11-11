@@ -54,8 +54,8 @@ const shape = async (d) => ({
   policies: (await d.query("select tablename, policyname, cmd, roles::text r, qual, with_check from pg_policies where schemaname = 'public' order by 1, 2")).rows,
   functions: (await d.query("select proname, prosecdef, pg_get_functiondef(oid) def from pg_proc where pronamespace = 'public'::regnamespace order by 1")).rows,
   grants: (await d.query("select table_name, privilege_type from information_schema.role_table_grants where table_schema = 'public' and grantee = 'authenticated' order by 1, 2")).rows,
-  columns: (await d.query("select table_name, column_name, data_type, is_nullable from information_schema.columns where table_schema = 'public' and table_name in ('members','users','residents','owners','bank_accounts','payments') order by 1, 2")).rows,
-  constraints: (await d.query("select conrelid::regclass::text t, conname, pg_get_constraintdef(oid) def from pg_constraint where conrelid in ('public.members'::regclass, 'public.payments'::regclass, 'public.users'::regclass, 'public.bank_accounts'::regclass, 'public.residents'::regclass, 'public.owners'::regclass) order by 1, 2")).rows,
+  columns: (await d.query("select table_name, column_name, data_type, is_nullable from information_schema.columns where table_schema = 'public' and table_name in ('members','users','residents','owners','bank_accounts','pending_payments','payments') order by 1, 2")).rows,
+  constraints: (await d.query("select conrelid::regclass::text t, conname, pg_get_constraintdef(oid) def from pg_constraint where conrelid in ('public.members'::regclass, 'public.users'::regclass, 'public.bank_accounts'::regclass, 'public.residents'::regclass, 'public.owners'::regclass) order by 1, 2")).rows,
   indexes: (await d.query("select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename in ('members','super_users','users') order by 1")).rows,
 });
 const [s1, s2] = [await shape(a), await shape(fresh)];
@@ -112,7 +112,7 @@ check('owners point at their person (an owner with no details points at nobody)'
 check('roles keep their rows (a person holds committee and owner of 18 at once)', (await un("select count(*)::int n from members m join users u on u.id = m.user_id where u.email = 'me@x.com'"))[0].n === 2);
 check('the old personal columns are gone', (await un("select count(*)::int n from information_schema.columns where table_schema = 'public' and ((table_name = 'residents' and column_name in ('first_name','last_name','first2','last2','phone1','phone2','account')) or (table_name = 'owners' and column_name in ('first_name','last_name','phone','account')) or (table_name = 'members' and column_name in ('email','name')))"))[0].n === 0);
 check('payments and snapshot untouched', (await un("select count(*)::int n from payments"))[0].n === 1 && (await un("select count(*)::int n from snapshot"))[0].n === 1);
-check('existing payments keep their apartment and key and are not pending', (await un("select count(*)::int n from payments where apt = 8 and key = '8-b' and amount = 570 and not pending and auto_comment is null"))[0].n === 1);
+check('payments keep exactly their columns and the new pending table starts empty', (await un("select count(*)::int n from information_schema.columns where table_schema = 'public' and table_name = 'payments'"))[0].n === 13 && (await un('select count(*)::int n from pending_payments'))[0].n === 0);
 const before = JSON.stringify([await un('select * from users order by id'), await un('select user_id, account from bank_accounts order by 1, 2')]);
 await v.exec(migrateUsers); await v.exec(migrateBank); await v.exec(schema);
 check('running the scripts again changes nothing', JSON.stringify([await un('select * from users order by id'), await un('select user_id, account from bank_accounts order by 1, 2')]) === before);

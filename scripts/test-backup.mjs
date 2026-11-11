@@ -26,8 +26,8 @@ await src.exec(`
   insert into payments(building_id, key, apt, y, m, amount, method, paid_on, note, ref, src, tx_key) values
     (1,'8-עדות',8,2026,3,570,'הוראת קבע','2026-03-15','בנק: מ''ש','975','bank','2026-03-15|975|570'),
     (1,'8-עדות',8,2026,4,1140.25,'העברה',null,'',null,'excel',null),(2,'3-x',3,2026,1,1,'x',null,'',null,'manual',null);
-  insert into payments(building_id, key, apt, y, m, amount, method, paid_on, note, ref, tx_key, pending, auto_comment) values
-    (1,null,null,2026,5,777.5,'העברה','2026-05-09','בנק: ש''ם','12','2026-05-09|12|777.5',true,'הצעה: דירה 8 (שם משפחה בלבד)');
+  insert into pending_payments(building_id, y, m, amount, method, paid_on, note, ref, tx_key, auto_comment) values
+    (1,2026,5,777.5,'העברה','2026-05-09','בנק: ש''ם','12','2026-05-09|12|777.5','הצעה: דירה 8 (שם משפחה בלבד)'),(2,2026,5,1,null,null,null,null,null,null);
   insert into expenses(building_id, y, m, d, category, descr, amount) values (1,2026,5,3,'חשמל','חשבון',2934.33);
   insert into meta(building_id, name, value) values (1,'aliases','{"נפתלי נאור":26,"o''brien":3}'),(1,'bankSeen','{"k1":true}'),(1,'settings','{"title":"ועד","showNames":false,"showDebt":true}');
   insert into members(building_id, user_id, role, apt) values (1,5,'committee',null),(1,6,'apt_owner',18),(1,7,'tenant',8),(1,6,'tenant',9),(2,8,'committee',null);
@@ -36,7 +36,7 @@ await src.exec(`
 
 // "export" building 1 the way the app does: every table's rows for that building, as JSON
 const tables = {};
-for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot']) {
+for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'pending_payments', 'expenses', 'meta', 'members', 'snapshot']) {
   tables[t] = JSON.parse(JSON.stringify((await src.query(`select * from ${t} where building_id = 1 order by 1, 2`)).rows));
 }
 // the people this building refers to (users have no building of their own)

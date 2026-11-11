@@ -119,7 +119,8 @@ window.Vaad = (function () {
 
   /* ---------- Supabase row mapping ---------- */
   const num = (v) => (v === null || v === undefined ? v : Number(v));
-  const fromPayment = (r) => ({ id: r.id, key: r.key, apt: r.apt, y: r.y, m: r.m, amount: num(r.amount), method: r.method || '', date: r.paid_on, note: r.note || '', ref: r.ref || undefined, src: r.src, txKey: r.tx_key || undefined, pending: !!r.pending || undefined, autoComment: r.auto_comment || undefined });
+  const fromPayment = (r) => ({ id: r.id, key: r.key, apt: r.apt, y: r.y, m: r.m, amount: num(r.amount), method: r.method || '', date: r.paid_on, note: r.note || '', ref: r.ref || undefined, src: r.src, txKey: r.tx_key || undefined });
+  const fromPending = (r) => ({ id: r.id, y: r.y, m: r.m, amount: num(r.amount), method: r.method || '', date: r.paid_on, note: r.note || '', ref: r.ref || undefined, txKey: r.tx_key || undefined, autoComment: r.auto_comment || '' });
   const toPayment = (p) => ({ key: p.key, apt: p.apt, y: p.y, m: p.m, amount: p.amount, method: p.method, paid_on: p.date || null, note: p.note, ref: p.ref || null, src: p.src, tx_key: p.txKey || null });
   // People live in the users table; tenancies and owners point at them. The app keeps its flat shape (first, last, phone1...).
   const fullName = (u) => [u && u.first_name, u && u.last_name].filter(Boolean).join(' ');
@@ -197,14 +198,14 @@ window.Vaad = (function () {
     const denied = () => new Error('רק מנהל העל יכול לערוך פרטי אנשים');
     return {
       async load() {
-        const [[apts, res, own, tar, pay, meta]] = await Promise.all([Promise.all(['apartments', 'residents', 'owners', 'tariffs', 'payments', 'meta'].map((t) => fetchAll(t, B))), refreshUsers()]);
+        const [[apts, res, own, tar, pay, meta, pend]] = await Promise.all([Promise.all(['apartments', 'residents', 'owners', 'tariffs', 'payments', 'meta', 'pending_payments'].map((t) => fetchAll(t, B))), refreshUsers()]);
         const m = Object.fromEntries(meta.map((r) => [r.name, r.value]));
         return {
           apartments: apts.map((a) => ({ apt: a.apt, floor: a.floor || '', rooms: a.rooms, sqm: a.sqm })),
           residents: res.map((r) => fromResident(r, users, accts)),
           owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
           tariffs: tar.map((t) => ({ year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
-          payments: pay.filter((p) => !p.pending).map(fromPayment), pending: pay.filter((p) => p.pending).map(fromPayment), expenses: [],
+          payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: [],
           bankSeen: m.bankSeen || {}, refSeen: m.refSeen || {}, aliases: m.aliases || {}, ignored: m.ignored || {},
           settings: Object.assign({ title: 'ועד הבית', showNames: false, showDebt: true }, m.settings || {}),
         };
@@ -216,7 +217,7 @@ window.Vaad = (function () {
       },
       async exportAll() { // every table of this building, as stored (the format scripts/restore-backup.js reads)
         const tables = {};
-        for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'snapshot']) tables[t] = await fetchAll(t, B);
+        for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'pending_payments', 'expenses', 'meta', 'snapshot']) tables[t] = await fetchAll(t, B);
         tables.members = ok(await c.from('members').select('*').eq('building_id', B).order('id'));
         const ids = new Set(); // the people this building refers to (users belong to no building)
         for (const r of tables.residents) { ids.add(r.user_id); ids.add(r.user2_id); }

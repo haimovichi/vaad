@@ -7,8 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const ORDER = ['users', 'bank_accounts', 'apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'meta', 'members', 'snapshot'];
-const IDENTITY = ['users', 'bank_accounts', 'residents', 'owners', 'tariffs', 'payments', 'expenses', 'members']; // "generated always" id columns
+const ORDER = ['users', 'bank_accounts', 'apartments', 'residents', 'owners', 'tariffs', 'payments', 'pending_payments', 'expenses', 'meta', 'members', 'snapshot'];
+const IDENTITY = ['users', 'bank_accounts', 'residents', 'owners', 'tariffs', 'payments', 'pending_payments', 'expenses', 'members']; // "generated always" id columns
 
 function lit(v) {
   if (v === null || v === undefined) return 'null';
