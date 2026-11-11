@@ -385,6 +385,55 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     report(key === 'דוד כהן', 'sql', 'payer_key strips words, quotes, digits and the account text', 'דוד כהן', key);
   }
 
+  // split_payment: the month-allocation rules of lib/match.js, in the database
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,20),(1,21),(1,22),(1,23);
+      insert into residents(building_id, key, apt, entry_year, entry_month, status) values
+        (1,'20-a',20,2026,1,null),(1,'21-a',21,2026,1,null),(1,'22-a',22,2026,1,null);
+      insert into tariffs(building_id, year, month, apt, amount) values (1,2026,null,null,570),(1,2026,null,22,300),(1,2026,3,null,50);
+      insert into payments(building_id, key, apt, y, m, amount) values (1,'20-a',20,2026,1,570),(1,'20-a',20,2026,2,285);`;
+    const split = async (email, apt, amount, date, already = 0, sql = 'select * from public.split_payment(1, $1, $2, $3, $4)') => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        const r = await db.query(sql, [apt, amount, date, already]);
+        return r.rows.map((x) => `${x.yr}-${x.mo}:${+x.part}`).join(',');
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const cases = [
+      ['transaction month, then the oldest unpaid of the last 6', 20, 1000, '2026-04-10', '2026-4:570,2026-2:285,2026-3:145'],
+      ['upcoming months once nothing older is unpaid (March has a surcharge)', 21, 2000, '2026-01-05', '2026-1:570,2026-2:570,2026-3:620,2026-4:240'],
+      ['only the last 6 months count as arrears; the rest is parked', 21, 4000, '2026-12-01', '2026-12:570,2026-6:570,2026-7:570,2026-8:570,2026-9:570,2026-10:570,2026-11:570,2026-12:10'],
+      ['own tariff and a one-off surcharge', 22, 1000, '2026-01-01', '2026-1:300,2026-2:300,2026-3:350,2026-4:50'],
+      ['nothing due anywhere: parked on the transaction month', 20, 100, '2030-01-15', '2030-1:100'],
+      ['earlier proposals of the same import count as paid', 21, 570, '2026-01-05', '2026-2:570', 570],
+      ['no tenancy: no rows', 23, 100, '2026-01-05', ''],
+    ];
+    for (const [what, apt, amount, date, expect, already] of cases) {
+      const got = await split('c1@x.com', apt, amount, date, already);
+      report(got === expect, 'committee1', `split_payment: ${what}`, expect, got);
+      if (got !== 'ERR' && got !== '') {
+        const sum = got.split(',').reduce((s, p) => s + +p.split(':')[1], 0);
+        report(sum === amount, 'committee1', `split_payment: parts sum to the credit (${what})`, amount, sum);
+      }
+    }
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const got = await split(email, 21, 100, '2026-01-05');
+      report(got === '2026-1:100', who, 'split_payment: allowed', 'ok', got);
+    }
+    for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['committee2', 'c2@x.com'], ['anon', null]]) {
+      const got = await split(email, 21, 100, '2026-01-05');
+      report(got === 'ERR', who, 'split_payment: refused', 'ERR', got);
+    }
+    const neg = await split('c1@x.com', 21, -5, '2026-01-05');
+    report(neg === 'ERR', 'committee1', 'split_payment: refuses a non-positive amount', 'ERR', neg);
+    const helper = await split('c1@x.com', 21, 1, '2026-01-05', 0, 'select 1 as yr, 1 as mo, public.tariff_due(1, $1, 2026, 1) as part where $2::int > 0 and $3::text <> $4::text');
+    report(helper === 'ERR', 'committee1', 'tariff_due is not callable from the app', 'ERR', helper);
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

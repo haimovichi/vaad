@@ -343,18 +343,76 @@ begin
   return query select null::int, 'לא זוהה'::text, false, '{}'::int[];
 end $$;
 
+-- ---------- splitting a credit over months (same rules as allocate() in lib/match.js) ----------
+-- What an apartment owes for a month: the year's base tariff, replaced by the apartment's own tariff,
+-- plus one-off surcharges of that month. Internal helper: not callable from the app.
+create or replace function public.tariff_due(b bigint, a int, y int, m int) returns numeric
+language sql stable security definer set search_path = public as $$
+  select coalesce(
+           (select t.amount from public.tariffs t where t.building_id = b and t.year = y and coalesce(t.month, 0) = 0 and t.apt = a order by t.id limit 1),
+           (select t.amount from public.tariffs t where t.building_id = b and t.year = y and coalesce(t.month, 0) = 0 and coalesce(t.apt, 0) = 0 order by t.id limit 1),
+           0)
+       + coalesce((select sum(t.amount) from public.tariffs t
+                    where t.building_id = b and t.year = y and t.month = m and coalesce(t.apt, 0) in (0, a)), 0)
+$$;
+
+-- Propose how to split a credit of amt, paid on on_date for apartment a, over months: the transaction month,
+-- then the oldest unpaid months of the last 6 months, then upcoming months; what is left (nothing due anywhere)
+-- is parked on the transaction month. The tenancy is the one covering the date (else the apartment's latest);
+-- its payments form one pool that fills the oldest month first. `already` = amounts proposed for the same
+-- tenancy earlier in the same import, not saved yet. No rows when the apartment has no tenancy. Managers only.
+create or replace function public.split_payment(b bigint, a int, amt numeric, on_date date, already numeric default 0)
+returns table (yr int, mo int, part numeric)
+language plpgsql stable security definer set search_path = public as $$
+declare
+  start_i constant int := 2022 * 12 + 5;     -- collection starts June 2022
+  tx int; t_key text; t_from int; t_to int; pool numeric;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if amt is null or amt <= 0 then raise exception 'amount must be positive'; end if;
+  tx := extract(year from on_date)::int * 12 + extract(month from on_date)::int - 1;
+
+  select x.key, x.f, x.t into t_key, t_from, t_to from (
+    select r.key, r.id,
+           case when coalesce(r.entry_year, 0) <> 0 then r.entry_year * 12 + coalesce(nullif(r.entry_month, 0), 1) - 1 else start_i end f,
+           case when r.status = 'עזב' and coalesce(r.exit_year, 0) <> 0 then r.exit_year * 12 + coalesce(nullif(r.exit_month, 0), 12) - 1 else 2147483647 end t
+      from public.residents r where r.building_id = b and r.apt = a) x
+  order by not (x.f <= tx and tx <= x.t), case when x.f <= tx and tx <= x.t then x.id else -x.id end
+  limit 1;
+  if t_key is null then return; end if;
+
+  select coalesce(sum(p.amount), 0) + coalesce(already, 0) into pool from public.payments p where p.building_id = b and p.key = t_key;
+
+  return query
+  with months as (
+    select i, public.tariff_due(b, a, i / 12, i % 12 + 1) due
+      from generate_series(greatest(start_i, t_from), tx + 24) i where i <= t_to),
+  cov as (select i, due, least(due, greatest(0, pool - (sum(due) over (order by i) - due))) paid from months),
+  cand as (
+    select i, due - paid r, case when i = tx then 0 when i < tx then i - (tx - 6) + 1 else 6 + (i - tx) end ord
+      from cov where due - paid > 0 and i between tx - 6 and tx + 24),
+  takes as (
+    select i, ord, least(r, greatest(0, amt - (sum(r) over (order by ord) - r))) take from cand),
+  parts as (
+    select i, ord, take from takes where take > 0
+    union all
+    select tx, 1000, amt - (select coalesce(sum(take), 0) from takes))
+  select p.i / 12, p.i % 12 + 1, p.take from parts p where p.take > 0 order by p.ord;
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);
   end loop;
 end $$;
+revoke all on function public.tariff_due(bigint, int, int, int) from public, anon, authenticated;   -- internal helper
 
 -- ---------- row level security ----------
 alter table public.buildings         enable row level security;
