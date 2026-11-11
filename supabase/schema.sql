@@ -122,6 +122,15 @@ create table if not exists public.payments (
   method text, paid_on date, note text, ref text, src text, tx_key text
 );
 create index if not exists payments_key_idx on public.payments(building_id, key);
+-- A pending payment is a bank credit that waits for the committee: it belongs to no apartment and no tenancy
+-- (apt and key are empty), counts toward nobody's balance, and carries the system's suggestion in auto_comment.
+alter table public.payments alter column apt drop not null;
+alter table public.payments alter column key drop not null;
+alter table public.payments add column if not exists pending boolean not null default false;
+alter table public.payments add column if not exists auto_comment text;
+alter table public.payments drop constraint if exists payments_pending_chk;
+alter table public.payments add  constraint payments_pending_chk
+  check ((pending and apt is null and key is null) or (not pending and apt is not null and key is not null));
 
 create table if not exists public.expenses (
   id bigint generated always as identity primary key,
@@ -193,7 +202,7 @@ returns table (y int, m int, amount numeric, method text, paid_on date)
 language sql stable security definer set search_path = public as $$
   select p.y, p.m, p.amount, p.method, p.paid_on
   from public.payments p
-  where p.building_id = b and p.apt = a and p.y = yr
+  where p.building_id = b and p.apt = a and p.y = yr and not p.pending
     and (
       public.can_manage(b)
       or (
@@ -206,6 +215,17 @@ language sql stable security definer set search_path = public as $$
     )
   order by p.m, p.paid_on
 $$;
+
+-- the credits waiting for the committee's decision (see payments.pending); managers of the building only
+create or replace function public.pending_payments(b bigint)
+returns table (id bigint, y int, m int, amount numeric, method text, paid_on date, note text, ref text, tx_key text, auto_comment text)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  return query
+    select p.id, p.y, p.m, p.amount, p.method, p.paid_on, p.note, p.ref, p.tx_key, p.auto_comment
+      from public.payments p where p.building_id = b and p.pending order by p.paid_on, p.id;
+end $$;
 
 -- the board a person may see: the whole snapshot for tenants and managers; for an apartment owner who is
 -- not also a tenant, only the rows of the apartments they own
@@ -406,7 +426,7 @@ declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','pending_payments')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);

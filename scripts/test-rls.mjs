@@ -434,6 +434,56 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     report(helper === 'ERR', 'committee1', 'tariff_due is not callable from the app', 'ERR', helper);
   }
 
+  // pending payments: credits that wait for the committee, with no apartment
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,20);
+      insert into residents(building_id, key, apt, entry_year, entry_month) values (1,'20-a',20,2026,1);
+      insert into tariffs(building_id, year, month, apt, amount) values (1,2026,null,null,570);
+      insert into members(building_id, user_id, role, apt) values (1,t_uid('t8@x.com'),'tenant',20);
+      insert into payments(building_id, key, apt, y, m, amount) values (1,'20-a',20,2026,1,570);
+      insert into payments(building_id, key, apt, y, m, amount, paid_on, pending, auto_comment, tx_key) values (1,null,null,2026,2,1234,'2026-02-03',true,'הצעה: דירה 20 (שם משפחה בלבד)','k1');`;
+    const run = async (email, sql) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        const r = await db.query(sql);
+        return r.rows;
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const insertBad = async (what, sql) => {
+      await db.exec('begin');
+      let refused = false;
+      try { await db.exec(sql); } catch (e) { refused = true; } finally { await db.exec('rollback'); }
+      report(refused, 'sql', `a payment row cannot be ${what}`, 'refused', refused ? 'refused' : 'ACCEPTED');
+    };
+    const list = await run('c1@x.com', 'select * from public.pending_payments(1)');
+    report(Array.isArray(list) && list.length === 1 && list[0].auto_comment === 'הצעה: דירה 20 (שם משפחה בלבד)' && +list[0].amount === 1234, 'committee1', 'pending_payments lists the waiting credit with its suggestion', 1, Array.isArray(list) ? list.length : list);
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const l = await run(email, 'select * from public.pending_payments(1)');
+      report(Array.isArray(l) && l.length === 1, who, 'pending_payments: allowed', 1, Array.isArray(l) ? l.length : l);
+    }
+    for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['committee2', 'c2@x.com'], ['anon', null]]) {
+      const l = await run(email, 'select * from public.pending_payments(1)');
+      report(l === 'ERR', who, 'pending_payments: refused', 'ERR', l === 'ERR' ? l : l.length);
+    }
+    for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com']]) {
+      const l = await run(email, 'select * from payments where pending');
+      report(l === 'ERR' || l.length === 0, who, 'cannot read pending rows from the table', 0, l === 'ERR' ? l : l.length);
+    }
+    const mine = await run('t8@x.com', 'select * from public.apt_payments(1, 20, 2026)');
+    report(Array.isArray(mine) && mine.length === 1 && +mine[0].amount === 570, 'tenant20', 'own payments exclude the pending credit', 1, Array.isArray(mine) ? mine.length : mine);
+    const split = await run('c1@x.com', 'select count(*)::int n, sum(part)::int s from public.split_payment(1, 20, 100, \'2026-02-10\')');
+    report(split !== 'ERR' && split[0].s === 100 && split[0].n === 1, 'committee1', 'a pending credit does not fill any month (split starts from the paid 570 only)', '1 part of 100', split === 'ERR' ? split : `${split[0].n} part(s) of ${split[0].s}`);
+    const feb = await run('c1@x.com', 'select * from public.split_payment(1, 20, 100, \'2026-02-10\')');
+    report(Array.isArray(feb) && feb[0].yr === 2026 && feb[0].mo === 2, 'committee1', 'February is still unpaid for the apartment', '2026-2', Array.isArray(feb) ? `${feb[0].yr}-${feb[0].mo}` : feb);
+    await insertBad('pending and tied to an apartment', "insert into payments(building_id,key,apt,y,m,amount,pending) values (1,null,20,2026,1,1,true)");
+    await insertBad('pending and tied to a tenancy', "insert into payments(building_id,key,apt,y,m,amount,pending) values (1,'20-a',null,2026,1,1,true)");
+    await insertBad('without an apartment unless it is pending', "insert into payments(building_id,key,apt,y,m,amount) values (1,null,null,2026,1,1)");
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }
