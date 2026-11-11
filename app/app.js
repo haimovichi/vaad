@@ -44,6 +44,7 @@ Vaad.mountSwitcher($('#bsel'), ME);
 const SCREENS = [
   ['home', 'בית', '🏠', '', 'home'],
   ['import', 'ייבוא מהבנק', '📥', 'כספים', 'import', () => STAFF],
+  ['pending', 'תשלומים ממתינים', '⏳', 'כספים', 'pending', () => STAFF],
   ['backup', 'גיבוי נתונים', '💾', 'כספים', 'more', () => STAFF],
   ['everyone', 'אנשים', '👥', 'אנשים', 'people', () => STAFF],
   ['apts', 'דירות ודיירים', '🏘️', 'אנשים', 'people', () => STAFF],
@@ -55,7 +56,7 @@ const PANE = { apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers:
 const LEGACY = { people: 'everyone', buildings: 'list', more: 'share' };   // old #people/users style addresses
 const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
-const LOAD = { home: () => renderHome(), import: () => {}, apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
 let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
@@ -87,7 +88,7 @@ function route() {
   sec = s; sub = u;
   const def = screens.find((x) => x[0] === s);
   $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
-  ['home', 'import', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
+  ['home', 'import', 'pending', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
   Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
   $('#scr').textContent = s === 'home' ? 'בית' : def[1];
   $('#homeBtn').classList.toggle('hide', s === 'home');
@@ -190,6 +191,7 @@ function tenantsBox(list, apt) {
 
 let seq = 0;
 async function renderHome() {
+  updatePend();
   $$('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
   const all = rowsFor(year); const current = all.filter((r) => !r.left); const idx = now.m - 1;
   const paidNow = current.filter((r) => ['paid', 'prepaid'].includes(r.months[idx])).length;
@@ -307,6 +309,41 @@ $('#commit').onclick = async () => {
     toast(`נשמרו ${r.added} תשלומים, ${r.ignored} הותעלמו`);
     await preview();
   } catch (e) { toast(e.message); }
+};
+
+/* ================= PENDING PAYMENTS ================= */
+const pendApt = (it) => { const m = /^הצעה: דירה (\d+)/.exec(it.autoComment || ''); return m ? +m[1] : ''; };
+function updatePend() {
+  const n = DB ? DB.pending.length : 0; const b = $('#pendBadge');
+  b.classList.toggle('hide', !n);
+  b.textContent = `⏳ ${n} ${n === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} לאישור`;
+}
+function renderPending() {
+  const list = DB.pending; const apts = DB.apartments.map((a) => a.apt);
+  $('#pendCard').classList.toggle('hide', !list.length); $('#pendEmpty').classList.toggle('hide', !!list.length);
+  $('#pendTable').innerHTML = '<tr><th>תאריך</th><th>סכום</th><th class="l">תיאור והצעה</th><th>דירה</th><th>זכור</th><th></th></tr>' +
+    list.map((it) => `<tr data-id="${it.id}"><td>${fdate(it.date)}</td><td class="n">${fmt(it.amount)} ₪</td>
+    <td class="l">${esc(it.note)}<div class="mute">${esc(it.autoComment)}</div></td>
+    <td><select class="apt"><option value="">בחרו דירה</option>${apts.map((a) => `<option ${a === pendApt(it) ? 'selected' : ''}>${a}</option>`).join('')}</select></td>
+    <td><input type="checkbox" class="learn" title="זכור את המשלם הזה לפעם הבאה"></td>
+    <td><button class="b ok">אשר</button> <button class="g ign">התעלם</button></td></tr>`).join('');
+  updatePend();
+}
+$('#pendTable').onclick = async (e) => {
+  const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+  const id = +tr.dataset.id;
+  try {
+    if (e.target.classList.contains('ok')) {
+      const apt = +tr.querySelector('.apt').value;
+      if (!apt) return toast('בחרו דירה');
+      await api('POST', '/api/pending/approve', { id, apt, learn: tr.querySelector('.learn').checked });
+      toast('התשלום אושר ונרשם');
+    } else if (e.target.classList.contains('ign')) {
+      await api('POST', '/api/pending/ignore', { id });
+      toast('התשלום הותעלם');
+    } else return;
+    renderPending();
+  } catch (err) { toast(err.message); }
 };
 
 /* ================= PEOPLE ================= */

@@ -9,6 +9,6 @@ for (const m of mods) {
   const src = fs.readFileSync(path.join(__dirname, '..', 'lib', `${m}.js`), 'utf8');
   out += `defs['${m}'] = function (module, exports, require) {\n${src}\n};\n`;
 }
-out += "window.VaadLib = { calc: load('calc'), snapshot: load('snapshot'), service: load('service') };\n})();\n";
+out += "window.VaadLib = { calc: load('calc'), match: load('match'), snapshot: load('snapshot'), service: load('service') };\n})();\n";
 fs.writeFileSync(path.join(__dirname, '..', 'app', 'vaad-lib.js'), out);
 console.log('app/vaad-lib.js built');

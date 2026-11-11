@@ -120,7 +120,7 @@ window.Vaad = (function () {
   /* ---------- Supabase row mapping ---------- */
   const num = (v) => (v === null || v === undefined ? v : Number(v));
   const fromPayment = (r) => ({ id: r.id, key: r.key, apt: r.apt, y: r.y, m: r.m, amount: num(r.amount), method: r.method || '', date: r.paid_on, note: r.note || '', ref: r.ref || undefined, src: r.src, txKey: r.tx_key || undefined });
-  const fromPending = (r) => ({ id: r.id, y: r.y, m: r.m, amount: num(r.amount), method: r.method || '', date: r.paid_on, note: r.note || '', ref: r.ref || undefined, txKey: r.tx_key || undefined, autoComment: r.auto_comment || '' });
+  const fromPending = (r) => ({ id: r.id, y: r.y, m: r.m, amount: num(r.amount), method: r.method || '', date: r.paid_on, note: r.note || '', ref: r.ref || undefined, txKey: r.tx_key || undefined, payer: r.payer || '', autoComment: r.auto_comment || '' });
   const toPayment = (p) => ({ key: p.key, apt: p.apt, y: p.y, m: p.m, amount: p.amount, method: p.method, paid_on: p.date || null, note: p.note, ref: p.ref || null, src: p.src, tx_key: p.txKey || null });
   // People live in the users table; tenancies and owners point at them. The app keeps its flat shape (first, last, phone1...).
   const fullName = (u) => [u && u.first_name, u && u.last_name].filter(Boolean).join(' ');
@@ -233,6 +233,8 @@ window.Vaad = (function () {
         return { building: { id: B, name: b ? b.name : String(B) }, tables };
       },
       async deletePayment(id) { ok(await c.from('payments').delete().eq('id', id).eq('building_id', B)); },
+      async approvePending(id, apt, learn) { ok(await c.rpc('approve_pending', { pid: id, a: apt, learn })); },
+      async ignorePending(id) { ok(await c.rpc('ignore_pending', { pid: id })); },
       async updateResident(r) { // status: the building's staff; a person's details: the super user (RLS enforces it)
         ok(await c.from('residents').update({ status: r.status }).eq('id', r.id).eq('building_id', B));
         const save = async (uid, f, force) => {
@@ -359,6 +361,9 @@ window.Vaad = (function () {
             if (!u) { u = { id: nextId++, email: '', first, last, phone, account: account || '' }; users = users.concat(u); } else if (account && !u.account.includes(account)) u.account = [u.account, account].filter(Boolean).join(', ');
             return u.id;
           };
+          db.pending = db.pending || [   // two waiting credits, so the approval screen can be tried in demo mode
+            { id: nextId++, y: 2026, m: 10, amount: 570, method: 'העברה בנקאית', date: '2026-10-09', note: 'בנק: העברה כהן', txKey: 'demo-1', payer: 'כהן', autoComment: 'הצעה: דירה 8 (שם משפחה בלבד)' },
+            { id: nextId++, y: 2026, m: 10, amount: 300, method: 'העברה בנקאית', date: '2026-10-12', note: 'בנק: העברה אלמוני', txKey: 'demo-2', payer: 'אלמוני', autoComment: 'לא זוהה' }];
           for (const o of db.owners) o.userId = person(o.first, o.last, o.phone, o.account);
           for (const r of db.residents) { r.userId = person(r.first, r.last, r.phone1, r.account); r.user2Id = person(r.first2, r.last2, r.phone2, ''); }
         }
@@ -367,6 +372,21 @@ window.Vaad = (function () {
       async addPayments(rows) { return rows.map((r) => ({ ...r, id: nextId++ })); },
       async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
+      async approvePending(id, apt, learn) {
+        const d = await this.load(); const it = d.pending.find((x) => x.id === id);
+        if (!it) throw new Error('לא נמצא');
+        const r = window.VaadLib.match.allocateFor(d, apt, it.amount, it.date || `${it.y}-${String(it.m).padStart(2, '0')}-01`);
+        if (!r) throw new Error('לדירה אין רשומת דייר');
+        for (const a of r.allocations) d.payments.push({ id: nextId++, key: r.key, apt, y: a.y, m: a.m, amount: a.amount, method: it.method, date: it.date, note: it.note, ref: it.ref, src: 'bank', txKey: it.txKey });
+        if (learn && it.payer) d.aliases[it.payer] = apt;
+        d.pending = d.pending.filter((x) => x.id !== id);
+      },
+      async ignorePending(id) {
+        const d = await this.load(); const it = d.pending.find((x) => x.id === id);
+        if (!it) throw new Error('לא נמצא');
+        if (it.txKey) d.ignored[it.txKey] = true;
+        d.pending = d.pending.filter((x) => x.id !== id);
+      },
       async saveSnapshot(d) { snap = d; },
       async getBoard() {
         const s = snap || window.VaadLib.snapshot.snapshot(await this.load());

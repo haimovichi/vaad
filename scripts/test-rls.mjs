@@ -535,6 +535,82 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // approve_pending / ignore_pending: the committee's decision on a waiting credit
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,20),(1,21),(1,23);
+      insert into users(first_name, last_name, phone) values ('דוד','כהן','m-20');
+      insert into residents(building_id, key, apt, entry_year, entry_month, user_id) values (1,'20-a',20,2026,1,(select id from users where phone='m-20')),(1,'21-a',21,2026,1,null);
+      insert into tariffs(building_id, year, month, apt, amount) values (1,2026,null,null,570);
+      insert into payments(building_id, key, apt, y, m, amount, tx_key) values (1,'20-a',20,2026,1,570,'t-jan');`;
+    const credits = [
+      { key: 'k1', refKey: 'r1', ref: '501', date: '2026-02-03', amount: 570, desc: 'העברה דוד כהן' },
+      { key: 'k2', refKey: 'r2', ref: '502', date: '2026-02-04', amount: 1000, desc: 'העברה אלמוני' },
+    ];
+    const go = async (email, fn) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email: 'c1@x.com' })}', true)`);
+        await db.exec('set local role authenticated');
+        await db.query('select public.save_pending_credits(1, $1::jsonb)', [JSON.stringify(credits)]);
+        if (email !== 'c1@x.com') {
+          await db.exec('reset role');
+          if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+          await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        }
+        return await fn((sql, params) => db.query(sql, params));
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const pid = async (q, key) => (await q('select id from pending_payments where tx_key = $1', [key])).rows[0]?.id;
+    const approved = await go('c1@x.com', async (q) => {
+      const id = await pid(q, 'k1');
+      const n = (await q('select public.approve_pending($1, 20, true) as n', [id])).rows[0].n;
+      const pays = (await q("select key, apt, y, m, amount::int amount, src, tx_key, ref from payments where tx_key = 'k1' order by y, m")).rows;
+      const left = (await q('select count(*)::int n from pending_payments where tx_key = $1', ['k1'])).rows[0].n;
+      const alias = (await q("select value from meta where building_id = 1 and name = 'aliases'")).rows[0]?.value;
+      return { n, pays, left, alias };
+    });
+    report(approved !== 'ERR' && approved.n === 1 && approved.pays.length === 1 && approved.pays[0].key === '20-a' && approved.pays[0].apt === 20 && approved.pays[0].m === 2 && approved.pays[0].amount === 570 && approved.pays[0].src === 'bank' && approved.pays[0].ref === '501',
+      'committee1', 'approving links the credit to the apartment and its tenancy, with the bank details', '1 payment, Feb, 570', approved === 'ERR' ? approved : JSON.stringify(approved.pays));
+    report(approved !== 'ERR' && approved.left === 0, 'committee1', 'approving removes the pending row', 0, approved === 'ERR' ? approved : approved.left);
+    report(approved !== 'ERR' && approved.alias && approved.alias['דוד כהן'] === 20, 'committee1', 'with "remember" the payer is saved as an alias', '{"דוד כהן":20}', approved === 'ERR' ? approved : JSON.stringify(approved.alias));
+    const other = await go('c1@x.com', async (q) => {
+      const id = await pid(q, 'k2');
+      const n = (await q('select public.approve_pending($1, 21, false) as n', [id])).rows[0].n;
+      const pays = (await q("select apt, y, m, amount::int amount from payments where tx_key = 'k2' order by y, m")).rows;
+      const alias = (await q("select count(*)::int n from meta where building_id = 1 and name = 'aliases'")).rows[0].n;
+      return { n, sum: pays.reduce((s, r) => s + r.amount, 0), apts: [...new Set(pays.map((r) => r.apt))].join(), alias };
+    });
+    report(other !== 'ERR' && other.apts === '21' && other.sum === 1000 && other.n >= 2, 'committee1', 'another apartment: split over months like split_payment, sum equals the credit', 'apt 21, 1000', other === 'ERR' ? other : JSON.stringify(other));
+    report(other !== 'ERR' && other.alias === 0, 'committee1', 'without "remember" no alias is stored', 0, other === 'ERR' ? other : other.alias);
+    const twice = await go('c1@x.com', async (q) => { const id = await pid(q, 'k1'); await q('select public.approve_pending($1, 20)', [id]); await q('select public.approve_pending($1, 20)', [id]); });
+    report(twice === 'ERR', 'committee1', 'approving the same credit twice is refused', 'ERR', twice === 'ERR' ? twice : 'ok');
+    const noApt = await go('c1@x.com', async (q) => q('select public.approve_pending($1, 99)', [await pid(q, 'k1')]));
+    report(noApt === 'ERR', 'committee1', 'an apartment that does not exist is refused', 'ERR', noApt === 'ERR' ? noApt : 'ok');
+    const noTen = await go('c1@x.com', async (q) => q('select public.approve_pending($1, 23)', [await pid(q, 'k1')]));
+    report(noTen === 'ERR', 'committee1', 'an apartment with no tenant record is refused', 'ERR', noTen === 'ERR' ? noTen : 'ok');
+    const ign = await go('c1@x.com', async (q) => {
+      const id = await pid(q, 'k2');
+      await q('select public.ignore_pending($1)', [id]);
+      const left = (await q('select count(*)::int n from pending_payments where tx_key = $1', ['k2'])).rows[0].n;
+      const ignored = (await q("select value from meta where building_id = 1 and name = 'ignored'")).rows[0].value;
+      const pays = (await q("select count(*)::int n from payments where tx_key = 'k2'")).rows[0].n;
+      return { left, ignored, pays };
+    });
+    report(ign !== 'ERR' && ign.left === 0 && ign.ignored.k2 === true && ign.pays === 0, 'committee1', 'ignoring removes the row, marks it ignored and credits nobody', 'ok', ign === 'ERR' ? ign : JSON.stringify(ign));
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await go(email, async (q) => (await q('select public.approve_pending($1, 20) as n', [await pid(q, 'k1')])).rows[0].n);
+      report(r === 1, who, 'approve_pending: allowed', 1, r);
+    }
+    for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['committee2', 'c2@x.com'], ['anon', null]]) {
+      const a = await go(email, async (q) => q('select public.approve_pending($1, 20)', [(await q('select id from pending_payments limit 1')).rows[0]?.id ?? 1]));
+      report(a === 'ERR', who, 'approve_pending: refused', 'ERR', a === 'ERR' ? a : 'ok');
+      const i = await go(email, async (q) => q('select public.ignore_pending($1)', [1]));
+      report(i === 'ERR', who, 'ignore_pending: refused', 'ERR', i === 'ERR' ? i : 'ok');
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

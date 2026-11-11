@@ -135,6 +135,7 @@ create table if not exists public.pending_payments (
   auto_comment text
 );
 create index if not exists pending_payments_building_idx on public.pending_payments(building_id);
+alter table public.pending_payments add column if not exists payer text;   -- payer_key of the bank description: what "remember" stores as an alias
 
 create table if not exists public.expenses (
   id bigint generated always as identity primary key,
@@ -369,6 +370,19 @@ language sql stable security definer set search_path = public as $$
                     where t.building_id = b and t.year = y and t.month = m and coalesce(t.apt, 0) in (0, a)), 0)
 $$;
 
+-- The tenancy of apartment a covering month index tx (year*12 + month-1): the one whose entry..exit months contain it,
+-- else the apartment's latest. Internal helper: not callable from the app.
+create or replace function public.tenancy_at(b bigint, a int, tx int) returns table (key text, f int, t int)
+language sql stable security definer set search_path = public as $$
+  select x.key, x.f, x.t from (
+    select r.key, r.id,
+           case when coalesce(r.entry_year, 0) <> 0 then r.entry_year * 12 + coalesce(nullif(r.entry_month, 0), 1) - 1 else 2022 * 12 + 5 end f,
+           case when r.status = 'עזב' and coalesce(r.exit_year, 0) <> 0 then r.exit_year * 12 + coalesce(nullif(r.exit_month, 0), 12) - 1 else 2147483647 end t
+      from public.residents r where r.building_id = b and r.apt = a) x
+  order by not (x.f <= tx and tx <= x.t), case when x.f <= tx and tx <= x.t then x.id else -x.id end
+  limit 1
+$$;
+
 -- Propose how to split a credit of amt, paid on on_date for apartment a, over months: the transaction month,
 -- then the oldest unpaid months of the last 6 months, then upcoming months; what is left (nothing due anywhere)
 -- is parked on the transaction month. The tenancy is the one covering the date (else the apartment's latest);
@@ -385,13 +399,7 @@ begin
   if amt is null or amt <= 0 then raise exception 'amount must be positive'; end if;
   tx := extract(year from on_date)::int * 12 + extract(month from on_date)::int - 1;
 
-  select x.key, x.f, x.t into t_key, t_from, t_to from (
-    select r.key, r.id,
-           case when coalesce(r.entry_year, 0) <> 0 then r.entry_year * 12 + coalesce(nullif(r.entry_month, 0), 1) - 1 else start_i end f,
-           case when r.status = 'עזב' and coalesce(r.exit_year, 0) <> 0 then r.exit_year * 12 + coalesce(nullif(r.exit_month, 0), 12) - 1 else 2147483647 end t
-      from public.residents r where r.building_id = b and r.apt = a) x
-  order by not (x.f <= tx and tx <= x.t), case when x.f <= tx and tx <= x.t then x.id else -x.id end
-  limit 1;
+  select ty.key, ty.f, ty.t into t_key, t_from, t_to from public.tenancy_at(b, a, tx) ty;
   if t_key is null then return; end if;
 
   select coalesce(sum(p.amount), 0) + coalesce(already, 0) into pool from public.payments p where p.building_id = b and p.key = t_key;
@@ -444,8 +452,8 @@ begin
       else 'דירות אפשריות: ' || array_to_string(m.candidates, ', ') || ' (' || m.how || ')'
     end;
     note := 'בנק: ' || left(coalesce(c ->> 'desc', ''), 60);
-    insert into public.pending_payments (building_id, y, m, amount, method, paid_on, note, ref, tx_key, auto_comment)
-    values (b, extract(year from d)::int, extract(month from d)::int, amt, 'העברה בנקאית', d, note, nullif(c ->> 'ref', ''), k, cmt);
+    insert into public.pending_payments (building_id, y, m, amount, method, paid_on, note, ref, tx_key, auto_comment, payer)
+    values (b, extract(year from d)::int, extract(month from d)::int, amt, 'העברה בנקאית', d, note, nullif(c ->> 'ref', ''), k, cmt, public.payer_key(c ->> 'desc'));
     insert into public.meta (building_id, name, value) values (b, 'bankSeen', jsonb_build_object(k, true))
       on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(k, true);
     if rk is not null then
@@ -457,19 +465,59 @@ begin
   return added;
 end $$;
 
+-- Approve a pending credit for apartment a (the suggested one, or another): it becomes normal payments split over
+-- months like split_payment proposes, on the tenancy of that apartment, and the pending row is removed.
+-- learn = remember this payer for next time (an alias). Returns the number of payment rows added. Managers only.
+create or replace function public.approve_pending(pid bigint, a int, learn boolean default false) returns int
+language plpgsql security definer set search_path = public as $$
+declare pp record; d date; tk text; n int;
+begin
+  select * into pp from public.pending_payments where id = pid;
+  if not found or not public.can_manage(pp.building_id) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if not exists (select 1 from public.apartments x where x.building_id = pp.building_id and x.apt = a) then raise exception 'no such apartment'; end if;
+  d := coalesce(pp.paid_on, make_date(pp.y, pp.m, 1));
+  select ty.key into tk from public.tenancy_at(pp.building_id, a, extract(year from d)::int * 12 + extract(month from d)::int - 1) ty;
+  if tk is null then raise exception 'the apartment has no tenant record'; end if;
+  insert into public.payments (building_id, key, apt, y, m, amount, method, paid_on, note, ref, src, tx_key)
+    select pp.building_id, tk, a, s.yr, s.mo, s.part, pp.method, pp.paid_on, pp.note, pp.ref, 'bank', pp.tx_key
+      from public.split_payment(pp.building_id, a, pp.amount, d) s;
+  get diagnostics n = row_count;
+  if learn and coalesce(pp.payer, '') <> '' then
+    insert into public.meta (building_id, name, value) values (pp.building_id, 'aliases', jsonb_build_object(pp.payer, a))
+      on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(pp.payer, a);
+  end if;
+  delete from public.pending_payments where id = pid;
+  return n;
+end $$;
+
+-- A pending credit that is not a dues payment: ignored, like an ignored row of the bank import. Managers only.
+create or replace function public.ignore_pending(pid bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare pp record;
+begin
+  select * into pp from public.pending_payments where id = pid;
+  if not found or not public.can_manage(pp.building_id) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if pp.tx_key is not null then
+    insert into public.meta (building_id, name, value) values (pp.building_id, 'ignored', jsonb_build_object(pp.tx_key, true))
+      on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(pp.tx_key, true);
+  end if;
+  delete from public.pending_payments where id = pid;
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);
   end loop;
 end $$;
-revoke all on function public.tariff_due(bigint, int, int, int) from public, anon, authenticated;   -- internal helper
+revoke all on function public.tariff_due(bigint, int, int, int) from public, anon, authenticated;   -- internal helpers
+revoke all on function public.tenancy_at(bigint, int, int) from public, anon, authenticated;
 
 -- ---------- row level security ----------
 alter table public.buildings         enable row level security;

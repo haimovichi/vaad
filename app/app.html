@@ -107,6 +107,7 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 .legend span{display:flex;align-items:center;gap:5px}
 .legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
 .empty{color:var(--mute);text-align:center;padding:24px 0}
+.pendbadge{display:block;background:var(--warnbg);color:#a67700;border:1px solid var(--partial);border-radius:12px;padding:10px 14px;margin:10px 0;text-decoration:none;font-weight:600}
 #msg{position:fixed;bottom:16px;left:16px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:20}
 </style>
 </head>
@@ -120,6 +121,7 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 
   <!-- ===== home: my apartment / debtors / all ===== -->
   <section id="sec-home">
+    <a id="pendBadge" class="pendbadge hide" href="#pending"></a>
     <div class="sum" id="sum"></div>
     <div class="tabs">
       <button class="tab" data-t="mine">הדירה שלי</button>
@@ -150,6 +152,16 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
     </div>
     <div class="box hide" id="impCard"><table class="t" id="impTable"></table></div>
     <div class="row hide" id="impActions"><button class="b" id="commit">שמור את הנבחרות</button></div>
+  </section>
+
+  <!-- ===== pending payments: credits the system could not place with certainty ===== -->
+  <section id="sec-pending" class="hide">
+    <div class="box pad">
+      <h3>תשלומים ממתינים לאישור</h3>
+      <div class="mute">הפקדות שהמערכת לא הייתה בטוחה לאיזו דירה הן שייכות. לכל אחת מוצעת דירה; אשרו אותה או בחרו דירה אחרת. "זכור" שומר את המשלם לפעם הבאה. "התעלם" לתשלום שאינו דמי ועד.</div>
+    </div>
+    <div class="box hide" id="pendCard"><table class="t" id="pendTable"></table></div>
+    <div class="empty hide" id="pendEmpty">אין תשלומים ממתינים.</div>
   </section>
 
   <!-- ===== people ===== -->
