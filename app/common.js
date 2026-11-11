@@ -203,7 +203,7 @@ window.Vaad = (function () {
         return {
           apartments: apts.map((a) => ({ apt: a.apt, floor: a.floor || '', rooms: a.rooms, sqm: a.sqm })),
           residents: res.map((r) => fromResident(r, users, accts)),
-          owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
+          owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { id: o.id, apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
           tariffs: tar.map((t) => ({ id: t.id, year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
           payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: [],
           bankSeen: m.bankSeen || {}, refSeen: m.refSeen || {}, aliases: m.aliases || {}, ignored: m.ignored || {},
@@ -238,6 +238,12 @@ window.Vaad = (function () {
         if (error) throw new Error(/overlap/.test(error.message) ? 'התאריכים חופפים לדיירות אחרת בדירה' : error.code === '42501' ? 'אין לך הרשאה להוסיף דיירים' : error.message);
         return data;
       },
+      async addOwner(o) {
+        const { data, error } = await c.rpc('add_owner', { b: B, a: o.apt, p_first: o.first, p_last: o.last, p_phone: o.phone, p_email: o.email || null });
+        if (error) throw new Error(/already an owner/.test(error.message) ? 'האדם הזה כבר רשום כבעל הדירה' : error.code === '42501' ? 'אין לך הרשאה להוסיף בעלי דירות' : error.message);
+        return data;
+      },
+      async removeOwner(id) { ok(await c.rpc('remove_owner', { b: B, owner_id: Number(id) })); },
       async endTenancy(key, y, m) { ok(await c.rpc('end_tenancy', { b: B, tenancy_key: key, exit_y: y, exit_m: m })); },
       async editPerson(uid, first, last, phone) {
         if (!uid) throw new Error('אין אדם רשום בדיירות הזו');
@@ -402,6 +408,12 @@ window.Vaad = (function () {
         d.residents.push({ id: nextId++, key, apt: t.apt, userId: null, user2Id: null, first: t.first, last: t.last, first2: '', last2: '', phone1: t.phone, phone2: '', role: t.role, status: t.exitYear ? 'עזב' : 'פעיל', entryMonth: t.entryMonth, entryYear: t.entryYear, exitMonth: t.exitMonth, exitYear: t.exitYear, account: '' });
         return key;
       },
+      async addOwner(o) {
+        const d = await this.load();
+        if (d.owners.some((x) => x.apt === o.apt && x.first === o.first && x.last === o.last)) throw new Error('האדם הזה כבר רשום כבעל הדירה');
+        const row = { id: nextId++, apt: o.apt, userId: null, first: o.first, last: o.last, phone: o.phone, account: '', note: '' }; d.owners.push(row); return row.id;
+      },
+      async removeOwner(id) { const d = await this.load(); d.owners = d.owners.filter((o) => String(o.id) !== String(id)); },
       async endTenancy(key, y, m) { const r = (await this.load()).residents.find((x) => x.key === key); r.status = 'עזב'; r.exitYear = y; r.exitMonth = m; },
       async editPerson() {},
       async addTariff(t) { return { ...t, id: nextId++ }; }, async updateTariff() {}, async deleteTariff() {},

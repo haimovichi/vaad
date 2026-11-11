@@ -472,14 +472,23 @@ $('#rAdd').onclick = async () => {
     toast('הדייר נוסף'); loadApts();
   } catch (e) { toast(e.message); }
 };
+$('#oAdd').onclick = async () => {
+  try {
+    await api('POST', '/api/owner', { apt: $('#oApt').value, first: $('#oFirst').value, last: $('#oLast').value, phone: $('#oPhone').value, email: $('#oMail').value });
+    ['#oFirst', '#oLast', '#oPhone', '#oMail'].forEach((i) => { $(i).value = ''; });
+    toast('בעל הדירה נוסף'); loadApts();
+  } catch (e) { toast(e.message); }
+};
 async function loadApts() {
   const d = await api('GET', '/api/apartments');
+  $('#oApt').innerHTML = '<option value="">בחרו דירה</option>' + d.apartments.map((a) => `<option>${a.apt}</option>`).join('');
   $('#rApt').innerHTML = '<option value="">בחרו דירה</option>' + d.apartments.map((a) => `<option>${a.apt}</option>`).join('');
   if (!$('#rEY').value) $('#rEY').value = now.y;
-  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">דיירים (פעילים)</th><th>טלפון</th><th>חשבון בנק</th><th></th></tr>';
+  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">בעלים</th><th class="l">דיירים (פעילים)</th><th>טלפון</th><th>חשבון בנק</th><th></th></tr>';
   d.apartments.forEach((a) => {
     const rs = d.residents.map((r, i) => ({ r, i })).filter((x) => x.r.apt === a.apt && x.r.status !== 'עזב');
     h += `<tr><td><b>${a.apt}</b></td><td>${esc(a.floor)}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td>` +
+      `<td class="l">${d.owners.filter((o) => o.apt === a.apt).map((o) => `${esc(o.first)} ${esc(o.last)} <button class="g" data-rmown="${o.id}" aria-label="הסר">✕</button>`).join('<br>')}</td>` +
       `<td class="l">${rs.map((x) => `${esc(x.r.first)} ${esc(x.r.last)}${x.r.first2 ? ' ו' + esc(x.r.first2) : ''} <span class="mute">(${esc(x.r.role)})</span>`).join('<br>')}</td>` +
       `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="phone1" value="${esc(x.r.phone1)}" style="width:110px">`).join('<br>')}</td>` +
       `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="account" value="${esc(x.r.account)}" style="width:100px" ${ME.isSuper ? '' : 'disabled'} title="מספר חשבון בנק של הדייר — משמש לזיהוי אוטומטי">`).join('<br>')}</td><td>${rs.map((x) => `<button class="g" data-end="${esc(x.r.key)}">עזב</button>`).join('<br>')}</td></tr>`;
@@ -487,6 +496,12 @@ async function loadApts() {
   $('#aptTable').innerHTML = h;
 }
 $('#aptTable').onclick = async (e) => {
+  const ro = e.target.closest('[data-rmown]');
+  if (ro) {
+    if (!confirm('להסיר את בעל הדירה? גם הרשאת הכניסה שלו לדירה הזו תוסר.')) return;
+    try { await api('DELETE', '/api/owner/' + ro.dataset.rmown); toast('בעל הדירה הוסר'); loadApts(); } catch (err) { toast(err.message); }
+    return;
+  }
   const b = e.target.closest('[data-end]'); if (!b) return;
   const v = prompt('באיזה חודש הדייר עזב? (חודש/שנה, למשל 8/2026)'); if (!v) return;
   const m = /^\s*(\d{1,2})\s*[\/.-]\s*(\d{4})\s*$/.exec(v);

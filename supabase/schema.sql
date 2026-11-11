@@ -110,6 +110,8 @@ create table if not exists public.owners (
   foreign key (building_id, apt) references public.apartments(building_id, apt)
 );
 
+create unique index if not exists owners_unique on public.owners (building_id, apt, user_id) where user_id is not null;
+
 create table if not exists public.tariffs (
   id bigint generated always as identity primary key,
   building_id bigint not null references public.buildings(id) on delete cascade,
@@ -697,13 +699,64 @@ begin
   update public.users set first_name = nullif(btrim(p_first), ''), last_name = btrim(p_last), phone = nullif(btrim(p_phone), '') where id = uid;
 end $$;
 
+-- ---------- owners of apartments ----------
+-- Record who owns apartment a. The person is created or reused like in add_tenancy. With an email, the person also gets
+-- the apartment-owner role for that apartment (they log in and see only their apartments); an existing login is reused
+-- as it is. Returns the owner record's id. The committee (and managers) of the building only.
+create or replace function public.add_owner(b bigint, a int, p_first text, p_last text, p_phone text, p_email text default null) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare
+  fn text := nullif(btrim(p_first), ''); ln text := nullif(btrim(p_last), ''); ph text := nullif(btrim(p_phone), '');
+  em text := lower(nullif(btrim(p_email), '')); uid bigint; oid bigint;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if not exists (select 1 from public.apartments x where x.building_id = b and x.apt = a) then raise exception 'no such apartment'; end if;
+  if em is not null and em !~ '^\S+@\S+\.\S+$' then raise exception 'invalid email'; end if;
+  if em is not null then
+    select u.id into uid from public.users u where u.email = em;
+    if uid is null then
+      if ln is null then raise exception 'last name required'; end if;
+      insert into public.users (email, first_name, last_name, phone) values (em, fn, ln, ph) returning id into uid;
+    end if;
+  else
+    if ln is null then raise exception 'last name required'; end if;
+    select u.id into uid from public.users u
+     where u.first_name is not distinct from fn and u.last_name = ln and u.phone is not distinct from ph and u.email is null
+       and (exists (select 1 from public.residents r where r.building_id = b and u.id in (r.user_id, r.user2_id))
+            or exists (select 1 from public.owners o where o.building_id = b and o.user_id = u.id)
+            or not (exists (select 1 from public.residents r where u.id in (r.user_id, r.user2_id))
+                    or exists (select 1 from public.owners o where o.user_id = u.id)
+                    or exists (select 1 from public.members m where m.user_id = u.id)))
+     order by u.id limit 1;
+    if uid is null then insert into public.users (first_name, last_name, phone) values (fn, ln, ph) returning id into uid; end if;
+  end if;
+  if exists (select 1 from public.owners o where o.building_id = b and o.apt = a and o.user_id = uid) then raise exception 'already an owner of this apartment'; end if;
+  insert into public.owners (building_id, apt, user_id) values (b, a, uid) returning id into oid;
+  if em is not null then
+    insert into public.members (building_id, user_id, role, apt) values (b, uid, 'apt_owner', a) on conflict do nothing;
+  end if;
+  return oid;
+end $$;
+
+-- Remove an owner record; the person's apartment-owner access to that apartment goes with it.
+create or replace function public.remove_owner(b bigint, owner_id bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare o record;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  select * into o from public.owners x where x.id = owner_id and x.building_id = b;
+  if not found then raise exception 'no such owner'; end if;
+  delete from public.owners where id = o.id;
+  delete from public.members m where m.building_id = b and m.user_id = o.user_id and m.role = 'apt_owner' and m.apt = o.apt;
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','add_tenancy','end_tenancy','edit_person')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','add_tenancy','end_tenancy','edit_person','add_owner','remove_owner')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);

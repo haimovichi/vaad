@@ -844,6 +844,72 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // add_owner / remove_owner: who owns an apartment, and their login as apartment owner
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,40),(1,41),(2,40);
+      insert into users(first_name, last_name, phone) values ('דנה','לוי','050-99');
+      insert into residents(building_id, key, apt, user_id, role, status, entry_month, entry_year) values
+        (2,'40-לוי',40,(select id from users where phone='050-99'),'שוכר','פעיל',1,2026);`;
+    const as = async (email, fn) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        return await fn((sql, params) => db.query(sql, params));
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const add = (q, apt, first, last, phone, email = null, b = 1) => q('select public.add_owner($1, $2, $3, $4, $5, $6) as id', [b, apt, first, last, phone, email]).then((r) => r.rows[0].id);
+
+    const r1 = await as('c1@x.com', async (q) => {
+      const id = await add(q, 40, 'רן', 'בעלים', '050-40');
+      const row = (await q('select o.apt, u.first_name, u.last_name, u.phone, u.email from owners o join users u on u.id = o.user_id where o.id = $1', [id])).rows[0];
+      const members = (await q("select count(*)::int n from members m join users u on u.id = m.user_id where u.last_name = 'בעלים'")).rows[0].n;
+      return { row, members };
+    });
+    report(r1 !== 'ERR' && r1.row.apt === 40 && r1.row.first_name === 'רן' && r1.row.phone === '050-40' && r1.row.email === null && r1.members === 0, 'committee1', 'records an owner without a login: a person and an owner record', 'apt 40, no login', r1 === 'ERR' ? r1 : JSON.stringify(r1));
+
+    const withMail = await as('c1@x.com', async (q) => {
+      await add(q, 41, 'שי', 'עם-מייל', '050-41', 'Owner41@X.com');
+      const mem = (await q("select m.role, m.apt, u.email from members m join users u on u.id = m.user_id where u.last_name = 'עם-מייל'")).rows;
+      return mem;
+    });
+    report(withMail !== 'ERR' && withMail.length === 1 && withMail[0].role === 'apt_owner' && withMail[0].apt === 41 && withMail[0].email === 'owner41@x.com', 'committee1', 'an owner with an email also gets the apartment-owner role for that apartment', 'apt_owner 41', withMail === 'ERR' ? withMail : JSON.stringify(withMail));
+
+    // what that owner then sees: only their apartment
+    const sees = await as('c1@x.com', async (q) => { await add(q, 41, 'שי', 'עם-מייל', '050-41', 'owner41@x.com'); await db.exec('reset role'); await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email: 'owner41@x.com' })}', true)`); await db.exec('set local role authenticated'); return [(await q('select count(*)::int n from payments')).rows[0].n, (await q('select count(*)::int n from members where apt = 41 and role = \'apt_owner\'')).rows[0].n]; });
+    report(sees !== 'ERR' && sees[0] === 0 && sees[1] === 1, 'owner41', 'after login the new owner reads no payments table and has their one apartment role', '0 / 1', sees === 'ERR' ? sees : JSON.stringify(sees));
+
+    const twice = await as('c1@x.com', async (q) => { await add(q, 40, 'רן', 'בעלים', '050-40'); await add(q, 40, 'רן', 'בעלים', '050-40'); });
+    report(twice === 'ERR', 'committee1', 'the same person cannot be recorded twice as owner of one apartment', 'ERR', twice === 'ERR' ? twice : 'ok');
+    const two = await as('c1@x.com', async (q) => { await add(q, 40, 'רן', 'בעלים', '050-40'); await add(q, 40, 'רנה', 'שותפה', '050-41'); return (await q('select count(*)::int n from owners where apt = 40 and building_id = 1')).rows[0].n; });
+    report(two === 2, 'committee1', 'an apartment can have two owners', 2, two);
+    const reuse = await as('c1@x.com', async (q) => { await add(q, 40, 'רן', 'בעלים', '050-40'); await add(q, 41, 'רן', 'בעלים', '050-40'); await db.exec('reset role'); return (await q("select count(*)::int n from users where last_name = 'בעלים'")).rows[0].n; });
+    report(reuse === 1, 'committee1', 'the same person owning two apartments is one person', 1, reuse);
+    const other = await as('c1@x.com', async (q) => { await add(q, 40, 'דנה', 'לוי', '050-99'); await db.exec('reset role'); return (await q("select count(*)::int n from users where last_name = 'לוי' and phone = '050-99'")).rows[0].n; });
+    report(other === 2, 'committee1', "a person of another building is not attached: a new person is created", 2, other);
+    for (const [what, args] of [['no last name', [40, 'א', '', '1']], ['a bad email', [40, 'א', 'ב', '1', 'not-an-email']], ['a missing apartment', [99, 'א', 'ב', '1']]]) {
+      const r = await as('c1@x.com', (q) => add(q, ...args));
+      report(r === 'ERR', 'committee1', `add_owner refuses ${what}`, 'ERR', r === 'ERR' ? r : 'ok');
+    }
+    const rm = await as('c1@x.com', async (q) => {
+      const id = await add(q, 41, 'שי', 'עם-מייל', '050-41', 'owner41@x.com');
+      await q('select public.remove_owner(1, $1)', [id]);
+      return [(await q('select count(*)::int n from owners where id = $1', [id])).rows[0].n, (await q("select count(*)::int n from members where apt = 41 and role = 'apt_owner'")).rows[0].n];
+    });
+    report(rm !== 'ERR' && rm[0] === 0 && rm[1] === 0, 'committee1', "removing an owner also removes their apartment-owner access", '0 / 0', rm === 'ERR' ? rm : JSON.stringify(rm));
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await as(email, (q) => add(q, 41, 'א', 'בדיקה', '1'));
+      report(r !== 'ERR', who, 'add_owner: allowed', 'ok', r === 'ERR' ? r : 'ok');
+    }
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const a = await as(email, (q) => add(q, 41, 'א', 'בדיקה', '1'));
+      const d = await as(email, (q) => q('select public.remove_owner(1, 1)'));
+      report(a === 'ERR' && d === 'ERR', who, 'add_owner and remove_owner are refused', 'ERR x2', `${a === 'ERR' ? 'ERR' : 'ok'} ${d === 'ERR' ? 'ERR' : 'ok'}`);
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }
