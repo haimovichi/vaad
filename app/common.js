@@ -198,14 +198,14 @@ window.Vaad = (function () {
     const denied = () => new Error('רק מנהל העל יכול לערוך פרטי אנשים');
     return {
       async load() {
-        const [[apts, res, own, tar, pay, meta, pend]] = await Promise.all([Promise.all(['apartments', 'residents', 'owners', 'tariffs', 'payments', 'meta', 'pending_payments'].map((t) => fetchAll(t, B))), refreshUsers()]);
+        const [[apts, res, own, tar, pay, meta, pend, exp]] = await Promise.all([Promise.all(['apartments', 'residents', 'owners', 'tariffs', 'payments', 'meta', 'pending_payments', 'expenses'].map((t) => fetchAll(t, B))), refreshUsers()]);
         const m = Object.fromEntries(meta.map((r) => [r.name, r.value]));
         return {
           apartments: apts.map((a) => ({ apt: a.apt, floor: a.floor || '', rooms: a.rooms, sqm: a.sqm })),
           residents: res.map((r) => fromResident(r, users, accts)),
           owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { id: o.id, apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
           tariffs: tar.map((t) => ({ id: t.id, year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
-          payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: [],
+          payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: exp.map((e) => ({ id: e.id, y: e.y, m: e.m, d: e.d, category: e.category || '', desc: e.descr || '', amount: num(e.amount), method: e.method || '', note: e.note || '' })),
           bankSeen: m.bankSeen || {}, refSeen: m.refSeen || {}, aliases: m.aliases || {}, ignored: m.ignored || {},
           settings: Object.assign({ title: 'ועד הבית', showNames: false, showDebt: true }, m.settings || {}),
         };
@@ -383,6 +383,7 @@ window.Vaad = (function () {
       async load() {
         if (!db) {
           db = await (await fetch('demo-db.json')).json();
+          (db.expenses || []).forEach((e, i) => { e.id = e.id || i + 1; });
           if (params.get('empty')) for (const k of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'expenses']) db[k] = [];   // demo of a building nobody has set up yet
           // the same person (same name and phone) is one user, however many apartments they own or rent
           const person = (first, last, phone, account) => {

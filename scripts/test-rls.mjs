@@ -910,6 +910,40 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // expenses: read by whoever manages the building, never written from the app
+  {
+    const setup = `
+      insert into expenses(building_id, y, m, d, category, descr, amount, method, note) values
+        (1, 2026, 3, 5, 'חשמל', 'חשבון חשמל', 300, 'העברה', ''), (1, 2026, 4, 9, 'ניקיון', 'מנקה', 200, 'מזומן', 'x'),
+        (2, 2026, 3, 7, 'מים', 'חשבון מים', 100, 'העברה', '');`;
+    const as = async (email, sql) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        const r = await db.query(sql);
+        return r.rows;
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const n = (r) => (r === 'ERR' ? r : r.length);
+    for (const [who, email, expect] of [['committee1', 'c1@x.com', 2], ['manager12', 'm12@x.com', 3], ['super', 'super@x.com', 3], ['committee2', 'c2@x.com', 1]]) {
+      const r = await as(email, 'select * from expenses');
+      report(n(r) === expect, who, 'reads the expenses of the buildings they manage', expect, n(r));
+    }
+    for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const r = await as(email, 'select * from expenses');
+      report(r === 'ERR' || r.length === 0, who, 'cannot read expenses', 0, n(r));
+    }
+    // nobody adds, changes or deletes expenses through the app: not the committee, not the manager, not even the super user
+    for (const [who, email] of [['committee1', 'c1@x.com'], ['manager12', 'm12@x.com'], ['super', 'super@x.com'], ['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['anon', null]]) {
+      const ins = await as(email, "insert into expenses(building_id, y, m, d, category, descr, amount) values (1, 2026, 5, 1, 'x', 'y', 1) returning id");
+      const upd = await as(email, 'update expenses set amount = 1 returning id');
+      const del = await as(email, 'delete from expenses returning id');
+      report([ins, upd, del].every((r) => r === 'ERR' || r.length === 0), who, 'cannot add, change or delete an expense', 'BLOCKED x3', [ins, upd, del].map(n).join('/'));
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

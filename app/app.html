@@ -166,6 +166,16 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
     <div class="empty hide" id="pendEmpty">אין תשלומים ממתינים.</div>
   </section>
 
+  <!-- ===== expenses: what the building spent (read-only: they come from the workbook and the bank report) ===== -->
+  <section id="sec-expenses" class="hide">
+    <div class="box pad">
+      <h3>הוצאות הבניין</h3>
+      <div class="mute">ההוצאות מגיעות מהאקסל ומדוח הבנק, ואי אפשר להוסיף אותן או למחוק אותן כאן.</div>
+      <div class="row"><select id="xYear" aria-label="שנה"></select><select id="xCat" aria-label="קטגוריה"></select><span class="mute" id="xTotal"></span></div>
+    </div>
+    <div class="box"><table class="t" id="xTable"></table></div>
+  </section>
+
   <!-- ===== tariffs: what each apartment owes per month ===== -->
   <section id="sec-tariffs" class="hide">
     <div class="box pad">

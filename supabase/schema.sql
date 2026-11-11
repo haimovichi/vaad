@@ -802,11 +802,17 @@ drop function if exists public.app_role(bigint);
 do $$
 declare t text;
 begin
-  foreach t in array array['apartments','residents','owners','tariffs','payments','pending_payments','expenses','meta'] loop
+  foreach t in array array['apartments','residents','owners','tariffs','payments','pending_payments','meta'] loop
     execute format($p$create policy manage_all on public.%I for all to authenticated using (public.can_manage(building_id)) with check (public.can_manage(building_id))$p$, t);
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
   end loop;
 end $$;
+
+-- expenses come from the workbook migration and the bank report (loaded in the SQL editor), never from the app: whoever
+-- manages the building reads them; nobody (the super user included) adds, changes or deletes them through the app
+create policy manage_read on public.expenses for select to authenticated using (public.can_manage(building_id));
+revoke insert, update, delete on public.expenses from authenticated;
+grant select on public.expenses to authenticated;
 
 -- buildings: you see the ones you belong to; super user sees all. The name is the address; only the super user changes it. Create/delete: functions / SQL editor only
 create policy member_read  on public.buildings for select to authenticated using (public.is_super() or public.is_manager_of(id) or public.is_member_any(id));

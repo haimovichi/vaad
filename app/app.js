@@ -44,6 +44,7 @@ Vaad.mountSwitcher($('#bsel'), ME);
 const SCREENS = [
   ['home', 'בית', '🏠', '', 'home'],
   ['import', 'ייבוא מהבנק', '📥', 'כספים', 'import', () => STAFF],
+  ['expenses', 'הוצאות', '🧾', 'כספים', 'expenses', () => STAFF],
   ['tariffs', 'תעריפים', '💰', 'כספים', 'tariffs', () => STAFF],
   ['pending', 'תשלומים ממתינים', '⏳', 'כספים', 'pending', () => STAFF],
   ['backup', 'גיבוי נתונים', '💾', 'כספים', 'more', () => STAFF],
@@ -57,7 +58,7 @@ const PANE = { apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers:
 const LEGACY = { people: 'everyone', buildings: 'list', more: 'share' };   // old #people/users style addresses
 const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
-const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), tariffs: () => loadTariffs(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
 let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
@@ -89,7 +90,7 @@ function route() {
   sec = s; sub = u;
   const def = screens.find((x) => x[0] === s);
   $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
-  ['home', 'import', 'pending', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
+  ['home', 'import', 'pending', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
   Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
   $('#scr').textContent = s === 'home' ? 'בית' : def[1];
   $('#homeBtn').classList.toggle('hide', s === 'home');
@@ -336,6 +337,37 @@ $('#commit').onclick = async () => {
     await preview(); updatePend();
   } catch (e) { toast(e.message); }
 };
+
+/* ================= EXPENSES (read-only) ================= */
+let xList = [];
+async function loadExpenses() {
+  xList = await api('GET', '/api/expenses');
+  const years = [...new Set(xList.map((e) => e.y))].sort((a, b) => b - a);
+  if (!years.length) years.push(now.y);
+  const keepY = $('#xYear').value;
+  $('#xYear').innerHTML = years.map((y) => `<option>${y}</option>`).join('');
+  $('#xYear').value = years.includes(+keepY) ? keepY : years[0];
+  const keepC = $('#xCat').value;
+  const cats = [...new Set(xList.map((e) => e.category || ''))].sort((a, b) => a.localeCompare(b, 'he'));
+  $('#xCat').innerHTML = '<option value="__all">כל הקטגוריות</option>' + cats.map((c) => `<option value="${esc(c)}">${esc(c || 'ללא קטגוריה')}</option>`).join('');
+  $('#xCat').value = cats.includes(keepC) || keepC === '__all' ? keepC : '__all';
+  renderExpenses();
+}
+function renderExpenses() {
+  const y = +$('#xYear').value; const cat = $('#xCat').value;
+  const rows = xList.filter((e) => e.y === y && (cat === '__all' || (e.category || '') === cat))
+    .sort((a, b) => a.m - b.m || (a.d || 0) - (b.d || 0) || a.id - b.id);
+  const sum = (l) => l.reduce((s, e) => s + e.amount, 0);
+  $('#xTotal').textContent = `סה״כ ${y}: ${fmt(sum(rows))} ₪ · ${rows.length} הוצאות`;
+  let h = '<tr><th>תאריך</th><th class="l">קטגוריה</th><th class="l">תיאור</th><th>סכום</th><th>אמצעי</th></tr>';
+  for (let m = 1; m <= 12; m++) {
+    const ms = rows.filter((e) => e.m === m); if (!ms.length) continue;
+    h += `<tr><td colspan="5" class="l"><b>${MF[m - 1]}</b> <span class="mute">· ${fmt(sum(ms))} ₪</span></td></tr>`;
+    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l">${esc(e.category)}</td><td class="l">${esc(e.desc)}</td><td class="n">${fmt(e.amount)} ₪</td><td>${esc(e.method)}</td></tr>`).join('');
+  }
+  $('#xTable').innerHTML = rows.length ? h : '<tr><td class="empty">אין הוצאות בשנה ובקטגוריה שנבחרו.</td></tr>';
+}
+$('#xYear').onchange = renderExpenses; $('#xCat').onchange = renderExpenses;
 
 /* ================= TARIFFS ================= */
 function tKindSync() {
