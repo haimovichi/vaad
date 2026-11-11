@@ -715,6 +715,49 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // tariffs: base per year, own tariff per apartment, one-off surcharge per month
+  {
+    const tryAs = async (email, sql) => {
+      await db.exec('begin');
+      try {
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        return (await db.query(sql)).rows;
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const ins = (cols, vals) => `insert into tariffs(building_id, year, ${cols}) values (1, ${vals}) returning id`;
+    const ok1 = await tryAs('c1@x.com', ins('month, apt, amount', '2027, null, null, 600'));
+    report(ok1 !== 'ERR' && ok1.length === 1, 'committee1', 'sets the base tariff of a year', 1, ok1 === 'ERR' ? ok1 : ok1.length);
+    const ov = await tryAs('c1@x.com', ins('month, apt, amount', '2027, null, 8, 450'));
+    report(ov !== 'ERR' && ov.length === 1, 'committee1', "sets an apartment's own tariff", 1, ov === 'ERR' ? ov : ov.length);
+    const su = await tryAs('c1@x.com', ins('month, apt, amount', '2027, 3, null, 50'));
+    report(su !== 'ERR' && su.length === 1, 'committee1', 'sets a one-off surcharge of a month', 1, su === 'ERR' ? su : su.length);
+    const dupBase = await tryAs('c1@x.com', "insert into tariffs(building_id, year, amount) values (1, 2027, 1), (1, 2027, 2)");
+    report(dupBase === 'ERR', 'committee1', 'a second base tariff for the same year is refused', 'ERR', dupBase === 'ERR' ? dupBase : 'ok');
+    const dupOv = await tryAs('c1@x.com', "insert into tariffs(building_id, year, apt, amount) values (1, 2027, 8, 1), (1, 2027, 8, 2)");
+    report(dupOv === 'ERR', 'committee1', "a second own tariff for the same apartment and year is refused", 'ERR', dupOv === 'ERR' ? dupOv : 'ok');
+    const dupSu = await tryAs('c1@x.com', "insert into tariffs(building_id, year, month, amount) values (1, 2027, 3, 1), (1, 2027, 3, 2)");
+    report(dupSu === 'ERR', 'committee1', 'a second surcharge for the same month and apartments is refused', 'ERR', dupSu === 'ERR' ? dupSu : 'ok');
+    const twoSu = await tryAs('c1@x.com', "insert into tariffs(building_id, year, month, apt, amount) values (1, 2027, 3, null, 1), (1, 2027, 3, 8, 2) returning id");
+    report(twoSu !== 'ERR' && twoSu.length === 2, 'committee1', 'a surcharge for all apartments and one for a single apartment can both exist', 2, twoSu === 'ERR' ? twoSu : twoSu.length);
+    for (const [what, vals] of [['month 13', '2027, 13, null, 1'], ['year 1999', '1999, null, null, 1'], ['apartment 0', '2027, null, 0, 1']]) {
+      const r = await tryAs('c1@x.com', ins('month, apt, amount', vals));
+      report(r === 'ERR', 'committee1', `a tariff with ${what} is refused`, 'ERR', r === 'ERR' ? r : 'ok');
+    }
+    const upd = await tryAs('c1@x.com', "update tariffs set amount = 999 where building_id = 1 and year = 2026 returning id");
+    report(upd !== 'ERR', 'committee1', 'changes an amount', 'ok', upd === 'ERR' ? upd : 'ok');
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await tryAs(email, ins('month, apt, amount', '2028, null, null, 1'));
+      report(r !== 'ERR' && r.length === 1, who, 'sets a tariff', 1, r === 'ERR' ? r : r.length);
+    }
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const r = await tryAs(email, ins('month, apt, amount', '2029, null, null, 1'));
+      report(r === 'ERR' || r.length === 0, who, 'cannot set a tariff of building 1', 'BLOCKED', r === 'ERR' ? r : r.length);
+      const d = await tryAs(email, 'delete from tariffs where building_id = 1 returning id');
+      report(d === 'ERR' || d.length === 0, who, 'cannot delete tariffs of building 1', 'BLOCKED', d === 'ERR' ? d : d.length);
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

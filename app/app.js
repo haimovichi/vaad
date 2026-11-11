@@ -44,6 +44,7 @@ Vaad.mountSwitcher($('#bsel'), ME);
 const SCREENS = [
   ['home', 'בית', '🏠', '', 'home'],
   ['import', 'ייבוא מהבנק', '📥', 'כספים', 'import', () => STAFF],
+  ['tariffs', 'תעריפים', '💰', 'כספים', 'tariffs', () => STAFF],
   ['pending', 'תשלומים ממתינים', '⏳', 'כספים', 'pending', () => STAFF],
   ['backup', 'גיבוי נתונים', '💾', 'כספים', 'more', () => STAFF],
   ['everyone', 'אנשים', '👥', 'אנשים', 'people', () => STAFF],
@@ -56,7 +57,7 @@ const PANE = { apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers:
 const LEGACY = { people: 'everyone', buildings: 'list', more: 'share' };   // old #people/users style addresses
 const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
-const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), tariffs: () => loadTariffs(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
 let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
@@ -88,7 +89,7 @@ function route() {
   sec = s; sub = u;
   const def = screens.find((x) => x[0] === s);
   $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
-  ['home', 'import', 'pending', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
+  ['home', 'import', 'pending', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
   Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
   $('#scr').textContent = s === 'home' ? 'בית' : def[1];
   $('#homeBtn').classList.toggle('hide', s === 'home');
@@ -314,6 +315,36 @@ $('#commit').onclick = async () => {
     toast(`נשמרו ${r.added} תשלומים, ${r.pending} ממתינים לאישור, ${r.ignored} הותעלמו`);
     await preview(); updatePend();
   } catch (e) { toast(e.message); }
+};
+
+/* ================= TARIFFS ================= */
+function tKindSync() {
+  const k = $('#tKind').value;
+  $('#tMonth').classList.toggle('hide', k !== 'extra'); $('#tApt').classList.toggle('hide', k === 'base');
+  $('#tApt').innerHTML = (k === 'extra' ? '<option value="">כל הדירות</option>' : '<option value="">בחרו דירה</option>') + DB.apartments.map((a) => `<option>${a.apt}</option>`).join('');
+}
+$('#tKind').onchange = tKindSync;
+$('#tMonth').innerHTML = MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+async function loadTariffs() {
+  if (!$('#tYear').value) $('#tYear').value = now.y;
+  tKindSync();
+  const list = await api('GET', '/api/tariffs');
+  const what = (t) => (t.month ? `תוספת ל${MF[t.month - 1]}${t.apt ? `, דירה ${t.apt}` : ', כל הדירות'}` : t.apt ? `תעריף מיוחד לדירה ${t.apt}` : 'תעריף בסיס');
+  const rows = [...list].sort((a, b) => b.year - a.year || (a.month || 0) - (b.month || 0) || (a.apt || 0) - (b.apt || 0));
+  $('#tTable').innerHTML = '<tr><th>שנה</th><th class="l">מה</th><th>סכום</th><th class="l">הערה</th><th></th></tr>' +
+    (rows.length ? rows.map((t) => `<tr><td>${t.year}</td><td class="l">${what(t)}</td><td class="n">${fmt(t.amount)} ₪</td><td class="l mute">${esc(t.note)}</td><td><button class="g" data-deltar="${t.id}" aria-label="מחק">✕</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">עוד לא הוגדרו תעריפים.</td></tr>');
+}
+$('#tAdd').onclick = async () => {
+  const k = $('#tKind').value;
+  if (k === 'apt' && !$('#tApt').value) return toast('בחרו דירה');
+  try {
+    await api('POST', '/api/tariff', { year: $('#tYear').value, month: k === 'extra' ? $('#tMonth').value : '', apt: k === 'base' ? '' : $('#tApt').value, amount: $('#tAmount').value, note: $('#tNote').value });
+    $('#tAmount').value = ''; $('#tNote').value = ''; toast('התעריף נשמר'); loadTariffs();
+  } catch (e) { toast(e.message); }
+};
+$('#tTable').onclick = async (e) => {
+  const b = e.target.closest('[data-deltar]'); if (!b) return;
+  try { await api('DELETE', '/api/tariff/' + b.dataset.deltar); toast('נמחק'); loadTariffs(); } catch (err) { toast(err.message); }
 };
 
 /* ================= PENDING PAYMENTS ================= */

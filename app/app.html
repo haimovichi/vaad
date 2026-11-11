@@ -164,6 +164,18 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
     <div class="empty hide" id="pendEmpty">אין תשלומים ממתינים.</div>
   </section>
 
+  <!-- ===== tariffs: what each apartment owes per month ===== -->
+  <section id="sec-tariffs" class="hide">
+    <div class="box pad">
+      <h3>תעריפים</h3>
+      <div class="mute">התשלום החודשי של דירה = התעריף הבסיסי של השנה, או התעריף המיוחד של הדירה אם הוגדר, ועוד תוספות חד-פעמיות של אותו חודש. הגדרה חוזרת של תעריף קיים משנה את הסכום שלו.</div>
+      <div class="row"><select id="tKind"><option value="base">תעריף בסיס לשנה</option><option value="apt">תעריף מיוחד לדירה</option><option value="extra">תוספת חד-פעמית לחודש</option></select>
+        <input id="tYear" type="number" min="2000" max="2100" style="width:90px" placeholder="שנה"><select id="tMonth" class="hide"></select><select id="tApt" class="hide"></select>
+        <input id="tAmount" type="number" step="1" style="width:100px" placeholder="סכום ₪"><input id="tNote" placeholder="הערה (לא חובה)" style="width:160px"><button class="b" id="tAdd">שמור</button></div>
+    </div>
+    <div class="box"><table class="t" id="tTable"></table></div>
+  </section>
+
   <!-- ===== people ===== -->
   <section id="sec-people" class="hide">
     <div id="p-everyone" class="hide">

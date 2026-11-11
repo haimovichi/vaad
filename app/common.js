@@ -204,7 +204,7 @@ window.Vaad = (function () {
           apartments: apts.map((a) => ({ apt: a.apt, floor: a.floor || '', rooms: a.rooms, sqm: a.sqm })),
           residents: res.map((r) => fromResident(r, users, accts)),
           owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
-          tariffs: tar.map((t) => ({ year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
+          tariffs: tar.map((t) => ({ id: t.id, year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
           payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: [],
           bankSeen: m.bankSeen || {}, refSeen: m.refSeen || {}, aliases: m.aliases || {}, ignored: m.ignored || {},
           settings: Object.assign({ title: 'ועד הבית', showNames: false, showDebt: true }, m.settings || {}),
@@ -233,6 +233,12 @@ window.Vaad = (function () {
         return { building: { id: B, name: b ? b.name : String(B) }, tables };
       },
       async deletePayment(id) { ok(await c.from('payments').delete().eq('id', id).eq('building_id', B)); },
+      async addTariff(t) {
+        const row = ok(await c.from('tariffs').insert({ building_id: B, year: t.year, month: t.month, apt: t.apt, amount: t.amount, note: t.note || null }).select().single());
+        return { id: row.id, year: row.year, month: row.month, apt: row.apt, amount: num(row.amount), note: row.note || '' };
+      },
+      async updateTariff(id, t) { ok(await c.from('tariffs').update({ amount: t.amount, note: t.note || null }).eq('id', id).eq('building_id', B)); },
+      async deleteTariff(id) { ok(await c.from('tariffs').delete().eq('id', id).eq('building_id', B)); },
       async addApartment(a) {
         const { error } = await c.from('apartments').insert({ building_id: B, apt: a.apt, floor: a.floor || null, rooms: a.rooms, sqm: a.sqm });
         if (error) throw new Error(error.code === '23505' ? `דירה ${a.apt} כבר קיימת בבניין` : error.code === '42501' ? 'אין לך הרשאה להוסיף דירות' : error.message);
@@ -379,6 +385,7 @@ window.Vaad = (function () {
       async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
       async addApartment() {},
+      async addTariff(t) { return { ...t, id: nextId++ }; }, async updateTariff() {}, async deleteTariff() {},
       // demo mode only: the same rules as the server functions propose_credits and save_import, in memory
       async proposeCredits(list) {
         const d = await this.load(); const M = window.VaadLib.match;

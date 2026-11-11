@@ -115,6 +115,15 @@ create table if not exists public.tariffs (
   year int not null, month int, apt int, amount numeric not null, note text
 );
 
+-- One base tariff per year, one own tariff per apartment and year, one surcharge per month (for all apartments or for one)
+alter table public.tariffs drop constraint if exists tariffs_year_chk;
+alter table public.tariffs add  constraint tariffs_year_chk  check (year between 2000 and 2100);
+alter table public.tariffs drop constraint if exists tariffs_month_chk;
+alter table public.tariffs add  constraint tariffs_month_chk check (month is null or month between 1 and 12);
+alter table public.tariffs drop constraint if exists tariffs_apt_chk;
+alter table public.tariffs add  constraint tariffs_apt_chk   check (apt is null or apt > 0);
+create unique index if not exists tariffs_unique on public.tariffs (building_id, year, coalesce(month, 0), coalesce(apt, 0));
+
 create table if not exists public.payments (
   id bigint generated always as identity primary key,
   building_id bigint not null references public.buildings(id) on delete cascade,
