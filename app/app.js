@@ -267,6 +267,8 @@ async function preview() {
   const from = $('#fromDate').value;
   try { IMP = await api('POST', '/api/import/preview?from=' + from, buf); } catch (e) { return toast(e.message); }
   if (!from && IMP.from) $('#fromDate').value = IMP.from;
+  // a credit the server is not sure about waits for approval unless an apartment is picked here: the suggestion is only shown
+  for (const it of IMP.items) if (!it.sure) { it.suggest = it.apt; it.apt = null; it.tenancy = null; it.tenant = ''; it.allocations = []; }
   $('#impInfo').textContent = `בקובץ ${IMP.total} תנועות · כבר רשומות: ${IMP.known} · לפני ${IMP.from || '—'} (נחשבות כרשומות): ${IMP.before} · הפקדות חדשות לבדיקה: ${IMP.items.length}`;
   renderImp();
 }
@@ -276,13 +278,13 @@ function renderImp() {
   $('#impCard').classList.toggle('hide', !IMP.items.length); $('#impActions').classList.toggle('hide', !IMP.items.length);
   $('#impTable').innerHTML = '<tr><th>✓</th><th>תאריך</th><th class="l">תיאור</th><th>סכום</th><th>דירה</th><th class="l">חלוקה לחודשים</th><th>זכור</th></tr>' +
     IMP.items.map((it, i) => `<tr class="${it.sure ? '' : 'warn'}" data-i="${i}">
-    <td><input type="checkbox" class="sel" ${it.apt ? 'checked' : ''}></td>
+    <td><input type="checkbox" class="sel" checked></td>
     <td>${it.date.split('-').reverse().join('/')}</td>
-    <td class="l">${esc(it.desc.slice(0, 70))}<div class="mute">${esc(it.how)}${it.sure ? '' : ' — לבדיקה'}</div></td>
+    <td class="l">${esc(it.desc.slice(0, 70))}<div class="mute">${esc(it.how)}${it.sure ? '' : ' — ימתין לאישור הוועד' + (it.suggest ? ` · הצעה: דירה ${it.suggest}` : '') + (it.candidates.length ? ` · דירות אפשריות: ${it.candidates.join(', ')}` : '')}</div></td>
     <td>${fmt(it.amount)}</td>
     <td><select class="apt"><option value="">—</option><option value="ignore">התעלם</option>${IMP.apartments.map((a) => `<option ${a == it.apt ? 'selected' : ''}>${a}</option>`).join('')}</select><div class="mute who2">${esc(it.tenant || '')}</div></td>
     <td class="l"><input class="al" style="width:230px" value="${allocText(it.allocations)}"></td>
-    <td><input type="checkbox" class="learn" ${it.apt && !it.sure ? 'checked' : ''} title="זכור את הקישור הזה לפעם הבאה"></td></tr>`).join('');
+    <td><input type="checkbox" class="learn" title="זכור את הקישור הזה לפעם הבאה"></td></tr>`).join('');
 }
 $('#impTable').onchange = async (e) => {
   const tr = e.target.closest('tr'); if (!tr || !tr.dataset.i) return; const it = IMP.items[tr.dataset.i];
@@ -302,12 +304,12 @@ $('#commit').onclick = async () => {
       if (!tr.querySelector('.sel').checked) return;
       const it = IMP.items[tr.dataset.i];
       if (it.ignore) { items.push({ key: it.key, ignore: true }); return; }
-      if (!it.apt) return;
-      items.push({ key: it.key, tenancy: it.tenancy, date: it.date, desc: it.desc, amount: it.amount, ref: it.ref, refKey: it.refKey, apt: it.apt, allocations: parseAlloc(tr.querySelector('.al').value), payer: it.payer, learn: tr.querySelector('.learn').checked });
+      if (!it.apt) { items.push({ key: it.key, date: it.date, desc: it.desc, amount: it.amount, ref: it.ref, refKey: it.refKey }); return; }   // no apartment: waits for approval
+      items.push({ key: it.key, date: it.date, desc: it.desc, amount: it.amount, ref: it.ref, refKey: it.refKey, apt: it.apt, allocations: parseAlloc(tr.querySelector('.al').value), learn: tr.querySelector('.learn').checked });
     });
     const r = await api('POST', '/api/import/commit', { items });
-    toast(`נשמרו ${r.added} תשלומים, ${r.ignored} הותעלמו`);
-    await preview();
+    toast(`נשמרו ${r.added} תשלומים, ${r.pending} ממתינים לאישור, ${r.ignored} הותעלמו`);
+    await preview(); updatePend();
   } catch (e) { toast(e.message); }
 };
 

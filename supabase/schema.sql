@@ -504,13 +504,112 @@ begin
   delete from public.pending_payments where id = pid;
 end $$;
 
+-- ---------- the bank import on the server ----------
+-- Proposals for a list of bank credits, in the order given (the caller sorts them by date): for each, the apartment
+-- match_payer finds (or the apartment forced by the caller: "apt" in the credit), its reason, certainty and candidates,
+-- the tenancy, and the split over months from split_payment. Credits proposed earlier in the same list count as
+-- paid for their tenancy. credits = [{key, date, desc, amount, apt?}, ...]. Managers of the building only.
+create or replace function public.propose_credits(b bigint, credits jsonb) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  c jsonb; res jsonb := '[]'; pool jsonb := '{}'; m record; ap int; d date; amt numeric; tk text; parts jsonb; how text; sure boolean; cands int[];
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if jsonb_typeof(credits) is distinct from 'array' then raise exception 'credits must be a list'; end if;
+  for c in select * from jsonb_array_elements(credits) loop
+    d := (c ->> 'date')::date; amt := (c ->> 'amount')::numeric;
+    if d is null or amt is null or amt <= 0 then raise exception 'each credit needs a date and a positive amount'; end if;
+    ap := nullif(c ->> 'apt', '')::int;
+    if ap is not null then how := 'נבחרה ידנית'; sure := true; cands := '{}';
+    else
+      select * into m from public.match_payer(b, coalesce(c ->> 'desc', ''));
+      ap := m.apt; how := m.how; sure := m.sure; cands := m.candidates;
+    end if;
+    tk := null; parts := '[]';
+    if ap is not null then
+      select ty.key into tk from public.tenancy_at(b, ap, extract(year from d)::int * 12 + extract(month from d)::int - 1) ty;
+      if tk is not null then
+        select coalesce(jsonb_agg(jsonb_build_object('y', s.yr, 'm', s.mo, 'amount', s.part) order by s.n), '[]') into parts
+          from public.split_payment(b, ap, amt, d, coalesce((pool ->> tk)::numeric, 0)) with ordinality s(yr, mo, part, n);
+        pool := pool || jsonb_build_object(tk, coalesce((pool ->> tk)::numeric, 0) + amt);
+      end if;
+    end if;
+    res := res || jsonb_build_array(jsonb_build_object('key', c ->> 'key', 'apt', ap, 'how', how, 'sure', sure,
+             'candidates', to_jsonb(cands), 'tenancy', tk, 'allocations', parts));
+  end loop;
+  return res;
+end $$;
+
+-- Save the treasurer's decisions on a bank import, all or nothing (one transaction): items = [{key, refKey, ref, date,
+-- desc, amount, apt?, allocations?: [{y, m, amount}], learn?, ignore?}, ...].
+--   ignore         : the row is ignored from now on
+--   apt + parts    : normal payments on that apartment's tenancy (the parts must add up to the amount); with learn,
+--                    the payer is remembered as an alias for that apartment
+--   no apartment   : saved as a pending credit with a suggestion (save_pending_credits)
+-- A bank row that is already recorded is skipped, so saving twice adds nothing. Returns {added, pending, ignored}.
+-- Managers of the building only.
+create or replace function public.save_import(b bigint, items jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  it jsonb; k text; rk text; amt numeric; d date; ap int; tk text; a jsonb; total numeric; pend jsonb := '[]';
+  added int := 0; ign int := 0; pcount int := 0;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if jsonb_typeof(items) is distinct from 'array' then raise exception 'items must be a list'; end if;
+  for it in select * from jsonb_array_elements(items) loop
+    k := nullif(it ->> 'key', ''); rk := nullif(it ->> 'refKey', '');
+    if k is null then raise exception 'each row needs a key'; end if;
+    if exists (select 1 from public.meta s where s.building_id = b and s.name in ('bankSeen', 'ignored') and s.value ? k)
+       or exists (select 1 from public.payments p where p.building_id = b and p.tx_key = k)
+       or exists (select 1 from public.pending_payments p where p.building_id = b and p.tx_key = k)
+    then continue; end if;
+
+    if coalesce((it ->> 'ignore')::boolean, false) then
+      insert into public.meta (building_id, name, value) values (b, 'ignored', jsonb_build_object(k, true))
+        on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(k, true);
+      ign := ign + 1; continue;
+    end if;
+
+    ap := nullif(it ->> 'apt', '')::int;
+    if ap is null then pend := pend || jsonb_build_array(it); continue; end if;
+
+    d := (it ->> 'date')::date; amt := (it ->> 'amount')::numeric;
+    if d is null or amt is null or amt <= 0 then raise exception 'each credit needs a date and a positive amount'; end if;
+    if jsonb_typeof(it -> 'allocations') is distinct from 'array' or jsonb_array_length(it -> 'allocations') = 0 then raise exception 'missing split over months'; end if;
+    select coalesce(sum((x ->> 'amount')::numeric), 0) into total from jsonb_array_elements(it -> 'allocations') x;
+    if abs(total - amt) > 0.01 then raise exception 'the split over months does not match the amount (%)', k; end if;
+    if not exists (select 1 from public.apartments x where x.building_id = b and x.apt = ap) then raise exception 'no such apartment'; end if;
+    select ty.key into tk from public.tenancy_at(b, ap, extract(year from d)::int * 12 + extract(month from d)::int - 1) ty;
+    if tk is null then raise exception 'the apartment has no tenant record'; end if;
+    for a in select * from jsonb_array_elements(it -> 'allocations') loop
+      if (a ->> 'm')::int not between 1 and 12 or (a ->> 'y')::int not between 2000 and 2100 or (a ->> 'amount')::numeric <= 0 then raise exception 'bad month in the split'; end if;
+      insert into public.payments (building_id, key, apt, y, m, amount, method, paid_on, note, ref, src, tx_key)
+      values (b, tk, ap, (a ->> 'y')::int, (a ->> 'm')::int, (a ->> 'amount')::numeric, 'העברה בנקאית', d,
+              'בנק: ' || left(coalesce(it ->> 'desc', ''), 60), nullif(it ->> 'ref', ''), 'bank', k);
+    end loop;
+    insert into public.meta (building_id, name, value) values (b, 'bankSeen', jsonb_build_object(k, true))
+      on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(k, true);
+    if rk is not null then
+      insert into public.meta (building_id, name, value) values (b, 'refSeen', jsonb_build_object(rk, true))
+        on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(rk, true);
+    end if;
+    if coalesce((it ->> 'learn')::boolean, false) and public.payer_key(it ->> 'desc') <> '' then
+      insert into public.meta (building_id, name, value) values (b, 'aliases', jsonb_build_object(public.payer_key(it ->> 'desc'), ap))
+        on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(public.payer_key(it ->> 'desc'), ap);
+    end if;
+    added := added + 1;
+  end loop;
+  if jsonb_array_length(pend) > 0 then pcount := public.save_pending_credits(b, pend); end if;
+  return jsonb_build_object('added', added, 'pending', pcount, 'ignored', ign);
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);

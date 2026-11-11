@@ -611,6 +611,83 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // propose_credits and save_import: the bank import on the server
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,20),(1,21);
+      insert into users(first_name, last_name, phone) values ('דוד','כהן','m-20'),('שרה','לוי','m-21');
+      insert into residents(building_id, key, apt, entry_year, entry_month, user_id) values
+        (1,'20-a',20,2026,1,(select id from users where phone='m-20')),(1,'21-a',21,2026,1,(select id from users where phone='m-21'));
+      insert into tariffs(building_id, year, month, apt, amount) values (1,2026,null,null,570);`;
+    const as = async (email, fn) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        return await fn((sql, params) => db.query(sql, params));
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const J = (o) => JSON.stringify(o);
+    const prop = (q, credits) => q('select public.propose_credits(1, $1::jsonb) as r', [J(credits)]).then((r) => r.rows[0].r);
+    const save = (q, items) => q('select public.save_import(1, $1::jsonb) as r', [J(items)]).then((r) => r.rows[0].r);
+    const cr = (key, date, amount, desc, extra = {}) => ({ key, refKey: `r-${key}`, ref: key, date, amount, desc, ...extra });
+
+    const p = await as('c1@x.com', (q) => prop(q, [cr('a', '2026-02-03', 570, 'העברה דוד כהן'), cr('b', '2026-02-04', 1000, 'העברה דוד כהן'), cr('c', '2026-02-05', 100, 'העברה לוי'), cr('d', '2026-02-06', 50, 'העברה אלמוני'), cr('e', '2026-02-07', 100, 'העברה אלמוני', { apt: 21 })]));
+    report(p !== 'ERR' && p[0].apt === 20 && p[0].sure === true && p[0].tenancy === '20-a' && p[0].allocations.length === 1 && p[0].allocations[0].m === 2, 'committee1', 'propose_credits: apartment, tenancy and split of a sure credit', 'apt 20, Feb', p === 'ERR' ? p : J(p[0]));
+    report(p !== 'ERR' && p[1].allocations[0].m === 2 && p[1].allocations[1].m === 3 && p[1].allocations.reduce((s, x) => s + x.amount, 0) === 1000, 'committee1', 'propose_credits: the first credit counts as paid (January), so the second starts at February', 'Feb then March, sum 1000', p === 'ERR' ? p : J(p[1].allocations));
+    report(p !== 'ERR' && p[2].sure === false && p[2].apt === 21 && p[2].how === 'שם משפחה בלבד', 'committee1', 'propose_credits: a last-name match is not sure', 'apt 21, not sure', p === 'ERR' ? p : J([p[2].apt, p[2].sure, p[2].how]));
+    report(p !== 'ERR' && p[3].apt === null && p[3].how === 'לא זוהה' && p[3].allocations.length === 0, 'committee1', 'propose_credits: an unknown payer has no apartment and no split', 'none', p === 'ERR' ? p : J(p[3]));
+    report(p !== 'ERR' && p[4].apt === 21 && p[4].sure === true && p[4].allocations.length === 1, 'committee1', 'propose_credits: an apartment chosen by hand is used as given', 'apt 21', p === 'ERR' ? p : J(p[4]));
+    for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['committee2', 'c2@x.com'], ['anon', null]]) {
+      const r = await as(email, (q) => prop(q, [cr('a', '2026-02-03', 570, 'x')]));
+      report(r === 'ERR', who, 'propose_credits: refused', 'ERR', r === 'ERR' ? r : 'ok');
+      const s = await as(email, (q) => save(q, [cr('a', '2026-02-03', 570, 'x', { apt: 20, allocations: [{ y: 2026, m: 2, amount: 570 }] })]));
+      report(s === 'ERR', who, 'save_import: refused', 'ERR', s === 'ERR' ? s : 'ok');
+    }
+
+    const items = [
+      cr('ok1', '2026-02-03', 1000, 'העברה דוד כהן', { apt: 20, allocations: [{ y: 2026, m: 2, amount: 570 }, { y: 2026, m: 3, amount: 430 }], learn: true }),
+      cr('un1', '2026-02-04', 100, 'העברה לוי'),
+      cr('un2', '2026-02-05', 50, 'העברה אלמוני'),
+      cr('ig1', '2026-02-06', 25, 'חיוב', { ignore: true }),
+    ];
+    const s1 = await as('c1@x.com', async (q) => {
+      const first = await save(q, items);
+      const pays = (await q("select y, m, amount::int amount, apt, key, src, method from payments where tx_key = 'ok1' order by m")).rows;
+      const pend = (await q("select tx_key, auto_comment from pending_payments order by tx_key")).rows;
+      const seen = (await q("select value from meta where building_id = 1 and name = 'bankSeen'")).rows[0].value;
+      const ign = (await q("select value from meta where building_id = 1 and name = 'ignored'")).rows[0].value;
+      const alias = (await q("select value from meta where building_id = 1 and name = 'aliases'")).rows[0].value;
+      const again = await save(q, items);
+      const total = (await q("select count(*)::int n from payments where tx_key = 'ok1'")).rows[0].n + (await q('select count(*)::int n from pending_payments')).rows[0].n;
+      return { first, pays, pend, seen, ign, alias, again, total };
+    });
+    report(s1 !== 'ERR' && s1.first.added === 1 && s1.first.pending === 2 && s1.first.ignored === 1, 'committee1', 'save_import: one credited, two pending, one ignored', '1/2/1', s1 === 'ERR' ? s1 : J(s1.first));
+    report(s1 !== 'ERR' && s1.pays.length === 2 && s1.pays.every((x) => x.apt === 20 && x.key === '20-a' && x.src === 'bank') && s1.pays[0].amount === 570 && s1.pays[1].amount === 430, 'committee1', 'save_import: the credited row becomes payments on the tenancy, split as given', '570+430', s1 === 'ERR' ? s1 : J(s1.pays));
+    report(s1 !== 'ERR' && s1.pend[0].tx_key === 'un1' && s1.pend[0].auto_comment.startsWith('הצעה: דירה 21') && s1.pend[1].auto_comment === 'לא זוהה', 'committee1', 'save_import: unsure rows wait with a suggestion', 'suggestion / לא זוהה', s1 === 'ERR' ? s1 : J(s1.pend));
+    report(s1 !== 'ERR' && s1.seen.ok1 && s1.seen.un1 && s1.seen.un2 && s1.ign.ig1 === true && s1.alias['דוד כהן'] === 20, 'committee1', 'save_import: rows marked seen, the ignored one ignored, the payer remembered', 'ok', s1 === 'ERR' ? s1 : J([s1.seen, s1.ign, s1.alias]));
+    report(s1 !== 'ERR' && s1.again.added === 0 && s1.again.pending === 0 && s1.again.ignored === 0 && s1.total === 4, 'committee1', 'save_import: saving the same rows twice adds nothing', '0/0/0 and 4 rows', s1 === 'ERR' ? s1 : J([s1.again, s1.total]));
+
+    // all or nothing: one bad row stops the whole save
+    const atomic = await as('c1@x.com', async (q) => {
+      await q('savepoint s1');
+      let failed = false;
+      try { await save(q, [items[0], cr('bad', '2026-02-04', 100, 'x', { apt: 21, allocations: [{ y: 2026, m: 2, amount: 90 }] })]); } catch (e) { failed = true; }
+      await q('rollback to savepoint s1');
+      const pays = (await q("select count(*)::int n from payments where tx_key in ('ok1','bad')")).rows[0].n;
+      const seen = (await q("select count(*)::int n from meta where name = 'bankSeen'")).rows[0].n;
+      return { failed, pays, seen };
+    });
+    report(atomic !== 'ERR' && atomic.failed && atomic.pays === 0 && atomic.seen === 0, 'committee1', 'save_import: a split that does not add up refuses the whole save, nothing is kept', 'failed, 0 rows', atomic === 'ERR' ? atomic : J(atomic));
+    const noTenant = await as('c1@x.com', (q) => save(q, [cr('x', '2026-02-04', 100, 'x', { apt: 99, allocations: [{ y: 2026, m: 2, amount: 100 }] })]));
+    report(noTenant === 'ERR', 'committee1', 'save_import: an apartment that does not exist is refused', 'ERR', noTenant === 'ERR' ? noTenant : 'ok');
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await as(email, (q) => save(q, [cr('z', '2026-02-04', 100, 'העברה אלמוני')]));
+      report(r !== 'ERR' && r.pending === 1, who, 'save_import: allowed', 'pending 1', r === 'ERR' ? r : J(r));
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

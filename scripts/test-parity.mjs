@@ -1,4 +1,4 @@
-// Parity of the server functions (match_payer, split_payment) with the browser code (lib/match.js propose):
+// Parity of the server functions (propose_credits: match_payer + split_payment) with the browser code (lib/match.js propose):
 // the same building and the same bank rows must give the same apartment, reason, certainty, candidates and split.
 //   node scripts/test-parity.mjs            synthetic building and bank rows that exercise every rule (part of npm test)
 //   node scripts/test-parity.mjs --real     also the real data: data/db.json (its seed, supabase/seed.sql) and data/bank-sample.xlsx
@@ -96,17 +96,18 @@ async function compare(db, txs) {
   const d = await load(db);
   await d.exec('begin');
   await d.exec(`select set_config('request.jwt.claims', '{"email":"c@x.com"}', true)`); await d.exec('set local role authenticated');
-  const diffs = []; const already = {};
+  const diffs = [];
+  // the server proposes the whole list in one call, as the import screen does (oldest first, pools carried along)
+  const proposals = (await d.query('select public.propose_credits(1, $1::jsonb) as r', [JSON.stringify(browser.map((it) => ({ key: it.key, date: it.date, desc: it.desc, amount: it.amount })))])).rows[0].r;
   for (const [i, it] of browser.entries()) {
-    const m = (await d.query('select * from public.match_payer(1, $1)', [it.desc])).rows[0];
+    const m = proposals[i];
     const server = { apt: m.apt ?? null, how: m.how, sure: m.sure, candidates: [...(m.candidates || [])].sort((a, b) => a - b) };
     const want = { apt: it.apt ?? null, how: it.how, sure: it.sure, candidates: [...(it.candidates || [])].sort((a, b) => a - b) };
     const bad = [];
     for (const k of ['apt', 'how', 'sure']) if (server[k] !== want[k]) bad.push(`${k}: browser ${want[k]} / server ${server[k]}`);
     if (JSON.stringify(server.candidates) !== JSON.stringify(want.candidates)) bad.push(`candidates: browser [${want.candidates}] / server [${server.candidates}]`);
     if (it.apt) {
-      const parts = (await d.query('select yr, mo, part from public.split_payment(1, $1, $2, $3::date, $4)', [it.apt, it.amount, it.date, already[it.tenancy] || 0])).rows.map((r) => `${r.yr}-${r.mo}:${+r.part}`);
-      already[it.tenancy] = (already[it.tenancy] || 0) + it.amount;
+      const parts = m.allocations.map((r) => `${r.y}-${r.m}:${r.amount}`);
       const bparts = it.allocations.map((a) => `${a.y}-${a.m}:${a.amount}`);
       if (JSON.stringify(parts) !== JSON.stringify(bparts)) bad.push(`split: browser ${bparts.join(',')} / server ${parts.join(',')}`);
     }

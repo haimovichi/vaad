@@ -233,6 +233,8 @@ window.Vaad = (function () {
         return { building: { id: B, name: b ? b.name : String(B) }, tables };
       },
       async deletePayment(id) { ok(await c.from('payments').delete().eq('id', id).eq('building_id', B)); },
+      async proposeCredits(list) { return ok(await c.rpc('propose_credits', { b: B, credits: list.map((t) => ({ key: t.key, date: t.date, desc: t.desc, amount: t.amount, apt: t.apt || null })) })); },
+      async saveImport(items) { return ok(await c.rpc('save_import', { b: B, items })); },
       async approvePending(id, apt, learn) { ok(await c.rpc('approve_pending', { pid: id, a: apt, learn })); },
       async ignorePending(id) { ok(await c.rpc('ignore_pending', { pid: id })); },
       async updateResident(r) { // status: the building's staff; a person's details: the super user (RLS enforces it)
@@ -372,6 +374,39 @@ window.Vaad = (function () {
       async addPayments(rows) { return rows.map((r) => ({ ...r, id: nextId++ })); },
       async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
+      // demo mode only: the same rules as the server functions propose_credits and save_import, in memory
+      async proposeCredits(list) {
+        const d = await this.load(); const M = window.VaadLib.match;
+        const forced = list.filter((t) => t.apt);
+        if (forced.length) return forced.map((t) => { const r = M.allocateFor(d, t.apt, t.amount, t.date); return { key: t.key, apt: t.apt, how: 'נבחרה ידנית', sure: true, candidates: [], tenancy: r ? r.key : null, allocations: r ? r.allocations : [] }; });
+        const items = M.propose({ ...d, bankSeen: {}, refSeen: {}, ignored: {} }, JSON.parse(JSON.stringify(list))).items;
+        return items.map((it) => ({ key: it.key, apt: it.apt, how: it.how, sure: it.sure, candidates: it.candidates || [], tenancy: it.tenancy || null, allocations: it.allocations }));
+      },
+      async saveImport(items) {
+        const d = await this.load(); const M = window.VaadLib.match; const out = { added: 0, pending: 0, ignored: 0 };
+        for (const it of items) {
+          if (d.bankSeen[it.key] || d.ignored[it.key] || d.payments.some((p) => p.txKey === it.key) || d.pending.some((p) => p.txKey === it.key)) continue;
+          if (it.ignore) { d.ignored[it.key] = true; out.ignored++; continue; }
+          if (it.apt) {
+            const total = it.allocations.reduce((a, x) => a + x.amount, 0);
+            if (Math.abs(total - it.amount) > 0.01) throw new Error('החלוקה לחודשים לא מתאימה לסכום');
+            const r = M.allocateFor(d, +it.apt, it.amount, it.date);
+            if (!r) throw new Error('לדירה אין רשומת דייר');
+            for (const a of it.allocations) d.payments.push({ id: nextId++, key: r.key, apt: +it.apt, y: a.y, m: a.m, amount: a.amount, method: 'העברה בנקאית', date: it.date, note: `בנק: ${it.desc.slice(0, 60)}`, ref: it.ref, src: 'bank', txKey: it.key });
+            d.bankSeen[it.key] = true; if (it.refKey) d.refSeen[it.refKey] = true;
+            if (it.learn) d.aliases[M.payerKey(it.desc)] = +it.apt;
+            out.added++;
+          } else {
+            const m = M.matchPayer(d, M.buildIndex(d), it);
+            const cmt = m.how === 'לא זוהה' ? 'לא זוהה' : m.apt ? `הצעה: דירה ${m.apt} (${m.how})` : `דירות אפשריות: ${(m.candidates || []).join(', ')} (${m.how})`;
+            const [y, mo] = it.date.split('-').map(Number);
+            d.pending.push({ id: nextId++, y, m: mo, amount: it.amount, method: 'העברה בנקאית', date: it.date, note: `בנק: ${it.desc.slice(0, 60)}`, ref: it.ref, txKey: it.key, payer: M.payerKey(it.desc), autoComment: cmt });
+            d.bankSeen[it.key] = true; if (it.refKey) d.refSeen[it.refKey] = true;
+            out.pending++;
+          }
+        }
+        return out;
+      },
       async approvePending(id, apt, learn) {
         const d = await this.load(); const it = d.pending.find((x) => x.id === id);
         if (!it) throw new Error('לא נמצא');
