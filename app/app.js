@@ -43,12 +43,10 @@ Vaad.mountSwitcher($('#bsel'), ME);
 /* ---------- menu and routing: one flat list of screens, ← בית on every screen but home ---------- */
 const SCREENS = [
   ['home', 'בית', '🏠', '', 'home'],
-  ['import', 'ייבוא מהבנק', '📥', 'כספים', 'import', () => STAFF],
   ['bank', 'תנועות בנק', '🏦', 'כספים', 'bank', () => STAFF],
   ['summary', 'גבייה מול הוצאות', '📊', 'כספים', 'summary', () => STAFF],
   ['expenses', 'הוצאות', '🧾', 'כספים', 'expenses', () => STAFF],
   ['tariffs', 'תעריפים', '💰', 'כספים', 'tariffs', () => STAFF],
-  ['pending', 'תשלומים ממתינים', '⏳', 'כספים', 'pending', () => STAFF],
   ['backup', 'גיבוי נתונים', '💾', 'כספים', 'more', () => STAFF],
   ['everyone', 'אנשים', '👥', 'אנשים', 'people', () => STAFF],
   ['apts', 'דירות ודיירים', '🏘️', 'אנשים', 'people', () => STAFF],
@@ -60,7 +58,7 @@ const PANE = { apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers:
 const LEGACY = { people: 'everyone', buildings: 'list', more: 'share' };   // old #people/users style addresses
 const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
-const LOAD = { home: () => renderHome(), import: () => {}, pending: () => renderPending(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), bank: () => loadBank(), summary: () => renderSummary(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+const LOAD = { home: () => renderHome(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), bank: () => loadBank(), summary: () => renderSummary(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
 let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
@@ -92,7 +90,7 @@ function route() {
   sec = s; sub = u;
   const def = screens.find((x) => x[0] === s);
   $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
-  ['home', 'import', 'pending', 'bank', 'summary', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
+  ['home', 'bank', 'summary', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
   Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
   $('#scr').textContent = s === 'home' ? 'בית' : def[1];
   $('#homeBtn').classList.toggle('hide', s === 'home');
@@ -284,7 +282,7 @@ $('#sec-home').addEventListener('click', async (e) => {
   openId = openId === c.dataset.id ? null : c.dataset.id; renderHome();
 });
 
-/* ================= BANK IMPORT ================= */
+/* ================= BANK FILE UPLOAD (review panel on the bank movements screen) ================= */
 let IMP = null; let FILE = null;
 $('#bankFile').onchange = (e) => { FILE = e.target.files[0]; $('#fromDate').value = ''; preview(); };
 $('#reload').onclick = () => FILE && preview();
@@ -298,6 +296,7 @@ async function preview() {
   for (const it of IMP.items) if (!it.sure) { it.suggest = it.apt; it.apt = null; it.tenancy = null; it.tenant = ''; it.allocations = []; }
   $('#impInfo').textContent = `בקובץ ${IMP.total} תנועות · כבר רשומות: ${IMP.known} · לפני ${IMP.from || '—'} (נחשבות כרשומות): ${IMP.before} · הפקדות חדשות לבדיקה: ${IMP.items.length} · חיובים להוצאות: ${IMP.expenses.length}`;
   renderImp();
+  await loadBank();
 }
 const allocText = (a) => a.map((x) => `${x.m}/${x.y}:${x.amount}`).join(', ');
 function parseAlloc(t) { return t.split(',').map((s) => s.trim()).filter(Boolean).map((s) => { const m = /^(\d{1,2})\/(\d{4}):(\d+(?:\.\d+)?)$/.exec(s); if (!m) throw new Error('פורמט חלוקה: 9/2026:570, 10/2026:570'); return { m: +m[1], y: +m[2], amount: +m[3] }; }); }
@@ -358,19 +357,23 @@ function renderSummary() {
       `<tr class="tot"><td>סה״כ</td><td class="n">${fmt(tot.collected)} ₪</td><td class="n">${fmt(tot.spent)} ₪</td><td class="n">${bal(tot.collected - tot.spent)}</td></tr>`
       : '<tr><td colspan="4" class="empty">עוד אין תשלומים או הוצאות.</td></tr>');
   const n = DB.pending.length;
-  $('#sumNote').innerHTML = n ? `${n} ${n === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} לאישור ולכן לא נספרים בסיכום. <a href="#pending">לאישור</a>` : '';
+  $('#sumNote').innerHTML = n ? `${n} ${n === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} לאישור ולכן לא נספרים בסיכום. <a href="#bank" data-kind="pending">לאישור</a>` : '';
 }
 
 /* ================= BANK RECORDS (every uploaded row, as the bank wrote it) ================= */
-let bList = [];
+let bList = []; let wantKind = '';
+const pendApt = (it) => { const m = /^הצעה: דירה (\d+)/.exec(it.autoComment || ''); return m ? +m[1] : ''; };
+const pendOf = (r) => DB.pending.find((p) => p.txKey === r.key);
+const refKeyOf = (r) => { const n = parseInt(r.ref, 10); return isNaN(n) ? null : `${r.date.slice(0, 4)}|${n}`; };
 const B_KIND = { payment: 'נרשמה כתשלום', pending: 'ממתינה לאישור', expense: 'נרשמה כהוצאה', ignored: 'הותעלמה', earlier: 'נרשמה קודם (אקסל)', none: 'עוד לא יובאה' };
 async function loadBank() {
   bList = await api('GET', '/api/bank');
   const years = [...new Set(bList.map((r) => +r.date.slice(0, 4)))].sort((a, b) => b - a);
-  const keep = { y: $('#bYear').value, m: $('#bMonth').value, k: $('#bKind').value };
+  const keep = { y: $('#bYear').value, m: $('#bMonth').value, k: wantKind || $('#bKind').value }; wantKind = '';
   $('#bYear').innerHTML = '<option value="">כל השנים</option>' + years.map((y) => `<option>${y}</option>`).join('');
   $('#bMonth').innerHTML = '<option value="">כל החודשים</option>' + MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
-  $('#bKind').innerHTML = '<option value="">כל המצבים</option>' + Object.entries(B_KIND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  const cnt = (k) => bList.filter((r) => r.status.kind === k).length;
+  $('#bKind').innerHTML = `<option value="">כל המצבים (${bList.length})</option>` + Object.entries(B_KIND).map(([k, v]) => `<option value="${k}">${v} (${cnt(k)})</option>`).join('');
   $('#bYear').value = keep.y && years.includes(+keep.y) ? keep.y : ''; $('#bMonth').value = keep.m || ''; $('#bKind').value = keep.k || '';
   renderBank();
 }
@@ -380,18 +383,62 @@ function renderBank() {
   const rows = bList.filter((r) => (!y || r.date.slice(0, 4) === y) && (!m || +r.date.slice(5, 7) === +m) && (!k || r.status.kind === k)
     && (!dir || (dir === 'in' ? r.amount > 0 : r.amount < 0)) && (!q || r.desc.includes(q) || String(r.ref).includes(q)));
   const sum = (f) => rows.filter(f).reduce((s, r) => s + r.amount, 0);
-  $('#bTotal').textContent = bList.length ? `${rows.length} מתוך ${bList.length} שורות · זכויות ${fmt2(sum((r) => r.amount > 0))} ₪ · חובות ${fmt2(-sum((r) => r.amount < 0))} ₪` : '';
+  $('#bTotal').textContent = bList.length ? `${rows.length} מתוך ${bList.length} שורות · הכנסות ${fmt2(sum((r) => r.amount > 0))} ₪ · הוצאות ${fmt2(-sum((r) => r.amount < 0))} ₪` : '';
+  const orphan = DB.pending.filter((p) => !bList.some((r) => r.key === p.txKey)).length;
+  if (orphan) $('#bTotal').textContent += ` · ${orphan} ${orphan === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} שהשורה שלהם עוד לא נשמרה כאן: העלו שוב את קובץ הבנק שמהם הגיעו כדי לאשר אותם.`;
   const what = (s) => {
     if (s.kind === 'payment') return `${B_KIND.payment}: דירה ${s.apts.join(', ')} <span class="mute">(${s.months.join(', ')})</span>`;
-    if (s.kind === 'pending') return `<a href="#pending">${B_KIND.pending}</a>`;
+    if (s.kind === 'pending') return `<b class="bad">${B_KIND.pending}</b>`;
     if (s.kind === 'expense') return `<a href="#expenses">${B_KIND.expense}</a>`;
     return s.kind === 'none' ? `<b class="bad">${B_KIND.none}</b>` : B_KIND[s.kind];
   };
   const dm = (d) => (d ? d.split('-').reverse().join('/') : '');
-  $('#bTable').innerHTML = '<tr><th>תאריך</th><th>יום ערך</th><th class="l">תיאור</th><th>זכות/חובה</th><th>יתרה</th><th>אסמכתא</th><th>עמלה</th><th>ערוץ</th><th class="l">מה קרה</th></tr>' +
-    (rows.length ? rows.map((r) => `<tr title="הועלה ${esc((r.uploadedAt || '').slice(0, 10))} ${esc(r.uploadedBy || '')}"><td>${dm(r.date)}</td><td>${dm(r.valueDate)}</td><td class="l">${esc(r.desc)}</td><td class="n"><b class="${r.amount < 0 ? 'bad' : 'good'}">${r.amount < 0 ? '−' : ''}${fmt2(Math.abs(r.amount))}</b></td><td class="n">${r.balance === null || r.balance === undefined ? '' : fmt2(r.balance)}</td><td>${esc(r.ref)}</td><td>${esc(r.fee)}</td><td>${esc(r.channel)}</td><td class="l">${what(r.status)}</td></tr>`).join('')
-      : `<tr><td colspan="9" class="empty">${bList.length ? 'אין שורות שמתאימות לסינון.' : 'עוד לא הועלה קובץ בנק. שורות נשמרות כאן ברגע שמעלים קובץ במסך ״ייבוא מהבנק״.'}</td></tr>`);
+  $('#bankTable').innerHTML = '<tr><th>תאריך</th><th>יום ערך</th><th class="l">תיאור</th><th>זכות/חובה</th><th>יתרה</th><th>אסמכתא</th><th>עמלה</th><th>ערוץ</th><th class="l">מה קרה</th><th class="l">קישור לדירה</th></tr>' +
+    (rows.length ? rows.map((r) => `<tr data-k="${esc(r.key)}" title="הועלה ${esc((r.uploadedAt || '').slice(0, 10))} ${esc(r.uploadedBy || '')}"><td>${dm(r.date)}</td><td>${dm(r.valueDate)}</td><td class="l">${esc(r.desc)}</td><td class="n"><b class="${r.amount < 0 ? 'bad' : 'good'}">${r.amount < 0 ? '−' : ''}${fmt2(Math.abs(r.amount))}</b></td><td class="n">${r.balance === null || r.balance === undefined ? '' : fmt2(r.balance)}</td><td>${esc(r.ref)}</td><td>${esc(r.fee)}</td><td>${esc(r.channel)}</td><td class="l">${what(r.status)}</td><td class="l act">${bankAct(r)}</td></tr>`).join('')
+      : `<tr><td colspan="10" class="empty">${bList.length ? 'אין שורות שמתאימות לסינון.' : 'עוד לא הועלה קובץ בנק. שורות נשמרות כאן ברגע שמעלים קובץ בכפתור למעלה.'}</td></tr>`);
 }
+
+// what can be done to a row: a waiting credit is approved or ignored; an unlinked credit is linked to an apartment (months split like in the upload review);
+// an unrecorded debit is recorded as an expense; any of them can be ignored
+function bankAct(r) {
+  const s = r.status;
+  const aptSel = (sel) => `<select class="apt"><option value="">דירה</option>${DB.apartments.map((a) => `<option ${a.apt === sel ? 'selected' : ''}>${a.apt}</option>`).join('')}</select>`;
+  const learn = '<label class="mute"><input type="checkbox" class="learn"> זכור</label>';
+  if (s.kind === 'pending') { const p = pendOf(r); return p ? `${aptSel(pendApt(p))} ${learn} <button class="b ok">אשר</button> <button class="g ign">התעלם</button>` : ''; }
+  if (s.kind === 'none' && r.amount > 0) return `${aptSel('')} <input class="al" placeholder="9/2026:570, 10/2026:570" style="width:190px"> ${learn} <button class="b lnk">קשר</button> <button class="g ign">התעלם</button>`;
+  if (s.kind === 'none' && r.amount < 0) return '<button class="b exp">רשום כהוצאה</button> <button class="g ign">התעלם</button>';
+  return '';
+}
+$('#bankTable').onchange = async (e) => {
+  const tr = e.target.closest('tr[data-k]'); if (!tr || !e.target.classList.contains('apt') || !tr.querySelector('.al')) return;
+  const r = bList.find((x) => x.key === tr.dataset.k); const apt = +e.target.value;
+  if (!apt) { tr.querySelector('.al').value = ''; return; }
+  try { const a = await api('GET', `/api/allocate?apt=${apt}&amount=${r.amount}&date=${r.date}`); tr.querySelector('.al').value = allocText(a.allocations); } catch (err) { toast(err.message); }
+};
+$('#bankTable').onclick = async (e) => {
+  const tr = e.target.closest('tr[data-k]'); const btn = e.target.closest('button'); if (!tr || !btn) return;
+  const r = bList.find((x) => x.key === tr.dataset.k); const base = { key: r.key, date: r.date, desc: r.desc, ref: r.ref, refKey: refKeyOf(r) };
+  const apt = +(tr.querySelector('.apt') || {}).value; const learn = !!(tr.querySelector('.learn') || {}).checked;
+  try {
+    if (btn.classList.contains('ok')) {
+      if (!apt) return toast('בחרו דירה');
+      await api('POST', '/api/pending/approve', { id: pendOf(r).id, apt, learn }); toast('התשלום אושר ונרשם');
+    } else if (btn.classList.contains('ign')) {
+      if (r.status.kind === 'pending') await api('POST', '/api/pending/ignore', { id: pendOf(r).id });
+      else await api('POST', '/api/import/commit', { items: [{ key: r.key, ignore: true }] });
+      toast('השורה הותעלמה');
+    } else if (btn.classList.contains('lnk')) {
+      if (!apt) return toast('בחרו דירה');
+      const al = parseAlloc(tr.querySelector('.al').value); if (!al.length) return toast('חסרה חלוקה לחודשים');
+      await api('POST', '/api/import/commit', { items: [{ ...base, amount: r.amount, apt, allocations: al, learn }] }); toast('התשלום נרשם');
+    } else if (btn.classList.contains('exp')) {
+      await api('POST', '/api/import/commit', { items: [{ ...base, amount: -r.amount, expense: true }] }); toast('נרשם כהוצאה');
+    } else return;
+    if (FILE) await preview(); else await loadBank();   // the upload review above must not keep offering what was just handled here
+    updatePend();
+  } catch (err) { toast(err.message); }
+};
+document.addEventListener('click', (e) => { if (e.target.closest('#pendBadge, [data-kind="pending"]')) wantKind = 'pending'; });
 ['#bYear', '#bMonth', '#bKind', '#bDir'].forEach((id) => { $(id).onchange = renderBank; }); $('#bQ').oninput = renderBank;
 
 /* ================= EXPENSES (read-only) ================= */
@@ -459,40 +506,12 @@ $('#tTable').onclick = async (e) => {
   try { await api('DELETE', '/api/tariff/' + b.dataset.deltar); toast('נמחק'); loadTariffs(); } catch (err) { toast(err.message); }
 };
 
-/* ================= PENDING PAYMENTS ================= */
-const pendApt = (it) => { const m = /^הצעה: דירה (\d+)/.exec(it.autoComment || ''); return m ? +m[1] : ''; };
+/* ================= WAITING PAYMENTS: the counter on the home screen (they are approved on the bank movements screen) ================= */
 function updatePend() {
   const n = DB ? DB.pending.length : 0; const b = $('#pendBadge');
   b.classList.toggle('hide', !n);
   b.textContent = `⏳ ${n} ${n === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} לאישור`;
 }
-function renderPending() {
-  const list = DB.pending; const apts = DB.apartments.map((a) => a.apt);
-  $('#pendCard').classList.toggle('hide', !list.length); $('#pendEmpty').classList.toggle('hide', !!list.length);
-  $('#pendTable').innerHTML = '<tr><th>תאריך</th><th>סכום</th><th class="l">תיאור והצעה</th><th>דירה</th><th>זכור</th><th></th></tr>' +
-    list.map((it) => `<tr data-id="${it.id}"><td>${fdate(it.date)}</td><td class="n">${fmt(it.amount)} ₪</td>
-    <td class="l">${esc(it.note)}<div class="mute">${esc(it.autoComment)}</div></td>
-    <td><select class="apt"><option value="">בחרו דירה</option>${apts.map((a) => `<option ${a === pendApt(it) ? 'selected' : ''}>${a}</option>`).join('')}</select></td>
-    <td><input type="checkbox" class="learn" title="זכור את המשלם הזה לפעם הבאה"></td>
-    <td><button class="b ok">אשר</button> <button class="g ign">התעלם</button></td></tr>`).join('');
-  updatePend();
-}
-$('#pendTable').onclick = async (e) => {
-  const tr = e.target.closest('tr[data-id]'); if (!tr) return;
-  const id = +tr.dataset.id;
-  try {
-    if (e.target.classList.contains('ok')) {
-      const apt = +tr.querySelector('.apt').value;
-      if (!apt) return toast('בחרו דירה');
-      await api('POST', '/api/pending/approve', { id, apt, learn: tr.querySelector('.learn').checked });
-      toast('התשלום אושר ונרשם');
-    } else if (e.target.classList.contains('ign')) {
-      await api('POST', '/api/pending/ignore', { id });
-      toast('התשלום הותעלם');
-    } else return;
-    renderPending();
-  } catch (err) { toast(err.message); }
-};
 
 /* ================= PEOPLE ================= */
 function syncAptField() { $('#uApt').style.display = $('#uRole').value === 'committee' ? 'none' : ''; }
