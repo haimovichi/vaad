@@ -16,7 +16,8 @@
     "test:backup": "node scripts/test-backup.mjs",
     "restore": "node scripts/restore-backup.js",
     "test:migration": "node scripts/test-migration.mjs",
-    "test": "node scripts/test-rls.mjs && node scripts/test-migration.mjs && node scripts/test-backup.mjs"
+    "test:parity": "node scripts/test-parity.mjs",
+    "test": "node scripts/test-rls.mjs && node scripts/test-migration.mjs && node scripts/test-backup.mjs && node scripts/test-parity.mjs"
   },
   "keywords": [],
   "author": "",
