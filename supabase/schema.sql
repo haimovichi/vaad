@@ -413,13 +413,57 @@ begin
   select p.i / 12, p.i % 12 + 1, p.take from parts p where p.take > 0 order by p.ord;
 end $$;
 
+-- ---------- credits the system cannot place with certainty wait for the committee ----------
+-- Save bank credits as pending payments: no apartment, with an automatic comment suggesting where each belongs
+-- (match_payer's answer). credits = [{key, refKey, ref, date, amount, desc}, ...]; amount > 0. A bank row that is
+-- already recorded (bank key or reference seen, or already saved as a payment or as pending) is skipped, so saving
+-- twice adds nothing. The rows are marked seen, so the next import does not list them again. Returns how many were
+-- added. Managers of the building only.
+create or replace function public.save_pending_credits(b bigint, credits jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  c jsonb; k text; rk text; amt numeric; d date; m record; note text; cmt text; added int := 0;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if jsonb_typeof(credits) is distinct from 'array' then raise exception 'credits must be a list'; end if;
+  for c in select * from jsonb_array_elements(credits) loop
+    k := nullif(c ->> 'key', ''); rk := nullif(c ->> 'refKey', '');
+    amt := (c ->> 'amount')::numeric; d := (c ->> 'date')::date;
+    if k is null or d is null or amt is null or amt <= 0 then raise exception 'each credit needs key, date and a positive amount'; end if;
+    if exists (select 1 from public.meta s where s.building_id = b and s.name = 'bankSeen' and s.value ? k)
+       or exists (select 1 from public.meta s where s.building_id = b and s.name = 'ignored' and s.value ? k)
+       or (rk is not null and exists (select 1 from public.meta s where s.building_id = b and s.name = 'refSeen' and s.value ? rk))
+       or exists (select 1 from public.payments p where p.building_id = b and p.tx_key = k)
+       or exists (select 1 from public.pending_payments p where p.building_id = b and p.tx_key = k)
+    then continue; end if;
+
+    select * into m from public.match_payer(b, coalesce(c ->> 'desc', ''));
+    cmt := case
+      when m.how = 'לא זוהה' then 'לא זוהה'
+      when m.apt is not null then 'הצעה: דירה ' || m.apt || ' (' || m.how || ')'
+      else 'דירות אפשריות: ' || array_to_string(m.candidates, ', ') || ' (' || m.how || ')'
+    end;
+    note := 'בנק: ' || left(coalesce(c ->> 'desc', ''), 60);
+    insert into public.pending_payments (building_id, y, m, amount, method, paid_on, note, ref, tx_key, auto_comment)
+    values (b, extract(year from d)::int, extract(month from d)::int, amt, 'העברה בנקאית', d, note, nullif(c ->> 'ref', ''), k, cmt);
+    insert into public.meta (building_id, name, value) values (b, 'bankSeen', jsonb_build_object(k, true))
+      on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(k, true);
+    if rk is not null then
+      insert into public.meta (building_id, name, value) values (b, 'refSeen', jsonb_build_object(rk, true))
+        on conflict (building_id, name) do update set value = public.meta.value || jsonb_build_object(rk, true);
+    end if;
+    added := added + 1;
+  end loop;
+  return added;
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);

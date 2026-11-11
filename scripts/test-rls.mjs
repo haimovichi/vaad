@@ -477,6 +477,64 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     report(Array.isArray(pay) && pay[0].n === 1, 'committee1', 'payments still holds only real payments', 1, Array.isArray(pay) ? pay[0].n : pay);
   }
 
+  // save_pending_credits: unsure credits are stored without an apartment, with a suggestion
+  {
+    const setup = `
+      insert into apartments(building_id, apt) values (1,10),(1,11),(1,12),(1,13);
+      insert into users(first_name, last_name, phone) values ('דוד','כהן','m-10'),('שרה','כהן','m-11'),('משה','לוי','m-12'),('דוד','כהן','m-13');
+      insert into residents(building_id, key, apt, user_id, status) values
+        (1,'10-a',10,(select id from users where phone='m-10'),null),(1,'11-a',11,(select id from users where phone='m-11'),'פעיל'),
+        (1,'12-a',12,(select id from users where phone='m-12'),'פעיל'),(1,'13-a',13,(select id from users where phone='m-13'),'פעיל');
+      insert into payments(building_id, key, apt, y, m, amount, tx_key) values (1,'12-a',12,2026,1,570,'old-tx');`;
+    const credits = [
+      { key: 'k-last', refKey: 'r1', ref: '501', date: '2026-02-03', amount: 570, desc: 'העברה לוי' },
+      { key: 'k-shared', refKey: 'r2', ref: '502', date: '2026-02-04', amount: 100, desc: 'העברה כהן' },
+      { key: 'k-none', refKey: 'r3', ref: '503', date: '2026-02-05', amount: 50, desc: 'העברה אלמוני' },
+    ];
+    const withDb = async (email, fn) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        return await fn((sql, params) => db.query(sql, params));
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const save = (q, list) => q('select public.save_pending_credits(1, $1::jsonb) as n', [JSON.stringify(list)]).then((r) => r.rows[0].n);
+    const out = await withDb('c1@x.com', async (q) => {
+      const first = await save(q, credits);
+      const rows = (await q('select tx_key, amount::int amount, auto_comment, paid_on::text d, y, m, method from pending_payments where building_id = 1 order by tx_key')).rows;
+      const again = await save(q, credits);
+      const total = (await q('select count(*)::int n from pending_payments where building_id = 1')).rows[0].n;
+      const seen = (await q("select value from meta where building_id = 1 and name = 'bankSeen'")).rows[0].value;
+      const refs = (await q("select value from meta where building_id = 1 and name = 'refSeen'")).rows[0].value;
+      const noApt = (await q('select count(*)::int n from payments where apt is null')).rows[0].n;
+      const paid = (await q("select count(*)::int n from payments where tx_key in ('k-last','k-shared','k-none')")).rows[0].n;
+      return { first, rows, again, total, seen, refs, noApt, paid };
+    });
+    const row = (k) => (out === 'ERR' ? null : out.rows.find((r) => r.tx_key === k));
+    report(out !== 'ERR' && out.first === 3, 'committee1', 'saves the three unsure credits', 3, out === 'ERR' ? out : out.first);
+    report(row('k-last')?.auto_comment === 'הצעה: דירה 12 (שם משפחה בלבד)', 'committee1', 'last name only: the comment suggests the apartment', 'הצעה: דירה 12 (שם משפחה בלבד)', row('k-last')?.auto_comment);
+    report(row('k-shared')?.auto_comment === 'דירות אפשריות: 10, 11, 13 (כמה דירות לאותו שם)', 'committee1', 'a shared name: the comment lists the candidate apartments', 'דירות אפשריות: 10, 11, 13 (כמה דירות לאותו שם)', row('k-shared')?.auto_comment);
+    report(row('k-none')?.auto_comment === 'לא זוהה', 'committee1', 'an unknown payer is stored with "לא זוהה"', 'לא זוהה', row('k-none')?.auto_comment);
+    report(row('k-last')?.amount === 570 && row('k-last')?.d === '2026-02-03' && row('k-last')?.y === 2026 && row('k-last')?.m === 2 && row('k-last')?.method === 'העברה בנקאית', 'committee1', 'amount, date and month are kept', 'ok', JSON.stringify(row('k-last')));
+    report(out !== 'ERR' && out.again === 0 && out.total === 3, 'committee1', 'saving the same bank rows twice adds nothing', '0 / 3', out === 'ERR' ? out : `${out.again} / ${out.total}`);
+    report(out !== 'ERR' && out.seen['k-last'] && out.seen['k-shared'] && out.seen['k-none'] && out.refs.r1 && out.refs.r3, 'committee1', 'the rows are marked as seen for the next import', 'seen', out === 'ERR' ? out : JSON.stringify(out.seen));
+    report(out !== 'ERR' && out.noApt === 0 && out.paid === 0, 'committee1', 'no payment was created: payments is unchanged', '0 / 0', out === 'ERR' ? out : `${out.noApt} / ${out.paid}`);
+    const dup = await withDb('c1@x.com', async (q) => save(q, [{ key: 'old-tx', date: '2026-02-03', amount: 5, desc: 'x' }, { key: 'same', date: '2026-02-03', amount: 5, desc: 'x' }, { key: 'same', date: '2026-02-03', amount: 5, desc: 'x' }]));
+    report(dup === 1, 'committee1', 'a row already saved as a payment, and a row twice in one batch, are added at most once', 1, dup);
+    const bad = await withDb('c1@x.com', async (q) => save(q, [{ key: 'neg', date: '2026-02-03', amount: -5, desc: 'x' }]));
+    report(bad === 'ERR', 'committee1', 'refuses a credit that is not positive', 'ERR', bad);
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const n = await withDb(email, async (q) => save(q, credits));
+      report(n === 3, who, 'save_pending_credits: allowed', 3, n);
+    }
+    for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['committee2', 'c2@x.com'], ['anon', null]]) {
+      const n = await withDb(email, async (q) => save(q, credits));
+      report(n === 'ERR', who, 'save_pending_credits: refused', 'ERR', n);
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }
