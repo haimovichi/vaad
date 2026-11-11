@@ -944,6 +944,51 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // expense comment: the only thing that can change
+  {
+    const setup = `
+      insert into expenses(building_id, y, m, d, category, descr, amount, method, note) values
+        (1, 2026, 3, 5, 'חשמל', 'חשבון חשמל', 300, 'העברה', 'n1'), (2, 2026, 3, 7, 'מים', 'חשבון מים', 100, 'העברה', '');`;
+    const as = async (email, sql) => {
+      await db.exec('begin');
+      try {
+        await db.exec(setup);
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        return (await db.query(sql)).rows;
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const n = (r) => (r === 'ERR' ? r : r.length);
+    const e1 = "building_id = 1";
+    const c1 = await as('c1@x.com', `update expenses set comment = 'שולם בהעברה' where ${e1} returning comment`);
+    report(c1 !== 'ERR' && c1.length === 1 && c1[0].comment === 'שולם בהעברה', 'committee1', 'writes the comment of an expense of their building', 'שולם בהעברה', c1 === 'ERR' ? c1 : c1.length);
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await as(email, `update expenses set comment = 'x' where ${e1} returning id`);
+      report(r !== 'ERR' && r.length === 1, who, 'writes a comment', 1, n(r));
+    }
+    for (const col of ['y = 2027', 'm = 1', 'd = 1', "category = 'x'", "descr = 'x'", 'amount = 1', "method = 'x'", "note = 'x'", 'building_id = 2']) {
+      for (const [who, email] of [['committee1', 'c1@x.com'], ['super', 'super@x.com']]) {
+        const r = await as(email, `update expenses set ${col} where ${e1} returning id`);
+        report(r === 'ERR' || r.length === 0, who, `cannot change an imported field (${col.split(' ')[0]})`, 'BLOCKED', n(r));
+      }
+    }
+    const both = await as('c1@x.com', `update expenses set comment = 'x', amount = 1 where ${e1} returning id`);
+    report(both === 'ERR', 'committee1', 'a comment change cannot carry an imported field along', 'ERR', n(both));
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const r = await as(email, `update expenses set comment = 'x' where ${e1} returning id`);
+      report(r === 'ERR' || r.length === 0, who, 'cannot comment on an expense of building 1', 'BLOCKED', n(r));
+    }
+    // even with full database rights (the SQL editor) an imported field cannot be changed by accident
+    await db.exec('begin');
+    let editorBlocked = false; let editorComment = false;
+    try { await db.exec(setup); try { await db.exec('update expenses set amount = 999'); } catch (e) { editorBlocked = true; } finally { await db.exec('rollback'); } } catch (e) { await db.exec('rollback'); }
+    await db.exec('begin');
+    try { await db.exec(setup); await db.exec("update expenses set comment = 'ok'"); editorComment = (await db.query("select count(*)::int n from expenses where comment = 'ok'")).rows[0].n === 2; } finally { await db.exec('rollback'); }
+    report(editorBlocked && editorComment, 'sql', 'the SQL editor can write comments but not the imported fields', 'locked', `${editorBlocked}/${editorComment}`);
+    const colDefault = (await db.query("select column_default, is_nullable from information_schema.columns where table_name = 'expenses' and column_name = 'comment'")).rows[0];
+    report(colDefault && colDefault.is_nullable === 'NO' && /''/.test(colDefault.column_default), 'sql', 'the comment column exists and is empty by default', "''", colDefault ? colDefault.column_default : 'none');
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

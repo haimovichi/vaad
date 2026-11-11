@@ -359,14 +359,18 @@ function renderExpenses() {
     .sort((a, b) => a.m - b.m || (a.d || 0) - (b.d || 0) || a.id - b.id);
   const sum = (l) => l.reduce((s, e) => s + e.amount, 0);
   $('#xTotal').textContent = `סה״כ ${y}: ${fmt(sum(rows))} ₪ · ${rows.length} הוצאות`;
-  let h = '<tr><th>תאריך</th><th class="l">קטגוריה</th><th class="l">תיאור</th><th>סכום</th><th>אמצעי</th></tr>';
+  let h = '<tr><th>תאריך</th><th class="l">קטגוריה</th><th class="l">תיאור</th><th>סכום</th><th>אמצעי</th><th class="l">הערה</th></tr>';
   for (let m = 1; m <= 12; m++) {
     const ms = rows.filter((e) => e.m === m); if (!ms.length) continue;
-    h += `<tr><td colspan="5" class="l"><b>${MF[m - 1]}</b> <span class="mute">· ${fmt(sum(ms))} ₪</span></td></tr>`;
-    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l">${esc(e.category)}</td><td class="l">${esc(e.desc)}</td><td class="n">${fmt(e.amount)} ₪</td><td>${esc(e.method)}</td></tr>`).join('');
+    h += `<tr><td colspan="6" class="l"><b>${MF[m - 1]}</b> <span class="mute">· ${fmt(sum(ms))} ₪</span></td></tr>`;
+    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l">${esc(e.category)}</td><td class="l">${esc(e.desc)}</td><td class="n">${fmt(e.amount)} ₪</td><td>${esc(e.method)}</td><td class="l"><input class="xc" data-id="${e.id}" value="${esc(e.comment)}" placeholder="הערה" style="width:170px"></td></tr>`).join('');
   }
   $('#xTable').innerHTML = rows.length ? h : '<tr><td class="empty">אין הוצאות בשנה ובקטגוריה שנבחרו.</td></tr>';
 }
+$('#xTable').onchange = async (e) => {
+  const inp = e.target.closest('.xc'); if (!inp) return;
+  try { await api('PUT', '/api/expense', { id: inp.dataset.id, comment: inp.value }); toast('ההערה נשמרה'); } catch (err) { toast(err.message); }
+};
 $('#xYear').onchange = renderExpenses; $('#xCat').onchange = renderExpenses;
 
 /* ================= TARIFFS ================= */

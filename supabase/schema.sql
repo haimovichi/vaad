@@ -157,6 +157,19 @@ create table if not exists public.expenses (
   building_id bigint not null references public.buildings(id) on delete cascade,
   y int, m int, d int, category text, descr text, amount numeric, method text, note text
 );
+-- the committee's own remark on an expense: the only column anyone can change
+alter table public.expenses add column if not exists comment text not null default '';
+-- every other column is imported (workbook, bank report) and locked: not even the SQL editor edits it by accident
+create or replace function public.expenses_lock() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  if (to_jsonb(new) - 'comment') is distinct from (to_jsonb(old) - 'comment') then
+    raise exception 'imported expense fields are locked: only the comment can change' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists expenses_lock on public.expenses;
+create trigger expenses_lock before update on public.expenses for each row execute function public.expenses_lock();
 
 -- bankSeen / refSeen / aliases / ignored / settings
 create table if not exists public.meta (
@@ -809,10 +822,13 @@ begin
 end $$;
 
 -- expenses come from the workbook migration and the bank report (loaded in the SQL editor), never from the app: whoever
--- manages the building reads them; nobody (the super user included) adds, changes or deletes them through the app
+-- manages the building reads them and writes the comment; nobody (the super user included) adds or deletes them, or changes
+-- anything but the comment, through the app
 create policy manage_read on public.expenses for select to authenticated using (public.can_manage(building_id));
+create policy manage_comment on public.expenses for update to authenticated using (public.can_manage(building_id)) with check (public.can_manage(building_id));
 revoke insert, update, delete on public.expenses from authenticated;
 grant select on public.expenses to authenticated;
+grant update (comment) on public.expenses to authenticated;   -- column grant: nothing but the comment
 
 -- buildings: you see the ones you belong to; super user sees all. The name is the address; only the super user changes it. Create/delete: functions / SQL editor only
 create policy member_read  on public.buildings for select to authenticated using (public.is_super() or public.is_manager_of(id) or public.is_member_any(id));

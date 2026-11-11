@@ -205,7 +205,7 @@ window.Vaad = (function () {
           residents: res.map((r) => fromResident(r, users, accts)),
           owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { id: o.id, apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
           tariffs: tar.map((t) => ({ id: t.id, year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
-          payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: exp.map((e) => ({ id: e.id, y: e.y, m: e.m, d: e.d, category: e.category || '', desc: e.descr || '', amount: num(e.amount), method: e.method || '', note: e.note || '' })),
+          payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: exp.map((e) => ({ id: e.id, y: e.y, m: e.m, d: e.d, category: e.category || '', desc: e.descr || '', amount: num(e.amount), method: e.method || '', note: e.note || '', comment: e.comment || '' })),
           bankSeen: m.bankSeen || {}, refSeen: m.refSeen || {}, aliases: m.aliases || {}, ignored: m.ignored || {},
           settings: Object.assign({ title: 'ועד הבית', showNames: false, showDebt: true }, m.settings || {}),
         };
@@ -249,6 +249,10 @@ window.Vaad = (function () {
         if (!uid) throw new Error('אין אדם רשום בדיירות הזו');
         const { error } = await c.rpc('edit_person', { b: B, uid, p_first: first, p_last: last, p_phone: phone });
         if (error) throw new Error(error.code === '42501' ? 'אי אפשר לערוך אדם שקשור גם לבניין אחר' : error.message);
+      },
+      async setExpenseComment(id, comment) {
+        const { data, error } = await c.from('expenses').update({ comment }).eq('id', id).eq('building_id', B).select('id');
+        if (error || !data.length) throw new Error('אין לך הרשאה לערוך את ההערה');
       },
       async addTariff(t) {
         const row = ok(await c.from('tariffs').insert({ building_id: B, year: t.year, month: t.month, apt: t.apt, amount: t.amount, note: t.note || null }).select().single());
@@ -404,6 +408,7 @@ window.Vaad = (function () {
       async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
       async addApartment() {},
+      async setExpenseComment() {},
       async addTenancy(t) {
         const d = await this.load();
         let key = `${t.apt}-${t.last}`; let n = 1; while (d.residents.some((r) => r.key === key)) key = `${t.apt}-${t.last}-${++n}`;

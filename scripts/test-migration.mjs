@@ -54,8 +54,9 @@ const shape = async (d) => ({
   policies: (await d.query("select tablename, policyname, cmd, roles::text r, qual, with_check from pg_policies where schemaname = 'public' order by 1, 2")).rows,
   functions: (await d.query("select proname, prosecdef, pg_get_functiondef(oid) def from pg_proc where pronamespace = 'public'::regnamespace order by 1")).rows,
   grants: (await d.query("select table_name, privilege_type from information_schema.role_table_grants where table_schema = 'public' and grantee = 'authenticated' order by 1, 2")).rows,
-  columns: (await d.query("select table_name, column_name, data_type, is_nullable from information_schema.columns where table_schema = 'public' and table_name in ('members','users','residents','owners','bank_accounts','pending_payments','payments') order by 1, 2")).rows,
+  columns: (await d.query("select table_name, column_name, data_type, is_nullable from information_schema.columns where table_schema = 'public' and table_name in ('members','users','residents','owners','bank_accounts','pending_payments','payments','expenses') order by 1, 2")).rows,
   constraints: (await d.query("select conrelid::regclass::text t, conname, pg_get_constraintdef(oid) def from pg_constraint where conrelid in ('public.members'::regclass, 'public.users'::regclass, 'public.bank_accounts'::regclass, 'public.residents'::regclass, 'public.owners'::regclass) order by 1, 2")).rows,
+  triggers: (await d.query("select tgrelid::regclass::text t, tgname from pg_trigger where not tgisinternal order by 1, 2")).rows,
   indexes: (await d.query("select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename in ('members','super_users','users') order by 1")).rows,
 });
 const [s1, s2] = [await shape(a), await shape(fresh)];
