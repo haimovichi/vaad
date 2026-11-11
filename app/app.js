@@ -111,7 +111,7 @@ if (homeTabs.includes('mine')) $('.tab[data-t="mine"]').textContent = myApts.len
 function rowsFor(y) {
   if (STAFF) {
     const g = calc.grid(DB, y); const cnt = {}; g.forEach((r) => { cnt[r.apt] = (cnt[r.apt] || 0) + 1; });
-    return g.map((r) => ({ apt: r.apt, key: r.key, name: r.name, tag: cnt[r.apt] > 1 ? (r.left ? 'דייר קודם' : 'דייר נוכחי') : undefined, left: r.left, debt: r.debt, balance: r.balance, months: r.months.map((c) => c.status), cells: r.months }));
+    return g.map((r) => ({ apt: r.apt, key: r.key, name: r.name, tag: cnt[r.apt] > 1 ? (r.left ? 'דייר קודם' : 'דייר נוכחי') : undefined, left: r.left, debt: r.debt, balance: r.balance, months: r.months.map((c) => c.status), cells: r.months, vacant: r.vacant }));
   }
   return (SNAP.grids[y] || []).map((r) => ({ ...r, left: r.tag === 'דייר קודם' }));
 }
@@ -123,6 +123,7 @@ function staffPayments(row, y) {
 }
 const isOwing = (r) => r.debt > 0 || (r.debt === undefined && r.months.some((s) => s === 'unpaid' || s === 'partial'));
 function badge(r) {
+  if (r.vacant) return '<span class="badge b-old">ללא דייר</span>';
   const cur = r.months[now.m - 1];
   if (r.debt > 0) return `<span class="badge ${cur === 'partial' ? 'b-warn' : 'b-bad'}">חוב ${fmt(r.debt)} ₪</span>`;
   if (r.debt === undefined && isOwing(r)) return '<span class="badge b-bad">חסר תשלום</span>';
@@ -132,6 +133,7 @@ function badge(r) {
   return '<span class="badge b-ok">שולם</span>';
 }
 function missing(r) {
+  if (r.vacant) return '';
   const m = r.months.map((s, i) => (s === 'unpaid' || s === 'partial' ? MF[i] + (s === 'partial' ? ' (חלקי)' : '') : null)).filter(Boolean);
   if (m.length) return 'חסר: ' + m.join(', ') + '.';
   if (r.debt > 0) return 'יש חוב מחודשים בשנים קודמות.';
@@ -148,6 +150,7 @@ function payTable(list, title) {
 }
 // full detail for whoever manages the building: exact amounts per month, balance, payments with dates, add and delete
 function detailPanel(r) {
+  if (r.vacant) return '<div class="pays"><div class="foot">עוד לא נרשם דייר בדירה. הוסיפו דייר כדי לרשום תשלומים.</div></div>';
   const list = staffPayments(r, year);
   const cells = r.cells.filter((c) => c.status !== 'na');
   const total = list.reduce((s, p) => s + p.amount, 0);
@@ -193,7 +196,7 @@ let seq = 0;
 async function renderHome() {
   updatePend();
   $$('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
-  const all = rowsFor(year); const current = all.filter((r) => !r.left); const idx = now.m - 1;
+  const all = rowsFor(year); const current = all.filter((r) => !r.left && !r.vacant); const idx = now.m - 1;
   const paidNow = current.filter((r) => ['paid', 'prepaid'].includes(r.months[idx])).length;
   const owing = new Set(all.filter(isOwing).map((r) => r.apt)).size;
   $('#sum').innerHTML = BOARD && year === now.y ? `<div><small>שילמו ${MF[idx]}</small><b>${paidNow} מתוך ${current.length}</b></div><div><small>דירות עם חוב</small><b class="${owing ? 'bad' : ''}">${owing}</b></div>` : '';
@@ -422,6 +425,13 @@ $('#pTable').onclick = async (e) => {
   const a = e.target.closest('a[data-open]'); if (!a) return; e.preventDefault(); Vaad.choose(a.dataset.open); location.href = 'app.html' + Vaad.keep + '#everyone';
 };
 
+$('#aAdd').onclick = async () => {
+  try {
+    await api('POST', '/api/apartment', { apt: $('#aNum').value, floor: $('#aFloor').value, rooms: $('#aRooms').value, sqm: $('#aSqm').value });
+    ['#aNum', '#aFloor', '#aRooms', '#aSqm'].forEach((i) => { $(i).value = ''; });
+    toast('הדירה נוספה'); loadApts();
+  } catch (e) { toast(e.message); }
+};
 async function loadApts() {
   const d = await api('GET', '/api/apartments');
   let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">דיירים (פעילים)</th><th>טלפון</th><th>חשבון בנק</th></tr>';

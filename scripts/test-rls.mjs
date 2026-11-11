@@ -688,6 +688,33 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     }
   }
 
+  // adding apartments to a building
+  {
+    const tryAs = async (email, sql) => {
+      await db.exec('begin');
+      try {
+        if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
+        const r = await db.query(sql);
+        return r.rows;
+      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    };
+    const added = await tryAs('c1@x.com', "insert into apartments(building_id, apt, floor, rooms, sqm) values (1, 50, '3', 4, 95) returning apt, floor, rooms, sqm");
+    report(added !== 'ERR' && added.length === 1 && added[0].floor === '3' && added[0].rooms === 4 && added[0].sqm === 95, 'committee1', 'adds an apartment with floor, rooms and sqm', 1, added === 'ERR' ? added : added.length);
+    for (const [who, email] of [['manager12', 'm12@x.com'], ['super', 'super@x.com']]) {
+      const r = await tryAs(email, "insert into apartments(building_id, apt) values (1, 51) returning apt");
+      report(r !== 'ERR' && r.length === 1, who, 'adds an apartment', 1, r === 'ERR' ? r : r.length);
+    }
+    const dup = await tryAs('c1@x.com', "insert into apartments(building_id, apt) values (1, 8) returning apt");
+    report(dup === 'ERR', 'committee1', 'a second apartment 8 is refused', 'ERR', dup === 'ERR' ? dup : dup.length);
+    const zero = await tryAs('c1@x.com', "insert into apartments(building_id, apt) values (1, 0) returning apt");
+    report(zero === 'ERR', 'committee1', 'apartment number 0 is refused', 'ERR', zero === 'ERR' ? zero : zero.length);
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const r = await tryAs(email, "insert into apartments(building_id, apt) values (1, 52) returning apt");
+      report(r === 'ERR' || r.length === 0, who, 'cannot add an apartment to building 1', 'BLOCKED', r === 'ERR' ? r : r.length);
+    }
+  }
+
   console.log(bad ? `\n${bad} of ${n} FAILED` : `\nall ${n} passed`);
   process.exit(bad ? 1 : 0);
 }

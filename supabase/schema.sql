@@ -86,6 +86,9 @@ create table if not exists public.apartments (
   primary key (building_id, apt)
 );
 
+alter table public.apartments drop constraint if exists apartments_apt_positive;
+alter table public.apartments add  constraint apartments_apt_positive check (apt > 0);
+
 create table if not exists public.residents (
   id bigint generated always as identity primary key,
   building_id bigint not null references public.buildings(id) on delete cascade,

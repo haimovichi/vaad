@@ -233,6 +233,10 @@ window.Vaad = (function () {
         return { building: { id: B, name: b ? b.name : String(B) }, tables };
       },
       async deletePayment(id) { ok(await c.from('payments').delete().eq('id', id).eq('building_id', B)); },
+      async addApartment(a) {
+        const { error } = await c.from('apartments').insert({ building_id: B, apt: a.apt, floor: a.floor || null, rooms: a.rooms, sqm: a.sqm });
+        if (error) throw new Error(error.code === '23505' ? `דירה ${a.apt} כבר קיימת בבניין` : error.code === '42501' ? 'אין לך הרשאה להוסיף דירות' : error.message);
+      },
       async proposeCredits(list) { return ok(await c.rpc('propose_credits', { b: B, credits: list.map((t) => ({ key: t.key, date: t.date, desc: t.desc, amount: t.amount, apt: t.apt || null })) })); },
       async saveImport(items) { return ok(await c.rpc('save_import', { b: B, items })); },
       async approvePending(id, apt, learn) { ok(await c.rpc('approve_pending', { pid: id, a: apt, learn })); },
@@ -374,6 +378,7 @@ window.Vaad = (function () {
       async addPayments(rows) { return rows.map((r) => ({ ...r, id: nextId++ })); },
       async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
+      async addApartment() {},
       // demo mode only: the same rules as the server functions propose_credits and save_import, in memory
       async proposeCredits(list) {
         const d = await this.load(); const M = window.VaadLib.match;
