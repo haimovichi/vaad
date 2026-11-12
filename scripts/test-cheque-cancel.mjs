@@ -1,0 +1,25 @@
+// A cheque deposit and its cancellation cancel each other (lib/bank.js chequeCancellations) and are never proposed by the import.
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { chequeCancellations } = require('../lib/bank');
+const { freshCredits } = require('../lib/match');
+let bad = 0;
+const check = (n, ok) => { console.log((ok ? 'ok   ' : 'FAIL ') + n); if (!ok) bad++; };
+const r = (date, desc, amount) => ({ key: `${date}|${desc}|${amount}`, date, desc, amount, ref: '1', refKey: null });
+const dep = r('2026-09-29', 'הפקדת שיק שמספרה 000030', 570);
+const can = r('2026-09-30', 'ביטול הפקדת שיקים : 000030', -570);
+const m = chequeCancellations([dep, can, r('2026-02-22', 'הפקדת שיק שמספרה 000036', 1000)]);
+check('the deposit and its cancellation point at each other', m.get(dep.key)?.pair === can.key && m.get(can.key)?.pair === dep.key && m.get(dep.key).deposit && !m.get(can.key).deposit);
+check('other deposits are untouched', m.size === 2);
+check('a different amount does not pair', chequeCancellations([dep, { ...can, amount: -500 }]).size === 0);
+check('a different cheque number does not pair', chequeCancellations([dep, r('2026-09-30', 'ביטול הפקדת שיקים : 000031', -570)]).size === 0);
+check('a cancellation before the deposit does not pair', chequeCancellations([r('2026-09-01', 'ביטול הפקדת שיקים : 000030', -570), dep]).size === 0);
+const old = r('2026-03-01', 'הפקדת שיק שמספרה 000030', 570);
+const m2 = chequeCancellations([old, dep, can]);
+check('a repeated cheque number pairs with the latest earlier deposit', m2.get(can.key).pair === dep.key && !m2.has(old.key));
+const db = { bankSeen: {}, ignored: {}, refSeen: {} };
+const f = freshCredits(db, [dep, can], null);
+check('the import proposes neither the deposit nor the cancellation', f.fresh.length === 0 && f.expenses.length === 0);
+const f2 = freshCredits(db, [can], null);
+check('a cancellation alone (deposit in another file) is not an expense', f2.expenses.length === 0);
+process.exit(bad ? 1 : 0);

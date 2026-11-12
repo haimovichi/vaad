@@ -366,7 +366,7 @@ let bList = []; let wantKind = '';
 const pendApt = (it) => { const m = /^הצעה: דירה (\d+)/.exec(it.autoComment || ''); return m ? +m[1] : ''; };
 const pendOf = (r) => DB.pending.find((p) => p.txKey === r.key);
 const refKeyOf = (r) => { const n = parseInt(r.ref, 10); return isNaN(n) ? null : `${r.date.slice(0, 4)}|${n}`; };
-const B_KIND = { payment: 'נרשמה כתשלום', pending: 'ממתינה לאישור', expense: 'נרשמה כהוצאה', ignored: 'הותעלמה', earlier: 'נרשמה קודם (אקסל)', none: 'עוד לא יובאה' };
+const B_KIND = { payment: 'נרשמה כתשלום', pending: 'ממתינה לאישור', expense: 'נרשמה כהוצאה', ignored: 'הותעלמה', earlier: 'נרשמה קודם (אקסל)', cancelled: 'שיק שהופקד ובוטל', none: 'עוד לא יובאה' };
 async function loadBank() {
   bList = await api('GET', '/api/bank');
   const years = [...new Set(bList.map((r) => +r.date.slice(0, 4)))].sort((a, b) => b - a);
@@ -391,6 +391,7 @@ function renderBank() {
     if (s.kind === 'payment') return `${B_KIND.payment}: דירה ${s.apts.join(', ')} <span class="mute">(${s.months.join(', ')})</span>`;
     if (s.kind === 'pending') return `<b class="bad">${B_KIND.pending}</b>`;
     if (s.kind === 'expense') return `<a href="#expenses">${B_KIND.expense}</a>`;
+    if (s.kind === 'cancelled') return `${B_KIND.cancelled} <span class="mute">(${s.deposit ? 'ההפקדה בוטלה' : 'ביטול של הפקדה'} — לא הכנסה ולא הוצאה)</span>${s.warn ? ' <b class="bad">⚠ ההפקדה כבר נרשמה — יש לבטל את הרישום</b>' : ''}`;
     if (s.kind === 'earlier' && s.expense) return `${B_KIND.earlier}: הוצאה${s.expense.category ? ' — ' + esc(s.expense.category) : ''}`;
     return s.kind === 'none' ? `<b class="bad">${B_KIND.none}</b>` : B_KIND[s.kind];
   };

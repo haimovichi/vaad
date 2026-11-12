@@ -17,8 +17,8 @@
     "restore": "node scripts/restore-backup.js",
     "test:migration": "node scripts/test-migration.mjs",
     "test:parity": "node scripts/test-parity.mjs",
-    "test:summary": "node scripts/test-summary.mjs && node scripts/test-bank-status.mjs",
-    "test": "node scripts/test-rls.mjs && node scripts/test-migration.mjs && node scripts/test-backup.mjs && node scripts/test-parity.mjs && node scripts/test-summary.mjs && node scripts/test-bank-status.mjs"
+    "test:summary": "node scripts/test-summary.mjs && node scripts/test-bank-status.mjs && node scripts/test-cheque-cancel.mjs",
+    "test": "node scripts/test-rls.mjs && node scripts/test-migration.mjs && node scripts/test-backup.mjs && node scripts/test-parity.mjs && node scripts/test-summary.mjs && node scripts/test-bank-status.mjs && node scripts/test-cheque-cancel.mjs"
   },
   "keywords": [],
   "author": "",
