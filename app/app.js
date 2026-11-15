@@ -286,7 +286,7 @@ $('#sec-home').addEventListener('click', async (e) => {
 
 /* ================= BANK FILE UPLOAD (review panel on the bank movements screen) ================= */
 let IMP = null; let FILE = null;
-$('#bankFile').onchange = (e) => { FILE = e.target.files[0]; $('#fromDate').value = ''; preview(); };
+$('#bankFile').onchange = (e) => { FILE = e.target.files[0]; preview(); };
 $('#reload').onclick = () => FILE && preview();
 // a file that is not loaded: say why where it stays visible, and forget it
 function rejectFile(msg) {
@@ -297,15 +297,13 @@ function rejectFile(msg) {
 async function preview() {
   if (!FILE) return;
   const buf = await FILE.arrayBuffer();
-  const from = $('#fromDate').value;
-  try { IMP = await api('POST', '/api/import/preview?from=' + from, buf); } catch (e) { return rejectFile(e.message); }
+  try { IMP = await api('POST', '/api/import/preview', buf); } catch (e) { return rejectFile(e.message); }
   if (IMP.needAccount) {   // the building has no bank account yet: the file's account becomes the building's account only if the user confirms it
     const a = IMP.needAccount;
     if (!confirm(`לבניין עוד לא הוגדר חשבון בנק.\nהקובץ שייך לחשבון ${a.number}${a.name ? `\n(${a.name})` : ''}.\nלקבוע אותו כחשבון הבנק של הבניין ולטעון את הקובץ?`)) return rejectFile('הקובץ לא נטען: חשבון הבנק של הבניין לא הוגדר.');
     try { await api('POST', '/api/bank/account', { account: a.number }); } catch (e) { return rejectFile(e.message); }
     return preview();
   }
-  if (!from && IMP.from) $('#fromDate').value = IMP.from;
   // a credit the server is not sure about waits for approval unless an apartment is picked here: the suggestion is only shown
   for (const it of IMP.items) if (!it.sure) { it.suggest = it.apt; it.apt = null; it.tenancy = null; it.tenant = ''; it.allocations = []; }
   $('#impInfo').textContent = `בקובץ ${IMP.total} תנועות · כבר רשומות: ${IMP.known} · לפני ${IMP.from || '—'} (נחשבות כרשומות): ${IMP.before} · הפקדות חדשות לבדיקה: ${IMP.items.length} · חיובים להוצאות: ${IMP.expenses.length}`;
