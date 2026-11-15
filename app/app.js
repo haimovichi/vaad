@@ -391,11 +391,12 @@ async function loadBank() {
   refreshBankInfo().then((i) => { $('#bBal').innerHTML = balLine(i); });
   const years = [...new Set(bList.map((r) => +r.date.slice(0, 4)))].sort((a, b) => b - a);
   const keep = { y: $('#bYear').value, m: $('#bMonth').value, k: wantKind || $('#bKind').value }; wantKind = '';
-  $('#bYear').innerHTML = '<option value="">כל השנים</option>' + years.map((y) => `<option>${y}</option>`).join('');
+  $('#bYear').innerHTML = years.map((y) => `<option>${y}</option>`).join('');
   $('#bMonth').innerHTML = '<option value="">כל החודשים</option>' + MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
   const cnt = (k) => bList.filter((r) => r.status.kind === k).length;
   $('#bKind').innerHTML = `<option value="">כל המצבים (${bList.length})</option>` + Object.entries(B_KIND).map(([k, v]) => `<option value="${k}">${v} (${cnt(k)})</option>`).join('');
-  $('#bYear').value = keep.y && years.includes(+keep.y) ? keep.y : ''; $('#bMonth').value = keep.m || ''; $('#bKind').value = keep.k || '';
+  // the current year unless the user picked another; with no rows this year, the newest year there is
+  $('#bYear').value = keep.y && years.includes(+keep.y) ? keep.y : String(years.includes(new Date().getFullYear()) ? new Date().getFullYear() : (years[0] || '')); $('#bMonth').value = keep.m || ''; $('#bKind').value = keep.k || '';
   renderBank();
 }
 const fmt2 = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
