@@ -856,6 +856,51 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
       const p = await as(email, (q) => q("select public.edit_person(1, (select id from users where phone='050-30'), 'x', 'y', 'z')"));
       report(a === 'ERR' && e === 'ERR' && p === 'ERR', who, 'add_tenancy, end_tenancy and edit_person are refused', 'ERR x3', `${a === 'ERR' ? 'ERR' : 'ok'} ${e === 'ERR' ? 'ERR' : 'ok'} ${p === 'ERR' ? 'ERR' : 'ok'}`);
     }
+
+    // a household of any size: add_household_member / remove_household_member
+    const join = (q, key, first, last, phone, b = 1) => q('select public.add_household_member($1, $2, $3, $4, $5) as u', [b, key, first, last, phone]).then((r) => r.rows[0].u);
+    const people = async (q, key) => (await q(`select (select first_name from users where id = r.user_id) a, (select first_name from users where id = r.user2_id) b,
+        coalesce((select string_agg(u.first_name, ',' order by rp.id) from resident_people rp join users u on u.id = rp.user_id where rp.resident_id = r.id), '') c
+        from residents r where r.key = $1`, [key])).rows[0];
+    const hh = await as('c1@x.com', async (q) => {
+      await join(q, '30-כהן', 'שרה', 'כהן', '050-31');
+      await join(q, '30-כהן', 'יוסי', 'כהן', '050-32');
+      await join(q, '30-כהן', 'נועה', 'כהן', '050-33');
+      const full = await people(q, '30-כהן');
+      await q("select public.remove_household_member(1, '30-כהן', (select id from users where first_name = 'דוד' and phone = '050-30'))");
+      const after = await people(q, '30-כהן');
+      return `${full.a}/${full.b}/${full.c} -> ${after.a}/${after.b}/${after.c}`;
+    });
+    report(hh === 'דוד/שרה/יוסי,נועה -> שרה/יוסי/נועה', 'committee1', 'a household takes any number of people and closes the gap when one leaves', 'דוד/שרה/יוסי,נועה -> שרה/יוסי/נועה', hh);
+    const dupe = await as('c1@x.com', async (q) => { await join(q, '30-כהן', 'שרה', 'כהן', '050-31'); await join(q, '30-כהן', 'שרה', 'כהן', '050-31'); });
+    report(dupe === 'ERR', 'committee1', 'the same person cannot join a household twice', 'ERR', dupe === 'ERR' ? dupe : 'ok');
+    const onlyOne = await as('c1@x.com', async (q) => {
+      await q("select public.remove_household_member(1, '30-כהן', (select id from users where phone='050-30'))");
+    });
+    report(onlyOne === 'ERR', 'committee1', 'removing the only person of a tenancy is refused', 'ERR', onlyOne === 'ERR' ? onlyOne : 'ok');
+    const otherB = await as('c1@x.com', (q) => join(q, '30-לוי', 'א', 'ב', '1', 2));
+    report(otherB === 'ERR', 'committee1', 'cannot add people to a tenancy of another building', 'ERR', otherB === 'ERR' ? otherB : 'ok');
+    const endedHh = await as('c1@x.com', async (q) => { await q("select public.end_tenancy(1, '30-כהן', 2026, 8)"); await join(q, '30-כהן', 'ר', 'ס', '9'); });
+    report(endedHh === 'ERR', 'committee1', 'cannot add people to a tenancy that ended', 'ERR', endedHh === 'ERR' ? endedHh : 'ok');
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const a = await as(email, (q) => join(q, '30-כהן', 'ר', 'ס', '9'));
+      report(a === 'ERR', who, 'add_household_member is refused', 'ERR', a === 'ERR' ? a : 'ok');
+    }
+    // an owner with a login who also lives in the apartment is one person, not two
+    const both = await as('c1@x.com', async (q) => {
+      await q("select public.add_owner(1, 30, 'שרה', 'כהן', '050-31', 'sara@x.com')");
+      await join(q, '30-כהן', 'שרה', 'כהן', '050-31');
+      const n = (await q("select count(*)::int n from users where first_name = 'שרה' and last_name = 'כהן'")).rows[0].n;
+      const inHh = (await q("select count(*)::int n from residents r join users u on u.id in (r.user_id, r.user2_id) where r.key = '30-כהן' and u.email = 'sara@x.com'")).rows[0].n;
+      return `${n}/${inHh}`;
+    });
+    report(both === '1/1', 'committee1', 'an owner with a login who also lives there is the same person', '1/1', both);
+    // a person of a third place in a household is found by name when matching a bank credit
+    const matched = await as('c1@x.com', async (q) => {
+      await join(q, '30-כהן', 'שרה', 'כהן', '050-31'); await join(q, '30-כהן', 'יוסי', 'כהן', '050-32'); await join(q, '30-כהן', 'נועה', 'לבנון', '050-33');
+      return (await q("select apt, how from public.match_payer(1, 'העברה נועה לבנון')")).rows[0];
+    });
+    report(matched && matched.apt === 30, 'committee1', 'a third household member is found by name in bank matching', 30, matched && matched.apt);
   }
 
   // add_owner / remove_owner: who owns an apartment, and their login as apartment owner

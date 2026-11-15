@@ -147,13 +147,15 @@ window.Vaad = (function () {
   // People live in the users table; tenancies and owners point at them. The app keeps its flat shape (first, last, phone1...).
   const fullName = (u) => [u && u.first_name, u && u.last_name].filter(Boolean).join(' ');
   const acctText = (accts, uid) => ((accts && accts.get(uid)) || []).map((x) => x.account).join(', ');   // a person's accounts as one list: "111, 222"
-  const fromResident = (r, users, accts) => {
+  const fromResident = (r, users, accts, extra) => {
     const a = users.get(r.user_id) || {}; const b = users.get(r.user2_id) || {};
-    return { id: r.id, key: r.key, apt: r.apt, userId: r.user_id || null, user2Id: r.user2_id || null, first: a.first_name || '', last: a.last_name || '', first2: b.first_name || '', last2: b.last_name || '', phone1: a.phone || '', phone2: b.phone || '', role: r.role || '', status: r.status || '', entryMonth: r.entry_month, entryYear: r.entry_year, exitMonth: r.exit_month, exitYear: r.exit_year, account: acctText(accts, r.user_id) };
+    // the people of the household beyond the first two
+    const others = ((extra && extra.get(r.id)) || []).map((x) => { const u = users.get(x.user_id) || {}; return { userId: x.user_id, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '' }; });
+    return { others, id: r.id, key: r.key, apt: r.apt, userId: r.user_id || null, user2Id: r.user2_id || null, first: a.first_name || '', last: a.last_name || '', first2: b.first_name || '', last2: b.last_name || '', phone1: a.phone || '', phone2: b.phone || '', role: r.role || '', status: r.status || '', entryMonth: r.entry_month, entryYear: r.entry_year, exitMonth: r.exit_month, exitYear: r.exit_year, account: acctText(accts, r.user_id) };
   };
   const userOut = (u, accts) => ({ id: u.id, email: u.email || '', first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, u.id) });
   const USER_COLS = { first: 'first_name', last: 'last_name', email: 'email', phone: 'phone' };
-  const fromTenantRow = (r) => ({ apt: r.apt, key: r.key, first: r.first_name || '', last: r.last_name || '', first2: r.first2 || '', last2: r.last2 || '', phone1: r.phone1 || '', phone2: r.phone2 || '', role: r.role || '' });
+  const fromTenantRow = (r) => ({ others: (r.others || []).map((o) => ({ first: o.first || '', last: o.last || '', phone: o.phone || '' })), apt: r.apt, key: r.key, first: r.first_name || '', last: r.last_name || '', first2: r.first2 || '', last2: r.last2 || '', phone1: r.phone1 || '', phone2: r.phone2 || '', role: r.role || '' });
 
   async function fetchUsers() { // every user this login may read (RLS decides), 1000 per request
     const out = [];
@@ -220,11 +222,12 @@ window.Vaad = (function () {
     const denied = () => new Error('רק מנהל העל יכול לערוך פרטי אנשים');
     return {
       async load() {
-        const [[apts, res, own, tar, pay, meta, pend, exp]] = await Promise.all([Promise.all(['apartments', 'residents', 'owners', 'tariffs', 'payments', 'meta', 'pending_payments', 'expenses'].map((t) => fetchAll(t, B))), refreshUsers()]);
+        const [[apts, res, own, tar, pay, meta, pend, exp, rpl]] = await Promise.all([Promise.all(['apartments', 'residents', 'owners', 'tariffs', 'payments', 'meta', 'pending_payments', 'expenses', 'resident_people'].map((t) => fetchAll(t, B))), refreshUsers()]);
         const m = Object.fromEntries(meta.map((r) => [r.name, r.value]));
+        const extra = new Map(); for (const x of rpl) { if (!extra.has(x.resident_id)) extra.set(x.resident_id, []); extra.get(x.resident_id).push(x); }
         return {
           apartments: apts.map((a) => ({ apt: a.apt, floor: a.floor || '', rooms: a.rooms, sqm: a.sqm })),
-          residents: res.map((r) => fromResident(r, users, accts)),
+          residents: res.map((r) => fromResident(r, users, accts, extra)),
           owners: own.map((o) => { const u = users.get(o.user_id) || {}; return { id: o.id, apt: o.apt, userId: o.user_id || null, first: u.first_name || '', last: u.last_name || '', phone: u.phone || '', account: acctText(accts, o.user_id), note: o.note || '' }; }),
           tariffs: tar.map((t) => ({ id: t.id, year: t.year, month: t.month, apt: t.apt, amount: num(t.amount), note: t.note || '' })),
           payments: pay.map(fromPayment), pending: pend.map(fromPending), expenses: exp.map((e) => ({ id: e.id, y: e.y, m: e.m, d: e.d, category: e.category || '', desc: e.descr || '', amount: num(e.amount), method: e.method || '', note: e.note || '', comment: e.comment || '', source: e.source || 'workbook', txKey: e.tx_key || undefined })),
@@ -239,10 +242,11 @@ window.Vaad = (function () {
       },
       async exportAll() { // every table of this building, as stored (the format scripts/restore-backup.js reads)
         const tables = {};
-        for (const t of ['apartments', 'residents', 'owners', 'tariffs', 'payments', 'pending_payments', 'expenses', 'bank_transactions', 'meta', 'snapshot']) tables[t] = await fetchAll(t, B);
+        for (const t of ['apartments', 'residents', 'resident_people', 'owners', 'tariffs', 'payments', 'pending_payments', 'expenses', 'bank_transactions', 'meta', 'snapshot']) tables[t] = await fetchAll(t, B);
         tables.members = ok(await c.from('members').select('*').eq('building_id', B).order('id'));
         const ids = new Set(); // the people this building refers to (users belong to no building)
         for (const r of tables.residents) { ids.add(r.user_id); ids.add(r.user2_id); }
+        for (const x of tables.resident_people) ids.add(x.user_id);
         for (const o of tables.owners) ids.add(o.user_id);
         for (const m of tables.members) ids.add(m.user_id);
         const want = [...ids].filter(Boolean); tables.users = [];
@@ -266,6 +270,14 @@ window.Vaad = (function () {
         return data;
       },
       async removeOwner(id) { ok(await c.rpc('remove_owner', { b: B, owner_id: Number(id) })); },
+      async addHouseholdMember(key, p) {
+        const { error } = await c.rpc('add_household_member', { b: B, tenancy_key: key, p_first: p.first, p_last: p.last, p_phone: p.phone });
+        if (error) throw new Error(/already in this household/.test(error.message) ? 'האדם הזה כבר רשום בדירה' : error.code === '42501' ? 'אין לך הרשאה להוסיף דיירים' : error.message);
+      },
+      async removeHouseholdMember(key, userId) {
+        const { error } = await c.rpc('remove_household_member', { b: B, tenancy_key: key, uid: userId });
+        if (error) throw new Error(/last person/.test(error.message) ? 'זה האדם האחרון בדירה. כדי להסיר אותו סיימו את הדיירות.' : error.code === '42501' ? 'אין לך הרשאה' : error.message);
+      },
       async endTenancy(key, y, m) { ok(await c.rpc('end_tenancy', { b: B, tenancy_key: key, exit_y: y, exit_m: m })); },
       async editPerson(uid, first, last, phone) {
         if (!uid) throw new Error('אין אדם רשום בדיירות הזו');
@@ -450,6 +462,16 @@ window.Vaad = (function () {
         const row = { id: nextId++, apt: o.apt, userId: null, first: o.first, last: o.last, phone: o.phone, account: '', note: '' }; d.owners.push(row); return row.id;
       },
       async removeOwner(id) { const d = await this.load(); d.owners = d.owners.filter((o) => String(o.id) !== String(id)); },
+      // demo mode: the household of a tenancy is the first two people plus "others", all in memory
+      async addHouseholdMember(key, p) {
+        const r = (await this.load()).residents.find((x) => x.key === key); if (!r) throw new Error('לא נמצא');
+        const all = [[r.first, r.last, r.phone1], [r.first2, r.last2, r.phone2], ...(r.others || []).map((o) => [o.first, o.last, o.phone])];
+        if (all.some((x) => x[0] === p.first && x[1] === p.last)) throw new Error('האדם הזה כבר רשום בדירה');
+        if (!r.last && !r.first) { r.first = p.first; r.last = p.last; r.phone1 = p.phone; }
+        else if (!r.last2 && !r.first2) { r.first2 = p.first; r.last2 = p.last; r.phone2 = p.phone; }
+        else (r.others = r.others || []).push({ userId: null, first: p.first, last: p.last, phone: p.phone });
+      },
+      async removeHouseholdMember(key, userId) { throw new Error('בתצוגת הדגמה אי אפשר להסיר אנשים'); },
       async endTenancy(key, y, m) { const r = (await this.load()).residents.find((x) => x.key === key); r.status = 'עזב'; r.exitYear = y; r.exitMonth = m; },
       async editPerson() {},
       async addTariff(t) { return { ...t, id: nextId++ }; }, async updateTariff() {}, async deleteTariff() {},

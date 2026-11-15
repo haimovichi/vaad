@@ -117,6 +117,17 @@ create table if not exists public.owners (
 
 create unique index if not exists owners_unique on public.owners (building_id, apt, user_id) where user_id is not null;
 
+-- The people of a tenancy beyond the first two (residents.user_id and user2_id): a household of any size.
+-- The first two stay where they were; add_household_member / remove_household_member keep the three places consistent.
+create table if not exists public.resident_people (
+  id bigint generated always as identity primary key,
+  building_id bigint not null references public.buildings(id) on delete cascade,
+  resident_id bigint not null references public.residents(id) on delete cascade,
+  user_id bigint not null references public.users(id) on delete cascade,
+  unique (resident_id, user_id)
+);
+create index if not exists resident_people_resident_idx on public.resident_people(resident_id);
+
 create table if not exists public.tariffs (
   id bigint generated always as identity primary key,
   building_id bigint not null references public.buildings(id) on delete cascade,
@@ -296,10 +307,13 @@ begin
 end $$;
 
 -- current tenants (names, phones) of the apartments the caller owns
+drop function if exists public.apt_tenants(bigint);
 create or replace function public.apt_tenants(b bigint)
-returns table (apt int, key text, first_name text, last_name text, first2 text, last2 text, phone1 text, phone2 text, role text)
+returns table (apt int, key text, first_name text, last_name text, first2 text, last2 text, phone1 text, phone2 text, role text, others jsonb)
 language sql stable security definer set search_path = public as $$
-  select r.apt, r.key, u1.first_name, u1.last_name, u2.first_name, u2.last_name, u1.phone, u2.phone, r.role
+  select r.apt, r.key, u1.first_name, u1.last_name, u2.first_name, u2.last_name, u1.phone, u2.phone, r.role,
+         coalesce((select jsonb_agg(jsonb_build_object('first', x.first_name, 'last', x.last_name, 'phone', x.phone) order by rp.id)
+                     from public.resident_people rp join public.users x on x.id = rp.user_id where rp.resident_id = r.id), '[]'::jsonb)
   from public.residents r
   left join public.users u1 on u1.id = r.user_id
   left join public.users u2 on u2.id = r.user2_id
@@ -401,7 +415,10 @@ begin
        where o.building_id = b and regexp_replace(regexp_replace(ba.account, '\D', '', 'g'), '^0+', '') = acc
       union
       select r.apt from public.residents r join public.bank_accounts ba on ba.user_id in (r.user_id, r.user2_id)
-       where r.building_id = b and regexp_replace(regexp_replace(ba.account, '\D', '', 'g'), '^0+', '') = acc) x;
+       where r.building_id = b and regexp_replace(regexp_replace(ba.account, '\D', '', 'g'), '^0+', '') = acc
+      union
+      select r.apt from public.resident_people rp join public.residents r on r.id = rp.resident_id join public.bank_accounts ba on ba.user_id = rp.user_id
+       where rp.building_id = b and regexp_replace(regexp_replace(ba.account, '\D', '', 'g'), '^0+', '') = acc) x;
     if cardinality(full_apts) = 1 then return query select full_apts[1], 'מספר חשבון'::text, true, '{}'::int[]; return; end if;
     if cardinality(full_apts) > 1 then return query select null::int, 'כמה דירות לאותו חשבון'::text, false, full_apts; return; end if;
   end if;
@@ -421,6 +438,10 @@ begin
       select r.apt a, u.first_name fn, u.last_name ln
         from public.residents r join public.users u on u.id in (r.user_id, r.user2_id)
        where r.building_id = b and coalesce(r.status, '') <> 'עזב'
+      union all
+      select r.apt, u.first_name, u.last_name
+        from public.resident_people rp join public.residents r on r.id = rp.resident_id join public.users u on u.id = rp.user_id
+       where rp.building_id = b and coalesce(r.status, '') <> 'עזב'
       union all
       select o.apt, u.first_name, u.last_name
         from public.owners o join public.users u on u.id = o.user_id
@@ -769,21 +790,72 @@ begin
       and (case when coalesce(r.entry_year, 0) <> 0 then r.entry_year * 12 + coalesce(nullif(r.entry_month, 0), 1) - 1 else 2022 * 12 + 5 end) <= t)
   then raise exception 'the dates overlap another tenancy of this apartment'; end if;
 
-  select u.id into uid from public.users u
-   where u.first_name is not distinct from fn and u.last_name = ln and u.phone is not distinct from ph and u.email is null
-     and (exists (select 1 from public.residents r where r.building_id = b and u.id in (r.user_id, r.user2_id))
-          or exists (select 1 from public.owners o where o.building_id = b and o.user_id = u.id)
-          or not (exists (select 1 from public.residents r where u.id in (r.user_id, r.user2_id))
-                  or exists (select 1 from public.owners o where o.user_id = u.id)
-                  or exists (select 1 from public.members m where m.user_id = u.id)))
-   order by u.id limit 1;
-  if uid is null then insert into public.users (first_name, last_name, phone) values (fn, ln, ph) returning id into uid; end if;
+  uid := public.person_for(b, fn, ln, ph);
 
   k := a || '-' || ln;
   while exists (select 1 from public.residents r where r.building_id = b and r.key = k) loop n := n + 1; k := a || '-' || ln || '-' || n; end loop;
   insert into public.residents (building_id, key, apt, user_id, role, status, entry_month, entry_year, exit_month, exit_year)
   values (b, k, a, uid, p_role, case when exit_y is null then 'פעיל' else 'עזב' end, entry_m, entry_y, exit_m, exit_y);
   return k;
+end $$;
+
+-- Find or create the person (name + phone, no login) a tenancy or an ownership points at. An existing person is reused only when
+-- tied to this building or to no building at all, so buildings never share people. Internal helper: not callable from the app.
+create or replace function public.person_for(b bigint, fn text, ln text, ph text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare uid bigint;
+begin
+  select u.id into uid from public.users u
+   where u.first_name is not distinct from fn and u.last_name = ln and u.phone is not distinct from ph
+     and (u.email is null or exists (select 1 from public.owners ow where ow.building_id = b and ow.user_id = u.id))
+     and (exists (select 1 from public.residents r where r.building_id = b and u.id in (r.user_id, r.user2_id))
+          or exists (select 1 from public.resident_people rp where rp.building_id = b and rp.user_id = u.id)
+          or exists (select 1 from public.owners o where o.building_id = b and o.user_id = u.id)
+          or not (exists (select 1 from public.residents r where u.id in (r.user_id, r.user2_id))
+                  or exists (select 1 from public.resident_people rp where rp.user_id = u.id)
+                  or exists (select 1 from public.owners o where o.user_id = u.id)
+                  or exists (select 1 from public.members m where m.user_id = u.id)))
+   order by u.id limit 1;
+  if uid is null then insert into public.users (first_name, last_name, phone) values (fn, ln, ph) returning id into uid; end if;
+  return uid;
+end $$;
+
+-- Add a person to the household of a current tenancy (a couple, a family, flatmates): any number of people live in one tenancy.
+create or replace function public.add_household_member(b bigint, tenancy_key text, p_first text, p_last text, p_phone text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare r record; fn text := nullif(btrim(p_first), ''); ln text := nullif(btrim(p_last), ''); ph text := nullif(btrim(p_phone), ''); uid bigint;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  select * into r from public.residents x where x.building_id = b and x.key = tenancy_key;
+  if not found then raise exception 'no such tenancy'; end if;
+  if r.status = 'עזב' then raise exception 'the tenancy has ended'; end if;
+  if ln is null then raise exception 'last name required'; end if;
+  uid := public.person_for(b, fn, ln, ph);
+  if uid in (coalesce(r.user_id, 0), coalesce(r.user2_id, 0)) or exists (select 1 from public.resident_people rp where rp.resident_id = r.id and rp.user_id = uid) then
+    raise exception 'already in this household';
+  end if;
+  if r.user_id is null then update public.residents set user_id = uid where id = r.id;
+  elsif r.user2_id is null then update public.residents set user2_id = uid where id = r.id;
+  else insert into public.resident_people (building_id, resident_id, user_id) values (b, r.id, uid);
+  end if;
+  return uid;
+end $$;
+
+-- Remove one person from a household. The last person cannot be removed: end the tenancy instead.
+create or replace function public.remove_household_member(b bigint, tenancy_key text, uid bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare r record; ids bigint[];
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  select * into r from public.residents x where x.building_id = b and x.key = tenancy_key;
+  if not found then raise exception 'no such tenancy'; end if;
+  ids := array_remove(array[r.user_id, r.user2_id] || array(select rp.user_id from public.resident_people rp where rp.resident_id = r.id order by rp.id), null);
+  if not uid = any(ids) then raise exception 'not in this household'; end if;
+  ids := array_remove(ids, uid);
+  if cardinality(ids) = 0 then raise exception 'the last person of a tenancy: end the tenancy instead'; end if;
+  update public.residents set user_id = ids[1], user2_id = ids[2] where id = r.id;
+  delete from public.resident_people where resident_id = r.id;
+  insert into public.resident_people (building_id, resident_id, user_id) select b, r.id, t.x from unnest(ids[3:]) with ordinality t(x, o) order by t.o;
 end $$;
 
 -- The tenant moved out: set the exit month of a current tenancy. The committee (and managers) of the building only.
@@ -807,11 +879,13 @@ language plpgsql security definer set search_path = public as $$
 begin
   if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
   if not (exists (select 1 from public.residents r where r.building_id = b and uid in (r.user_id, r.user2_id))
+          or exists (select 1 from public.resident_people rp where rp.building_id = b and rp.user_id = uid)
           or exists (select 1 from public.owners o where o.building_id = b and o.user_id = uid)
           or exists (select 1 from public.members m where m.building_id = b and m.user_id = uid)) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
   if exists (select 1 from public.residents r where r.building_id <> b and uid in (r.user_id, r.user2_id) and not public.can_manage(r.building_id))
+     or exists (select 1 from public.resident_people rp where rp.building_id <> b and rp.user_id = uid and not public.can_manage(rp.building_id))
      or exists (select 1 from public.owners o where o.building_id <> b and o.user_id = uid and not public.can_manage(o.building_id))
      or exists (select 1 from public.members m where m.building_id <> b and m.user_id = uid and not public.can_manage(m.building_id)) then
     raise exception 'the person is also tied to another building' using errcode = '42501';
@@ -841,15 +915,7 @@ begin
     end if;
   else
     if ln is null then raise exception 'last name required'; end if;
-    select u.id into uid from public.users u
-     where u.first_name is not distinct from fn and u.last_name = ln and u.phone is not distinct from ph and u.email is null
-       and (exists (select 1 from public.residents r where r.building_id = b and u.id in (r.user_id, r.user2_id))
-            or exists (select 1 from public.owners o where o.building_id = b and o.user_id = u.id)
-            or not (exists (select 1 from public.residents r where u.id in (r.user_id, r.user2_id))
-                    or exists (select 1 from public.owners o where o.user_id = u.id)
-                    or exists (select 1 from public.members m where m.user_id = u.id)))
-     order by u.id limit 1;
-    if uid is null then insert into public.users (first_name, last_name, phone) values (fn, ln, ph) returning id into uid; end if;
+    uid := public.person_for(b, fn, ln, ph);
   end if;
   if exists (select 1 from public.owners o where o.building_id = b and o.apt = a and o.user_id = uid) then raise exception 'already an owner of this apartment'; end if;
   insert into public.owners (building_id, apt, user_id) values (b, a, uid) returning id into oid;
@@ -877,7 +943,7 @@ declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','end_tenancy','edit_person','add_owner','remove_owner')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','add_household_member','remove_household_member','end_tenancy','edit_person','add_owner','remove_owner')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);
@@ -885,6 +951,7 @@ begin
 end $$;
 revoke all on function public.tariff_due(bigint, int, int, int) from public, anon, authenticated;   -- internal helpers
 revoke all on function public.tenancy_at(bigint, int, int) from public, anon, authenticated;
+revoke all on function public.person_for(bigint, text, text, text) from public, anon, authenticated;
 
 -- ---------- row level security ----------
 alter table public.buildings         enable row level security;
@@ -897,7 +964,8 @@ alter table public.members           enable row level security;
 alter table public.apartments        enable row level security;
 alter table public.residents         enable row level security;
 alter table public.owners            enable row level security;
-alter table public.tariffs           enable row level security;
+alter table public.resident_people   enable row level security;
+alter table public.tariffs          enable row level security;
 alter table public.payments          enable row level security;
 alter table public.pending_payments  enable row level security;
 alter table public.bank_transactions enable row level security;
@@ -924,7 +992,7 @@ drop function if exists public.app_role(bigint);
 do $$
 declare t text;
 begin
-  foreach t in array array['apartments','residents','owners','tariffs','payments','pending_payments','meta'] loop
+  foreach t in array array['apartments','residents','owners','resident_people','tariffs','payments','pending_payments','meta'] loop
     execute format($p$create policy manage_all on public.%I for all to authenticated using (public.can_manage(building_id)) with check (public.can_manage(building_id))$p$, t);
     execute format('grant select, insert, update, delete on public.%I to authenticated', t);
   end loop;
@@ -962,6 +1030,7 @@ create policy self_read  on public.users for select to authenticated using (emai
 create policy staff_read on public.users for select to authenticated using (
   exists (select 1 from public.members m where m.user_id = users.id and public.can_manage(m.building_id))
   or exists (select 1 from public.residents r where (r.user_id = users.id or r.user2_id = users.id) and public.can_manage(r.building_id))
+  or exists (select 1 from public.resident_people rp where rp.user_id = users.id and public.can_manage(rp.building_id))
   or exists (select 1 from public.owners o where o.user_id = users.id and public.can_manage(o.building_id)));
 create policy super_all  on public.users for all to authenticated using (public.is_super()) with check (public.is_super());
 grant select, insert, update, delete on public.users to authenticated;
