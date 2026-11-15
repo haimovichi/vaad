@@ -378,7 +378,12 @@ function renderSummary() {
 }
 
 /* ================= BANK RECORDS (every uploaded row, as the bank wrote it) ================= */
-let bList = []; let wantKind = '';
+let bList = []; let wantKind = ''; let wantYear = '';
+// the year to open for the waiting credits: this year when one of them is from it, else the newest year they come from
+const pendingYear = () => {
+  const ys = DB.pending.map((p) => String(p.date || p.txKey || '').slice(0, 4)).filter((y) => /^\d{4}$/.test(y)).sort();
+  return ys.includes(String(new Date().getFullYear())) ? String(new Date().getFullYear()) : (ys.pop() || '');
+};
 const pendApt = (it) => { const m = /^הצעה: דירה (\d+)/.exec(it.autoComment || ''); return m ? +m[1] : ''; };
 const pendOf = (r) => DB.pending.find((p) => p.txKey === r.key);
 const refKeyOf = (r) => { const n = parseInt(r.ref, 10); return isNaN(n) ? null : `${r.date.slice(0, 4)}|${n}`; };
@@ -387,7 +392,7 @@ async function loadBank() {
   bList = await api('GET', '/api/bank');
   refreshBankInfo().then((i) => { $('#bBal').innerHTML = balLine(i); });
   const years = [...new Set(bList.map((r) => +r.date.slice(0, 4)))].sort((a, b) => b - a);
-  const keep = { y: $('#bYear').value, m: $('#bMonth').value, k: wantKind || $('#bKind').value }; wantKind = '';
+  const keep = { y: wantYear || $('#bYear').value, m: wantYear ? '' : $('#bMonth').value, k: wantKind || $('#bKind').value }; wantKind = ''; wantYear = '';
   $('#bYear').innerHTML = years.map((y) => `<option>${y}</option>`).join('');
   $('#bMonth').innerHTML = '<option value="">כל החודשים</option>' + MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
   const cnt = (k) => bList.filter((r) => r.status.kind === k).length;
@@ -459,7 +464,7 @@ $('#bankTable').onclick = async (e) => {
     updatePend();
   } catch (err) { toast(err.message); }
 };
-document.addEventListener('click', (e) => { if (e.target.closest('#pendBadge, [data-kind="pending"]')) wantKind = 'pending'; });
+document.addEventListener('click', (e) => { if (e.target.closest('#pendBadge, [data-kind="pending"]')) { wantKind = 'pending'; wantYear = pendingYear(); } });
 ['#bYear', '#bMonth', '#bKind', '#bDir'].forEach((id) => { $(id).onchange = renderBank; }); $('#bQ').oninput = renderBank;
 
 /* ================= EXPENSES (read-only) ================= */
