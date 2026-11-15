@@ -26,6 +26,10 @@ let DB = null; let SNAP = null; let SVC = null;
 try {
   if (STAFF) { DB = await store.load(); SVC = VaadLib.service.createService(DB, store, Vaad.perms(ME)); } else SNAP = await store.getBoard();
 } catch (e) { document.body.innerHTML = '<div class="wrap">שגיאה בטעינה: ' + esc(e.message) + '</div>'; return; }
+// viewing as an apartment owner: the board shows only that owner's apartments, as the database would give them
+if (ME.viewAs && ME.viewAs.role === 'apt_owner' && SNAP && SNAP.grids) {
+  SNAP = { ...SNAP, grids: Object.fromEntries(Object.entries(SNAP.grids).map(([y, rows]) => [y, rows.filter((r) => r.apt === ME.viewAs.apt)])) };
+}
 if (!STAFF && !SNAP) { document.body.innerHTML = '<div class="wrap">עדיין לא פורסם מידע. נסו שוב מאוחר יותר.</div>'; return; }
 const api = (m, u, b) => SVC.call(m, u, b);
 
@@ -62,8 +66,8 @@ for (const x of screens) {
   menuHtml += `<a href="#${x[0]}" data-k="${x[0]}"><b>${x[2]}</b> ${x[1]}</a>`;
 }
 // the super user switches buildings (and creates, renames, deletes them) on the platform page; everyone else switches here
-const others = ME.isSuper ? [] : ME.memberships.filter((m) => !ME.building || m.id !== ME.building.id);
-menuHtml += '<h4>חשבון</h4>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> כל הבניינים</a>' : '') + others.map((m) => `<a href="#" data-b="${m.id}"><b>🔄</b> עבור ל${esc(m.name)}</a>`).join('') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
+const others = ME.isSuper || ME.realSuper ? [] : ME.memberships.filter((m) => !ME.building || m.id !== ME.building.id);
+menuHtml += '<h4>חשבון</h4>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> כל הבניינים</a><a href="#" id="mview"><b>👁️</b> צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend"><b>↩</b> חזרה למנהל על</a>' : '') + others.map((m) => `<a href="#" data-b="${m.id}"><b>🔄</b> עבור ל${esc(m.name)}</a>`).join('') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
 $('#menu').innerHTML = menuHtml;
 const setMenu = (on) => document.body.classList.toggle('mopen', on);
 $('#mbtn').onclick = () => setMenu(true);
@@ -72,9 +76,40 @@ $('#menu').onclick = (e) => {
   if (c) return setMenu(false);
   if (!a) return;
   if (a.id === 'mout') { e.preventDefault(); return Vaad.signOut(); }
+  if (a.id === 'mview') { e.preventDefault(); setMenu(false); return openViewAs(); }
+  if (a.id === 'mviewend') { e.preventDefault(); Vaad.setViewAs(null); return (location.href = 'app.html' + Vaad.keep); }
   if (a.dataset.b) { e.preventDefault(); Vaad.choose(a.dataset.b); return (location.href = 'index.html' + Vaad.keep); }
   setMenu(false);
 };
+
+/* ---------- the super user experiences the app as another role ---------- */
+if (ME.viewAs) {
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:sticky;top:0;z-index:50;background:#7c3aed;color:#fff;padding:8px 12px;font-size:14px;text-align:center';
+  bar.innerHTML = `👁️ אתם צופים כ<b>${esc(ME.viewAs.label)}</b> · פעולות נשמרות באמת · <a href="#" id="vaEnd" style="color:#fff;text-decoration:underline">חזרה למנהל על</a>`;
+  document.body.prepend(bar);
+  $('#vaEnd').onclick = (e) => { e.preventDefault(); Vaad.setViewAs(null); location.href = 'app.html' + Vaad.keep; };
+}
+function openViewAs() {
+  const apts = DB ? DB.apartments.map((a) => a.apt) : [];
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px';
+  box.innerHTML = `<div class="box pad" style="max-width:340px;width:100%"><h3>צפייה כתפקיד אחר</h3>
+    <div class="mute">תראו את האפליקציה כפי שהתפקיד הזה רואה אותה, בבניין הזה. הנתונים נשארים אמיתיים והפעולות נשמרות באמת.</div>
+    <div class="row"><select id="vaRole">${Object.entries(Vaad.VIEW_LABEL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+    <select id="vaApt" class="hide">${apts.map((a) => `<option>${a}</option>`).join('')}</select></div>
+    <div class="row"><button class="b" id="vaGo">צפו</button><button class="g" id="vaCancel">ביטול</button></div></div>`;
+  document.body.append(box);
+  const sync = () => box.querySelector('#vaApt').classList.toggle('hide', !['tenant', 'apt_owner'].includes(box.querySelector('#vaRole').value));
+  box.querySelector('#vaRole').onchange = sync;
+  box.querySelector('#vaCancel').onclick = () => box.remove();
+  box.querySelector('#vaGo').onclick = () => {
+    const role = box.querySelector('#vaRole').value;
+    const apt = ['tenant', 'apt_owner'].includes(role) ? +box.querySelector('#vaApt').value : null;
+    Vaad.setViewAs({ b: BLD.id, role, apt });
+    location.href = 'app.html' + Vaad.keep;
+  };
+}
 
 const homeTabs = [...(myApts.length ? ['mine'] : []), ...(BOARD ? ['debt', 'all'] : [])];
 let sec = 'home'; let sub = ''; let tab = homeTabs[0];

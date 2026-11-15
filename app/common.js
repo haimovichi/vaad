@@ -38,6 +38,22 @@ window.Vaad = (function () {
     const picked = memberships.find((m) => m.id === getChosen()) || (memberships.length === 1 ? memberships[0] : null);
     return { email, isSuper, isManager, canCreate: isSuper, memberships, building: picked };
   }
+  // The super user may experience the app as another role in the building he opened ("view as"): the screens, menu and buttons
+  // follow that role. It only shapes the app; the database still answers as the super user (writes really happen), and it ends with the session.
+  const viewKey = 'vaad-viewas';
+  const getViewAs = () => { try { return JSON.parse(sessionStorage.getItem(viewKey)) || null; } catch (e) { return null; } };
+  const setViewAs = (v) => { try { if (v) sessionStorage.setItem(viewKey, JSON.stringify(v)); else sessionStorage.removeItem(viewKey); } catch (e) {} };
+  const VIEW_LABEL = { manager: 'מנהל בניינים', committee: 'ועד הבית', tenant: 'דייר', apt_owner: 'בעל דירה' };
+  function meFor(args) {
+    const real = buildMe(args);
+    const v = args.isSuper ? getViewAs() : null;
+    if (!v || !real.building || v.b !== real.building.id) return real;
+    const rows = v.role === 'committee' ? [{ building_id: v.b, role: 'committee', apt: null }]
+      : v.role === 'tenant' || v.role === 'apt_owner' ? [{ building_id: v.b, role: v.role, apt: v.apt }] : [];
+    const sim = buildMe({ email: args.email, isSuper: false, isManager: v.role === 'manager', managerOf: v.role === 'manager' ? [v.b] : [], rows, buildings: args.buildings });
+    sim.viewAs = { ...v, label: VIEW_LABEL[v.role] + (v.apt ? ' ' + v.apt : '') }; sim.realSuper = true;
+    return sim;
+  }
   const chosenKey = 'vaad-building';
   // the building a person opened lasts for this browser session only: whoever belongs to several buildings picks one each time they enter
   const getChosen = () => { try { return Number(sessionStorage.getItem(chosenKey)) || null; } catch (e) { return null; } };
@@ -55,7 +71,7 @@ window.Vaad = (function () {
   async function whoami() {
     if (demo) {
       const d = DEMOS[demo] || DEMOS.committee;
-      return buildMe({ email: `${demo}@demo.com`, isSuper: !!d.isSuper, isManager: !!d.isManager, managerOf: d.managerOf || [], rows: d.rows, buildings: [{ id: 1, name: 'בניין לדוגמה' }] });
+      return meFor({ email: `${demo}@demo.com`, isSuper: !!d.isSuper, isManager: !!d.isManager, managerOf: d.managerOf || [], rows: d.rows, buildings: [{ id: 1, name: 'בניין לדוגמה' }] });
     }
     const { data: { session } } = await client().auth.getSession();
     if (!session) return null;
@@ -71,7 +87,7 @@ window.Vaad = (function () {
       c.from('buildings').select('id, name').order('id'),
     ]);
     for (const r of [mem, sup, mgr, mb, blds]) if (r.error) throw new Error(r.error.message);
-    return buildMe({ email, isSuper: sup.data === true, isManager: !!mgr.data, managerOf: (mb.data || []).map((x) => x.building_id), rows: mem.data || [], buildings: blds.data || [] });
+    return meFor({ email, isSuper: sup.data === true, isManager: !!mgr.data, managerOf: (mb.data || []).map((x) => x.building_id), rows: mem.data || [], buildings: blds.data || [] });
   }
   // fill a <select> with the person's buildings (stays hidden when there is only one)
   function mountSwitcher(sel, me) {
@@ -532,5 +548,5 @@ window.Vaad = (function () {
   }
 
   const store = (building, me) => (demo ? demoStore(building, me) : supabaseStore(building));
-  return { demo, keep, client, whoami, addressPicker, buildMe, mountSwitcher, choose, signIn, signOut, go, store, perms, ROLE_LABEL };
+  return { demo, keep, client, whoami, addressPicker, buildMe, mountSwitcher, choose, setViewAs, VIEW_LABEL, signIn, signOut, go, store, perms, ROLE_LABEL };
 })();
