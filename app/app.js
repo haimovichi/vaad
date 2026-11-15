@@ -614,13 +614,6 @@ $('#pTable').onclick = async (e) => {
   const a = e.target.closest('a[data-open]'); if (!a) return; e.preventDefault(); Vaad.choose(a.dataset.open); location.href = 'app.html' + Vaad.keep + '#everyone';
 };
 
-$('#aAdd').onclick = async () => {
-  try {
-    await api('POST', '/api/apartment', { apt: $('#aNum').value, floor: $('#aFloor').value, rooms: $('#aRooms').value, sqm: $('#aSqm').value });
-    ['#aNum', '#aFloor', '#aRooms', '#aSqm'].forEach((i) => { $(i).value = ''; });
-    toast('הדירה נוספה'); loadApts();
-  } catch (e) { toast(e.message); }
-};
 $('#rEM').innerHTML = MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
 $('#rXM').innerHTML += MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
 $('#rAdd').onclick = async () => {
@@ -675,7 +668,7 @@ function loadBuildings() {
 }
 let newAddr = null;
 const bPick = Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
-$('#bAdd').onclick = async () => { if (!newAddr) return; try { const b = await api('POST', '/api/building', { name: newAddr, bankAccount: $('#bAcct').value }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
+$('#bAdd').onclick = async () => { if (!newAddr) return; try { const b = await api('POST', '/api/building', { name: newAddr, bankAccount: $('#bAcct').value, apartments: $('#bApts').value }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
 let editId = null; let editAddr = null;
 const editPick = ME.isSuper ? Vaad.addressPicker($('#bEditPick'), (a) => { editAddr = a; $('#bEditSave').disabled = !a; }) : null;
 const closeEdit = () => { editId = null; $('#bEditBox').classList.add('hide'); if (editPick) editPick.reset(); };

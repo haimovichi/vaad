@@ -332,6 +332,15 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   });
   report(comMade === 'committee/0', 'committee1', 'creates a building and becomes its committee', 'committee/0', comMade);
   await blocked('manager3', 'm3@x.com', 'create a building with an empty name', "select public.create_building('   ')");
+  // the number of apartments is set when the building is created: apartments 1..N
+  const aptsMade = await asUser('super@x.com', async (q) => {
+    const id = (await q("select public.create_building('Apts', null, 12) as id")).rows[0].id;
+    const r = (await q(`select count(*)::int as n, min(apt) as lo, max(apt) as hi from apartments where building_id = ${id}`)).rows[0];
+    return `${r.n}/${r.lo}/${r.hi}`;
+  });
+  report(aptsMade === '12/1/12', 'super', 'creates a building with 12 apartments numbered 1..12', '12/1/12', aptsMade);
+  await blocked('super', 'super@x.com', 'create a building with 0 apartments', "select public.create_building('Z', null, 0)");
+  await blocked('super', 'super@x.com', 'create a building with 501 apartments', "select public.create_building('Z', null, 501)");
 
   // match_payer: the bank-matching cascade of lib/match.js, in the database
   {

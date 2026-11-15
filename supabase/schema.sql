@@ -312,7 +312,9 @@ $$;
 -- the super user, a buildings manager or a building committee member creates a building;
 -- a manager becomes its manager, a committee member becomes its committee
 drop function if exists public.create_building(text);
-create or replace function public.create_building(nm text, acct text default null) returns bigint
+drop function if exists public.create_building(text, text);
+-- apts: how many apartments the building has, numbered 1..apts (apartments are not added one by one afterwards)
+create or replace function public.create_building(nm text, acct text default null, apts int default null) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare nid bigint; mgr boolean; com boolean;
 begin
@@ -322,7 +324,9 @@ begin
     raise exception 'not allowed' using errcode = '42501';
   end if;
   if nm is null or length(trim(nm)) = 0 then raise exception 'name required'; end if;
+  if apts is not null and apts not between 1 and 500 then raise exception 'apartments must be between 1 and 500'; end if;
   insert into public.buildings (name, bank_account) values (trim(nm), nullif(btrim(acct), '')) returning id into nid;
+  if apts is not null then insert into public.apartments (building_id, apt) select nid, g from generate_series(1, apts) g; end if;
   if public.is_super() then null;
   elsif mgr then insert into public.manager_buildings (building_id, email) values (nid, public.me());
   else insert into public.members (building_id, user_id, role) values (nid, public.my_uid(), 'committee');

@@ -372,7 +372,7 @@ window.Vaad = (function () {
       async removeManager(e) { ok(await c.from('managers').delete().eq('email', e)); },
       async addManagerBuilding(e, id) { ok(await c.from('manager_buildings').insert({ email: e, building_id: id })); },
       async removeManagerBuilding(e, id) { ok(await c.from('manager_buildings').delete().eq('email', e).eq('building_id', id)); },
-      async createBuilding(name, acct) { return ok(await c.rpc('create_building', { nm: name, acct: acct || null })); },
+      async createBuilding(name, acct, apts) { return ok(await c.rpc('create_building', { nm: name, acct: acct || null, apts: apts || null })); },
       async renameBuilding(id, name) { ok(await c.from('buildings').update({ name }).eq('id', id)); },
     };
   }

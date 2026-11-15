@@ -215,7 +215,6 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
       <div class="box"><table class="t" id="pTable"></table></div>
     </div>
     <div id="p-apts" class="hide">
-      <div class="box pad"><h3>הוספת דירה</h3><div class="row"><input id="aNum" type="number" min="1" placeholder="מספר דירה" style="width:110px"><input id="aFloor" placeholder="קומה" style="width:80px"><input id="aRooms" type="number" min="1" step="0.5" placeholder="חדרים" style="width:90px"><input id="aSqm" type="number" min="1" placeholder="מ״ר" style="width:90px"><button class="b" id="aAdd">הוסף דירה</button></div></div>
       <div class="box pad"><h3>הוספת בעל דירה</h3><div class="mute">בעל הדירה נרשם על הדירה ונראה בטבלת האנשים. עם כתובת אימייל הוא גם מקבל כניסה לאפליקציה ורואה רק את הדירות שלו.</div>
         <div class="row"><select id="oApt"></select><input id="oFirst" placeholder="שם פרטי" style="width:110px"><input id="oLast" placeholder="שם משפחה" style="width:120px"><input id="oPhone" placeholder="טלפון" style="width:120px;direction:ltr"><input id="oMail" type="email" placeholder="אימייל (לא חובה)" style="width:190px;direction:ltr"><button class="b" id="oAdd">הוסף בעל דירה</button></div></div>
       <div class="box pad"><h3>הוספת דייר</h3><div class="mute">דייר חדש מתחיל בחודש הכניסה; אם יש דייר קודם בדירה, סיימו קודם את הדיירות שלו בטבלה למטה. אדם שכבר רשום בבניין עם אותו שם וטלפון משמש שוב.</div>
@@ -229,8 +228,8 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
     <div id="b-list">
       <div class="box pad">
         <h3>בניינים</h3>
-        <div class="mute">בניין חדש נוצר ריק, ומי שיצר אותו הופך למנהל שלו (מנהל בניינים) או לוועד שלו (ועד הבית). הוספת דירות ודיירים לבניין חדש נעשית כרגע בטעינת נתונים (ראו README).</div>
-        <div class="mute" style="margin-top:8px">כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית.</div><div class="row" id="bPick"></div><div class="row"><input id="bAcct" placeholder="מספר חשבון הבנק של הבניין (לא חובה עכשיו)" inputmode="numeric" style="width:300px;direction:ltr"></div><div class="mute">קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.</div><div class="row"><button class="b" id="bAdd" disabled>צור בניין</button></div>
+        <div class="mute">מי שיצר בניין הופך למנהל שלו (מנהל בניינים) או לוועד שלו (ועד הבית). מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.</div>
+        <div class="mute" style="margin-top:8px">כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית.</div><div class="row" id="bPick"></div><div class="row"><input id="bApts" type="number" min="1" max="500" placeholder="מספר הדירות בבניין" style="width:170px"></div><div class="row"><input id="bAcct" placeholder="מספר חשבון הבנק של הבניין (לא חובה עכשיו)" inputmode="numeric" style="width:300px;direction:ltr"></div><div class="mute">קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.</div><div class="row"><button class="b" id="bAdd" disabled>צור בניין</button></div>
       </div>
       <div class="box"><table class="t" id="bTable"></table></div>
       <div class="box pad hide" id="bEditBox"><h3 id="bEditT"></h3><div class="mute">בחרו את הכתובת החדשה מהרשימה.</div><div class="row" id="bEditPick"></div><div class="row"><button class="b" id="bEditSave" disabled>שמור כתובת</button><button class="g" id="bEditCancel">ביטול</button></div></div>
