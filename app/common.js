@@ -266,7 +266,10 @@ window.Vaad = (function () {
       },
       async proposeCredits(list) { return ok(await c.rpc('propose_credits', { b: B, credits: list.map((t) => ({ key: t.key, date: t.date, desc: t.desc, amount: t.amount, apt: t.apt || null })) })); },
       async saveImport(items) { return ok(await c.rpc('save_import', { b: B, items })); },
-      async recordBank(rows) { return ok(await c.rpc('record_bank_rows', { b: B, rows: rows.map((t) => ({ key: t.key, date: t.date, valueDate: t.valueDate, desc: t.desc, amount: t.amount, balance: t.balance, ref: t.ref, fee: t.fee, channel: t.channel, raw: t.raw })) })); },
+      async bankAccount() { const b = ok(await c.from('buildings').select('bank_account').eq('id', B).maybeSingle()); return b ? b.bank_account || '' : ''; },
+      async setBankAccount(a) { ok(await c.rpc('set_bank_account', { b: B, acct: a })); },
+      async recentBank() { return ok(await c.from('bank_transactions').select('tx_date, amount, balance').eq('building_id', B).order('tx_date', { ascending: false }).limit(40)).map((r) => ({ date: r.tx_date, amount: num(r.amount), balance: r.balance === null ? null : num(r.balance) })); },
+      async recordBank(rows, acct) { return ok(await c.rpc('record_bank_rows', { b: B, acct, rows: rows.map((t) => ({ key: t.key, date: t.date, valueDate: t.valueDate, desc: t.desc, amount: t.amount, balance: t.balance, ref: t.ref, fee: t.fee, channel: t.channel, raw: t.raw })) })); },
       async bankRows() { return (await fetchAll('bank_transactions', B)).map((r) => ({ id: r.id, key: r.tx_key, date: r.tx_date, valueDate: r.value_date, desc: r.descr, amount: num(r.amount), balance: r.balance === null ? null : num(r.balance), ref: r.ref || '', fee: r.fee || '', channel: r.channel || '', raw: r.raw, uploadedAt: r.uploaded_at, uploadedBy: r.uploaded_by || '' })); },
       async approvePending(id, apt, learn) { ok(await c.rpc('approve_pending', { pid: id, a: apt, learn })); },
       async ignorePending(id) { ok(await c.rpc('ignore_pending', { pid: id })); },
@@ -368,7 +371,7 @@ window.Vaad = (function () {
       async removeManager(e) { ok(await c.from('managers').delete().eq('email', e)); },
       async addManagerBuilding(e, id) { ok(await c.from('manager_buildings').insert({ email: e, building_id: id })); },
       async removeManagerBuilding(e, id) { ok(await c.from('manager_buildings').delete().eq('email', e).eq('building_id', id)); },
-      async createBuilding(name) { return ok(await c.rpc('create_building', { nm: name })); },
+      async createBuilding(name, acct) { return ok(await c.rpc('create_building', { nm: name, acct: acct || null })); },
       async renameBuilding(id, name) { ok(await c.from('buildings').update({ name }).eq('id', id)); },
     };
   }
@@ -440,6 +443,9 @@ window.Vaad = (function () {
         return n;
       },
       async bankRows() { const d = await this.load(); return d.bankRows || []; },
+      async bankAccount() { return (await this.load()).bankAccount || ''; },
+      async setBankAccount(a) { (await this.load()).bankAccount = a; },
+      async recentBank() { return [...(await this.bankRows())].sort((x, y) => y.date.localeCompare(x.date)).slice(0, 40); },
       async saveImport(items) {
         const d = await this.load(); const M = window.VaadLib.match; const out = { added: 0, pending: 0, ignored: 0, expenses: 0 };
         for (const it of items) {

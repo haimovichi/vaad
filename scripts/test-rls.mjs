@@ -1058,7 +1058,8 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   {
     const setup = `
       insert into apartments(building_id, apt) values (1,61);
-      insert into bank_transactions(building_id, tx_key, tx_date, descr, amount) values (2, 'other-building', '2026-01-02', 'x', 5);`;
+      insert into bank_transactions(building_id, tx_key, tx_date, descr, amount) values (2, 'other-building', '2026-01-02', 'x', 5);
+      update buildings set bank_account = '0184949434' where id = 1;`;
     const as = async (email, fn) => {
       await db.exec('begin');
       try {
@@ -1070,7 +1071,24 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     };
     const J = (o) => JSON.stringify(o);
     const row = (key, date, amount, extra = {}) => ({ key, date, valueDate: date, desc: 'העברה מדוגמה', amount, balance: 1234.56, ref: '988', fee: 'ערוץ ישיר', channel: 'יזום מחשב', raw: [date, date, 'העברה מדוגמה', amount, 1234.56, '988      ', 'ערוץ ישיר', 'יזום מחשב'], ...extra });
-    const rec = (q, rows) => q('select public.record_bank_rows(1, $1::jsonb) as n', [J(rows)]).then((r) => r.rows[0].n);
+    const rec = (q, rows, acct = '184-949434') => q('select public.record_bank_rows(1, $1::jsonb, $2) as n', [J(rows), acct]).then((r) => r.rows[0].n);
+    // the account in the file must be the building's account (digits only, leading zeros ignored)
+    for (const [what, acct] of [['another account', '0123456789'], ['no account', null], ['an empty account', '']]) {
+      const r = await as('c1@x.com', async (q) => { const n = await rec(q, [row('ka', '2026-10-28', 5)], acct); return n; });
+      report(r === 'ERR', 'committee1', `rows from a file with ${what} are not kept`, 'ERR', r === 'ERR' ? r : 'kept');
+    }
+    {
+      const r = await as('c1@x.com', async (q) => { await rec(q, [row('kb', '2026-10-28', 5)], '0184949434'); return (await q("select count(*)::int n from bank_transactions where tx_key = 'kb'")).rows[0].n; });
+      report(r === 1, 'committee1', 'a file of the building account is kept (leading zeros and dashes do not matter)', 1, r);
+      const u = await as('super@x.com', async (q) => (await q("select public.record_bank_rows(2, $1::jsonb, '0184949434') as n", [J([row('kc', '2026-10-28', 5)])])).rows[0].n);
+      report(u === 'ERR', 'super', 'rows are not kept while the building has no bank account', 'ERR', u === 'ERR' ? u : 'kept');
+      const s1 = await as('c1@x.com', async (q) => (await q("select public.set_bank_account(1, ' 0184949434 ')")).rows.length);
+      report(s1 === 'ERR', 'committee1', 'the bank account is set by the building account setter only while unset (already set here, not super)', 'ERR', s1 === 'ERR' ? s1 : 'changed');
+      const s2 = await as('super@x.com', async (q) => { await q('select public.set_bank_account(1, $1)', ['111-222']); return (await q('select bank_account from buildings where id = 1')).rows[0].bank_account; });
+      report(s2 === '111-222', 'super', 'the super user may change the bank account', '111-222', s2);
+      const s3 = await as('c2@x.com', async (q) => { await q("select public.set_bank_account(1, '5')"); return 'ok'; });
+      report(s3 === 'ERR', 'committee2', 'cannot set the bank account of another building', 'ERR', s3);
+    }
 
     const r1 = await as('c1@x.com', async (q) => {
       const first = await rec(q, [row('k1', '2026-10-28', 1710), row('k2', '2026-10-29', -49.15)]);

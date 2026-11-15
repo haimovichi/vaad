@@ -107,7 +107,7 @@ const years = STAFF ? Array.from({ length: now.y - calc.fromMi(calc.START).y + 1
 let year = now.y; let openId = null;
 for (const y of years) $('#year').add(new Option(y, y));
 $('#year').value = year;
-$('#mlabels').innerHTML = MN.map((m) => `<span>${m[0]}</span>`).join('');
+$('#mlabels').innerHTML = MN.map((m, i) => `<span title="${MF[i]}">${i + 1}</span>`).join('');
 $$('.tab').forEach((b) => { b.hidden = !homeTabs.includes(b.dataset.t); });
 if (homeTabs.includes('mine')) $('.tab[data-t="mine"]').textContent = myApts.length > 1 ? 'הדירות שלי' : 'הדירה שלי';
 
@@ -223,6 +223,7 @@ async function renderHome() {
   const paidNow = current.filter((r) => ['paid', 'prepaid'].includes(r.months[idx])).length;
   const owing = new Set(all.filter(isOwing).map((r) => r.apt)).size;
   $('#sum').innerHTML = BOARD && year === now.y ? `<div><small>שילמו ${MF[idx]}</small><b>${paidNow} מתוך ${current.length}</b></div><div><small>דירות עם חוב</small><b class="${owing ? 'bad' : ''}">${owing}</b></div>` : '';
+  if (STAFF && BOARD && year === now.y) refreshBankInfo().then((i) => { if (i && i.balance && !$('#balBox')) $('#sum').insertAdjacentHTML('beforeend', `<div id="balBox"><small>יתרת הבנק (${fdate(i.balance.date)})</small><b class="${i.balance.amount < 0 ? 'bad' : ''}">${fmt(i.balance.amount)} ₪</b></div>`); });
   $('#q').hidden = tab !== 'all';
   $('#mlabels').style.display = tab === 'mine' && !myApts.length ? 'none' : '';
   const my = ++seq;
@@ -287,11 +288,23 @@ $('#sec-home').addEventListener('click', async (e) => {
 let IMP = null; let FILE = null;
 $('#bankFile').onchange = (e) => { FILE = e.target.files[0]; $('#fromDate').value = ''; preview(); };
 $('#reload').onclick = () => FILE && preview();
+// a file that is not loaded: say why where it stays visible, and forget it
+function rejectFile(msg) {
+  FILE = null; $('#bankFile').value = ''; IMP = null;
+  $('#impCard').classList.add('hide'); $('#expCard').classList.add('hide'); $('#impActions').classList.add('hide');
+  $('#impInfo').innerHTML = `<b class="bad">${esc(msg)}</b>`; toast(msg);
+}
 async function preview() {
   if (!FILE) return;
   const buf = await FILE.arrayBuffer();
   const from = $('#fromDate').value;
-  try { IMP = await api('POST', '/api/import/preview?from=' + from, buf); } catch (e) { return toast(e.message); }
+  try { IMP = await api('POST', '/api/import/preview?from=' + from, buf); } catch (e) { return rejectFile(e.message); }
+  if (IMP.needAccount) {   // the building has no bank account yet: the file's account becomes the building's account only if the user confirms it
+    const a = IMP.needAccount;
+    if (!confirm(`לבניין עוד לא הוגדר חשבון בנק.\nהקובץ שייך לחשבון ${a.number}${a.name ? `\n(${a.name})` : ''}.\nלקבוע אותו כחשבון הבנק של הבניין ולטעון את הקובץ?`)) return rejectFile('הקובץ לא נטען: חשבון הבנק של הבניין לא הוגדר.');
+    try { await api('POST', '/api/bank/account', { account: a.number }); } catch (e) { return rejectFile(e.message); }
+    return preview();
+  }
   if (!from && IMP.from) $('#fromDate').value = IMP.from;
   // a credit the server is not sure about waits for approval unless an apartment is picked here: the suggestion is only shown
   for (const it of IMP.items) if (!it.sure) { it.suggest = it.apt; it.apt = null; it.tenancy = null; it.tenant = ''; it.allocations = []; }
@@ -348,8 +361,14 @@ $('#commit').onclick = async () => {
   } catch (e) { toast(e.message); }
 };
 
+/* ================= BANK BALANCE (from the newest row of the bank file) ================= */
+let BANKINFO = null;
+async function refreshBankInfo() { if (!STAFF) return null; try { BANKINFO = await api('GET', '/api/bank/info'); } catch (e) { BANKINFO = null; } return BANKINFO; }
+const balLine = (i) => (i && i.balance ? `יתרת חשבון הבנק: <b class="${i.balance.amount < 0 ? 'bad' : 'good'}">${i.balance.amount < 0 ? '−' : ''}${fmt2(Math.abs(i.balance.amount))} ₪</b> <span class="mute">(לפי תנועות הבנק עד ${fdate(i.balance.date)})</span>` : '');
+
 /* ================= COLLECTED VERSUS SPENT ================= */
 function renderSummary() {
+  refreshBankInfo().then((i) => { $('#sumBal').innerHTML = balLine(i); });
   const rows = calc.yearlySummary(DB);
   const tot = rows.reduce((t, r) => ({ collected: t.collected + r.collected, spent: t.spent + r.spent }), { collected: 0, spent: 0 });
   const bal = (n) => `<b class="${n < 0 ? 'bad' : 'good'}">${n < 0 ? '−' : ''}${fmt(Math.abs(n))} ₪</b>`;
@@ -369,6 +388,7 @@ const refKeyOf = (r) => { const n = parseInt(r.ref, 10); return isNaN(n) ? null 
 const B_KIND = { payment: 'נרשמה כתשלום', pending: 'ממתינה לאישור', expense: 'נרשמה כהוצאה', ignored: 'הותעלמה', earlier: 'נרשמה קודם (אקסל)', cancelled: 'שיק שהופקד ובוטל', none: 'עוד לא יובאה' };
 async function loadBank() {
   bList = await api('GET', '/api/bank');
+  refreshBankInfo().then((i) => { $('#bBal').innerHTML = balLine(i); });
   const years = [...new Set(bList.map((r) => +r.date.slice(0, 4)))].sort((a, b) => b - a);
   const keep = { y: $('#bYear').value, m: $('#bMonth').value, k: wantKind || $('#bKind').value }; wantKind = '';
   $('#bYear').innerHTML = '<option value="">כל השנים</option>' + years.map((y) => `<option>${y}</option>`).join('');
@@ -651,7 +671,7 @@ function loadBuildings() {
 }
 let newAddr = null;
 const bPick = Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
-$('#bAdd').onclick = async () => { if (!newAddr) return; try { const b = await api('POST', '/api/building', { name: newAddr }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
+$('#bAdd').onclick = async () => { if (!newAddr) return; try { const b = await api('POST', '/api/building', { name: newAddr, bankAccount: $('#bAcct').value }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
 let editId = null; let editAddr = null;
 const editPick = ME.isSuper ? Vaad.addressPicker($('#bEditPick'), (a) => { editAddr = a; $('#bEditSave').disabled = !a; }) : null;
 const closeEdit = () => { editId = null; $('#bEditBox').classList.add('hide'); if (editPick) editPick.reset(); };
