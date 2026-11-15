@@ -36,7 +36,7 @@ window.Vaad = (function () {
       };
     });
     const picked = memberships.find((m) => m.id === getChosen()) || (memberships.length === 1 ? memberships[0] : null);
-    return { email, isSuper, isManager, canCreate: isSuper || isManager || memberships.some((m) => m.roles.includes('committee')), memberships, building: picked };
+    return { email, isSuper, isManager, canCreate: isSuper, memberships, building: picked };
   }
   const chosenKey = 'vaad-building';
   // the building a person opened lasts for this browser session only: whoever belongs to several buildings picks one each time they enter

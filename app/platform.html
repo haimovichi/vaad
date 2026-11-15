@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>כל הבניינים</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><h2 style="margin:0">🏢 כל הבניינים</h2></div>
+  <div class="sub" style="margin-bottom:8px"><span id="who"></span> · <a href="#" id="logout">יציאה</a></div>
+
+  <div class="box pad">
+    <h3>הבניינים</h3>
+    <div class="mute">בחרו בניין כדי להיכנס אליו. רק מנהל העל יוצר, משנה כתובת ומוחק בניינים.</div>
+  </div>
+  <div class="box"><table class="t" id="bTable"></table></div>
+  <div class="box pad hide" id="bEditBox"><h3 id="bEditT"></h3><div class="mute">בחרו את הכתובת החדשה מהרשימה.</div><div class="row" id="bEditPick"></div><div class="row"><button class="b" id="bEditSave" disabled>שמור כתובת</button><button class="g" id="bEditCancel">ביטול</button></div></div>
+
+  <div class="box pad">
+    <h3>בניין חדש</h3>
+    <div class="mute">מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.</div>
+    <div class="mute" style="margin-top:8px">כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית.</div>
+    <div class="row" id="bPick"></div>
+    <div class="row"><input id="bApts" type="number" min="1" max="500" placeholder="מספר הדירות בבניין" style="width:170px"></div>
+    <div class="row"><input id="bAcct" placeholder="מספר חשבון הבנק של הבניין (לא חובה עכשיו)" inputmode="numeric" style="width:300px;direction:ltr"></div>
+    <div class="mute">קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.</div>
+    <div class="row"><button class="b" id="bAdd" disabled>צור בניין</button></div>
+  </div>
+
+  <div class="box pad">
+    <h3>מנהלי בניינים</h3>
+    <div class="mute">רק מנהל העל ממנה מנהלי בניינים. מנהל בניינים מנהל את הבניינים שהוקצו לו, ואינו יוצר בניינים חדשים.</div>
+    <div class="row"><input id="mEmail" type="email" placeholder="אימייל" style="width:220px;direction:ltr"><button class="b" id="mAdd">הוסף מנהל בניינים</button></div>
+  </div>
+  <div class="box"><table class="t" id="mTable"></table></div>
+</div>
+<div id="msg"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script src="vaad-lib.js"></script>
+<script src="common.js"></script>
+<script src="platform.js"></script>
+</body>
+</html>

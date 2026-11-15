@@ -20,7 +20,6 @@ const BLD = ME.building;
 const STAFF = BLD.manage;                     // committee, buildings manager or super user: the building's full data
 const BOARD = BLD.seesBoard;                  // may see every apartment's status
 const PLATFORM = ME.isSuper || ME.isManager;  // may see everyone's roles
-const CREATE = PLATFORM || ME.canCreate;      // may create buildings (also committee members)
 const myApts = BLD.linkedApts;                // apartments linked to this login as tenant or apartment owner
 const store = Vaad.store(BLD.id, ME);
 let DB = null; let SNAP = null; let SVC = null;
@@ -50,22 +49,21 @@ const SCREENS = [
   ['backup', 'גיבוי נתונים', '💾', 'כספים', 'more', () => STAFF],
   ['everyone', 'אנשים', '👥', 'אנשים', 'people', () => STAFF],
   ['apts', 'דירות ודיירים', '🏘️', 'אנשים', 'people', () => STAFF],
-  ['list', 'הבניינים שלי', '🏢', 'בניינים', 'buildings', () => CREATE],
-  ['managers', 'מנהלי בניינים', '🧑‍💼', 'בניינים', 'buildings', () => ME.isSuper],
   ['share', 'מה הדיירים רואים', '📢', 'הגדרות', 'more', () => STAFF],
 ];
-const PANE = { apts: 'p-apts', everyone: 'p-everyone', list: 'b-list', managers: 'b-managers', share: 'm-share', backup: 'm-backup' };
-const LEGACY = { people: 'everyone', buildings: 'list', more: 'share' };   // old #people/users style addresses
+const PANE = { apts: 'p-apts', everyone: 'p-everyone', share: 'm-share', backup: 'm-backup' };
+const LEGACY = { people: 'everyone', more: 'share' };   // old #people/users style addresses
 const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
-const LOAD = { home: () => renderHome(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), bank: () => loadBank(), summary: () => renderSummary(), apts: () => loadApts(), everyone: () => loadPeople(), list: () => loadBuildings(), managers: () => loadManagers(), share: () => loadShare(), backup: () => showLastBackup() };
+const LOAD = { home: () => renderHome(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), bank: () => loadBank(), summary: () => renderSummary(), apts: () => loadApts(), everyone: () => loadPeople(), share: () => loadShare(), backup: () => showLastBackup() };
 let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
   menuHtml += `<a href="#${x[0]}" data-k="${x[0]}"><b>${x[2]}</b> ${x[1]}</a>`;
 }
-const others = ME.memberships.filter((m) => !ME.building || m.id !== ME.building.id);
-menuHtml += '<h4>חשבון</h4>' + others.map((m) => `<a href="#" data-b="${m.id}"><b>🔄</b> עבור ל${esc(m.name)}</a>`).join('') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
+// the super user switches buildings (and creates, renames, deletes them) on the platform page; everyone else switches here
+const others = ME.isSuper ? [] : ME.memberships.filter((m) => !ME.building || m.id !== ME.building.id);
+menuHtml += '<h4>חשבון</h4>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> כל הבניינים</a>' : '') + others.map((m) => `<a href="#" data-b="${m.id}"><b>🔄</b> עבור ל${esc(m.name)}</a>`).join('') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
 $('#menu').innerHTML = menuHtml;
 const setMenu = (on) => document.body.classList.toggle('mopen', on);
 $('#mbtn').onclick = () => setMenu(true);
@@ -90,7 +88,7 @@ function route() {
   sec = s; sub = u;
   const def = screens.find((x) => x[0] === s);
   $$('#menu a[data-k]').forEach((a) => a.classList.toggle('on', a.dataset.k === s));
-  ['home', 'bank', 'summary', 'expenses', 'tariffs', 'people', 'buildings', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
+  ['home', 'bank', 'summary', 'expenses', 'tariffs', 'people', 'more'].forEach((k) => $('#sec-' + k).classList.toggle('hide', k !== def[4]));
   Object.entries(PANE).forEach(([k, id]) => $('#' + id).classList.toggle('hide', k !== s));
   document.body.classList.toggle('wide', s === 'bank');   // the bank table has many columns: it may use the whole width
   $('#scr').textContent = s === 'home' ? 'בית' : def[1];
@@ -660,58 +658,6 @@ $('#aptTable').onclick = async (e) => {
   try { await api('POST', '/api/tenancy/end', { key: b.dataset.end, exitMonth: m[1], exitYear: m[2] }); toast('הדיירות הסתיימה'); loadApts(); } catch (err) { toast(err.message); }
 };
 $('#aptTable').onchange = async (e) => { const i = e.target.dataset.i; if (i === undefined) return; try { await api('PUT', '/api/resident', { index: +i, patch: { [e.target.dataset.k]: e.target.value } }); toast('נשמר'); } catch (err) { toast(err.message); } };
-
-/* ================= BUILDINGS (super user, managers) ================= */
-function loadBuildings() {
-  $('#bTable').innerHTML = '<tr><th>#</th><th class="l">שם</th><th class="l">התפקידים שלכם</th><th></th></tr>' +
-    ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l">${esc(m.name)}</td><td class="l">${m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${ME.isSuper ? `<button class="g" data-edit="${m.id}">שנה כתובת</button> <button class="g" data-del="${m.id}">מחק בניין</button> ` : ''}${m.id === BLD.id ? '<span class="mute">פתוח עכשיו</span>' : `<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
-}
-let newAddr = null;
-const bPick = Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
-$('#bAdd').onclick = async () => { if (!newAddr) return; try { const b = await api('POST', '/api/building', { name: newAddr, bankAccount: $('#bAcct').value, apartments: $('#bApts').value }); Vaad.choose(b.id); Vaad.go('index.html'); } catch (e) { toast(e.message); } };
-let editId = null; let editAddr = null;
-const editPick = ME.isSuper ? Vaad.addressPicker($('#bEditPick'), (a) => { editAddr = a; $('#bEditSave').disabled = !a; }) : null;
-const closeEdit = () => { editId = null; $('#bEditBox').classList.add('hide'); if (editPick) editPick.reset(); };
-$('#bEditCancel').onclick = closeEdit;
-$('#bEditSave').onclick = async () => {
-  if (!editAddr) return;
-  try { await api('PUT', '/api/building', { id: editId, name: editAddr }); const m = ME.memberships.find((x) => String(x.id) === String(editId)); if (m) m.name = editAddr; if (BLD.id === +editId) BLD.name = editAddr; closeEdit(); loadBuildings(); toast('הכתובת עודכנה'); } catch (err) { toast(err.message); }
-};
-// delete a building (super user): an empty building after one confirmation; one with payments, expenses or bank rows only when its address is typed
-async function deleteBuilding(id) {
-  const m = ME.memberships.find((x) => String(x.id) === String(id)); if (!m) return;
-  try {
-    const c = await api('GET', '/api/building/counts?id=' + id);
-    const n = c.payments + c.pending + c.expenses + c.bank;
-    let typed = '';
-    if (n) {
-      typed = prompt(`למחוק את הבניין "${m.name}"?\nיימחקו לצמיתות: ${c.payments} תשלומים, ${c.pending} תשלומים ממתינים, ${c.expenses} הוצאות, ${c.bank} שורות בנק, וכל הדירות והאנשים.\nאי אפשר לשחזר.\n\nלאישור, הקלידו את כתובת הבניין בדיוק:`);
-      if (typed === null) return;
-    } else if (!confirm(`למחוק את הבניין "${m.name}" וכל הדירות והאנשים שבו? אי אפשר לשחזר.`)) return;
-    await api('DELETE', '/api/building', { id, confirm: typed });
-    ME.memberships.splice(ME.memberships.indexOf(m), 1);
-    if (BLD.id === +id) return Vaad.go('index.html');
-    loadBuildings(); toast('הבניין נמחק');
-  } catch (err) { toast(err.message.includes('confirm') ? 'הכתובת שהוקלדה לא תואמת, הבניין לא נמחק' : err.message); }
-}
-$('#bTable').onclick = (e) => { if (e.target.dataset.del) return deleteBuilding(e.target.dataset.del); const ed = e.target.dataset.edit; if (ed) { editId = ed; const m = ME.memberships.find((x) => String(x.id) === ed); $('#bEditT').textContent = 'שינוי כתובת: ' + m.name; $('#bEditBox').classList.remove('hide'); $('#bEditBox').scrollIntoView(); return; } const id = e.target.dataset.open; if (id) { Vaad.choose(id); Vaad.go('index.html'); } };
-
-async function loadManagers() {
-  const list = await api('GET', '/api/managers'); const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name])); const enc = encodeURIComponent;
-  $('#mTable').innerHTML = '<tr><th class="l">אימייל</th><th class="l">הבניינים שלו</th><th>הוסף בניין</th><th></th></tr>' +
-    list.map((x) => `<tr><td class="l" dir="ltr">${esc(x.email)}</td><td class="l">${x.buildings.map((b) => `<span class="chip">${esc(names[b] || b)} <a href="#" data-mb="${enc(x.email)}~${b}">✕</a></span>`).join('') || '<span class="mute">אין בניינים</span>'}</td>` +
-      `<td><select data-addb="${enc(x.email)}"><option value="">בחרו…</option>${ME.memberships.filter((m) => !x.buildings.includes(m.id)).map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></td>` +
-      `<td><button class="g" data-rmm="${enc(x.email)}">הסר מנהל</button></td></tr>`).join('');
-}
-$('#mAdd').onclick = async () => { try { await api('POST', '/api/manager', { email: $('#mEmail').value }); $('#mEmail').value = ''; toast('נוסף'); loadManagers(); } catch (e) { toast(e.message); } };
-$('#mTable').onchange = async (e) => { const em = e.target.dataset.addb; if (!em || !e.target.value) return; try { await api('POST', '/api/manager-building', { email: decodeURIComponent(em), building_id: e.target.value }); loadManagers(); } catch (err) { toast(err.message); } };
-$('#mTable').onclick = async (e) => {
-  if (e.target.dataset.mb) e.preventDefault();
-  try {
-    if (e.target.dataset.mb) { await api('DELETE', '/api/manager-building/' + e.target.dataset.mb); loadManagers(); }
-    if (e.target.dataset.rmm && confirm('להסיר את מנהל הבניינים?')) { await api('DELETE', '/api/manager/' + e.target.dataset.rmm); loadManagers(); }
-  } catch (err) { toast(err.message); }
-};
 
 /* ================= MORE: what tenants see, backup ================= */
 async function loadShare() { const s = await api('GET', '/api/settings'); $('#sTitle').value = s.title; $('#sNames').checked = s.showNames; $('#sDebt').checked = s.showDebt; }

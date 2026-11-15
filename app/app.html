@@ -4,119 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ועד הבית</title>
-<style>
-:root{--bg:#f6f7f9;--card:#fff;--ink:#1b2430;--mute:#6b7685;--line:#e3e7ec;--paid:#2e9d5b;--partial:#e0a100;--unpaid:#d64545;--pending:#f0c14b;--future:#d5dbe2;--pre:#3b82c4;--accbg:#e6effc;--acc:#2456a6;--btn:#2563eb;--badbg:#fdecec;--okbg:#e5f4ea;--warnbg:#fdf1d6}
-@media(prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1b222b;--ink:#e8edf3;--mute:#8d99a8;--line:#2a333f;--future:#323c49;--accbg:#1c2d4a;--acc:#9cc0f5;--badbg:#3a1f22;--okbg:#17321f;--warnbg:#3a3018}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,"Segoe UI",Arial,sans-serif}
-.hide{display:none!important}
-.wrap{max-width:720px;margin:0 auto;padding:12px 14px 28px}
-.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-h1{font-size:20px;margin:4px 0}
-.sub{color:var(--mute);font-size:13px}
-.sub a{color:var(--acc);text-decoration:none}
-.bad{color:var(--unpaid)}.good{color:var(--paid)}.mute{color:var(--mute);font-size:13px}
-input,select{font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
-input[type=search]{width:100%;margin-top:8px}
-button.b,label.b{background:var(--btn);color:#fff;border:0;border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer;display:inline-block}
-button.g{background:none;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:5px 10px;font:inherit;cursor:pointer}
-.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
-.box{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:auto;margin-bottom:14px}
-.pad{padding:14px}
-.box h3{margin:0 0 6px;font-size:16px}
-table.t{border-collapse:collapse;width:100%}
-table.t th,table.t td{padding:6px;text-align:center;border-bottom:1px solid var(--line);font-size:14px}
-table.t th{color:var(--mute);font-weight:600}
-#bankFilters{position:sticky;top:56px;z-index:6;margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0}
-#bankBox{max-height:calc(100vh - 230px);border-top-left-radius:0;border-top-right-radius:0;border-top:0}
-#bankTable th{position:sticky;top:0;z-index:2;background:var(--card)}
-table.t td.actrow{background:rgba(127,127,127,.1);white-space:nowrap;text-align:start}
-td.l,th.l{text-align:right}
-tr.warn{background:rgba(224,161,0,.15)}
-.chip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:1px;font-size:12px;color:var(--ink);text-decoration:none}
-a.chip{color:var(--acc)}
-
-/* ---- one flat menu: a sheet on phones (opened by the top bar), a side panel on computers ---- */
-#banner{display:block;text-align:center;font-size:19px;font-weight:700;color:var(--ink);text-decoration:none;padding:12px 14px 10px;background:var(--card);border-bottom:1px solid var(--line)}
-#banner small{display:block;font-size:12px;font-weight:400;color:var(--mute)}
-#bar,#menu{display:none}
-body.staff #bar{display:flex}
-#bar{position:sticky;top:0;z-index:15;align-items:center;gap:10px;background:var(--card);border-bottom:1px solid var(--line);padding:8px 14px}
-#bar .mb{font-size:22px;line-height:1;padding:6px 12px;border:1px solid var(--line);border-radius:10px;background:none;color:var(--ink);cursor:pointer}
-#bar .st{flex:1;font-weight:600;font-size:17px}
-#bar a.home{color:var(--acc);text-decoration:none;font-size:15px;padding:6px 12px;border:1px solid var(--acc);border-radius:10px}
-#menu{position:fixed;inset:0;z-index:30;background:var(--bg);overflow:auto;padding:14px 18px 28px}
-body.staff.mopen #menu{display:block}
-#menu .mh{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:18px;margin-bottom:6px}
-#menu .mh button{font-size:20px;border:0;background:none;color:var(--ink);cursor:pointer}
-#menu h4{margin:16px 0 4px;color:var(--mute);font-size:12px;font-weight:600}
-#menu a{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-size:17px;padding:12px 10px;border-radius:10px}
-#menu a.on{background:var(--accbg);color:var(--acc);font-weight:600}
-@media(min-width:760px){
-  #bar .mb{display:none}
-  body.staff #menu{display:block;position:fixed;inset:0 0 0 auto;width:190px;z-index:10;background:var(--card);border-inline-start:1px solid var(--line);padding:14px 8px}
-  #menu .mh{display:none}
-  #menu a{font-size:14px;padding:8px 10px}
-  body.staff #banner,body.staff #bar,body.staff .wrap{margin-inline-end:190px}
-  body.staff .wrap{max-width:860px;margin-inline-start:auto}
-  body.staff.wide .wrap{max-width:none;margin-left:0;margin-right:190px}
-  body.staff #banner,body.staff #bar{margin-left:0;margin-right:190px}
-}
-
-/* ---- sub tabs ---- */
-.tab{border:1px solid var(--line);border-radius:999px;padding:7px 14px;font:inherit;font-size:14px;background:var(--card);color:var(--mute);cursor:pointer;white-space:nowrap}
-.tab.on{background:var(--accbg);color:var(--acc);border-color:var(--acc);font-weight:600}
-.tabs{display:flex;gap:6px;margin:8px 0;align-items:center}
-.tab{flex:1;font-size:15px;padding:8px 6px}
-.tabs select{padding:7px 8px;border-radius:999px;font-size:14px}
-
-/* ---- home: summary, cards, detail ---- */
-.sum{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
-.sum div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
-.sum small{display:block;color:var(--mute);font-size:12px}
-.sum b{font-size:22px;font-weight:600}
-.mlabels{display:flex;gap:3px;padding:0 13px;margin-top:6px;font-size:10px;color:var(--mute)}
-.mlabels span{flex:1;text-align:center}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px;cursor:pointer}
-.top{display:flex;align-items:center;gap:10px}
-.num{min-width:36px;height:36px;border-radius:9px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:600}
-.who{flex:1;min-width:0;line-height:1.25}
-.who small{display:block;color:var(--mute);font-size:12px}
-.badge{font-size:13px;padding:3px 9px;border-radius:7px;white-space:nowrap}
-.b-ok{background:var(--okbg);color:var(--paid)}.b-bad{background:var(--badbg);color:var(--unpaid)}.b-warn{background:var(--warnbg);color:#a67700}.b-pre{background:var(--accbg);color:var(--acc)}.b-wait{background:var(--warnbg);color:#a67700}.b-old{background:var(--bg);color:var(--mute)}
-.strip{display:flex;gap:3px;margin-top:9px}
-.strip i{flex:1;height:9px;border-radius:3px;background:var(--future)}
-i.paid{background:var(--paid)}i.partial{background:var(--partial)}i.unpaid{background:var(--unpaid)}i.pending{background:var(--pending)}i.prepaid{background:var(--pre)}i.na{background:var(--line);opacity:.5}
-.more{display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:14px;color:var(--mute);cursor:default}
-.card.open .more{display:block}
-.pays{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px;font-size:14px;color:var(--ink)}
-.more .pays{background:var(--bg);margin-top:10px}
-.pays h3{font-size:15px;margin:10px 0 6px}
-.pays h3:first-child{margin-top:0}
-table.p{width:100%;border-collapse:collapse}
-table.p th{color:var(--mute);font-weight:500;font-size:12px;text-align:right;padding:3px 2px}
-table.p td{padding:5px 2px;border-top:1px solid var(--line)}
-table.p td.n{font-variant-numeric:tabular-nums;font-weight:600}
-table.p tr.tot td{font-weight:700;border-top:2px solid var(--line)}
-.balrow{font-size:15px;margin-bottom:6px}
-.addp{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
-.addp select,.addp input{padding:6px 8px;font-size:14px}
-.addp input[type=number]{width:90px}
-.foot{color:var(--mute);font-size:12px;margin-top:6px}
-.res{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
-.res small{display:block;color:var(--mute);font-size:12px}
-.res:first-of-type{border-top:0}
-a.tel{color:var(--acc);text-decoration:none;direction:ltr;unicode-bidi:embed;white-space:nowrap}
-details.old{margin-top:12px}
-details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 2px}
-.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin:16px 0 0}
-.legend span{display:flex;align-items:center;gap:5px}
-.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
-.empty{color:var(--mute);text-align:center;padding:24px 0}
-.checklist a{color:var(--acc);text-decoration:none}.checklist li{padding:4px 0}.checklist .done{color:var(--mute);text-decoration:line-through}
-.pendbadge{display:block;background:var(--warnbg);color:#a67700;border:1px solid var(--partial);border-radius:12px;padding:10px 14px;margin:10px 0;text-decoration:none;font-weight:600}
-#msg{position:fixed;bottom:16px;left:16px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:20}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 <a id="banner" target="_blank" rel="noopener"></a>
@@ -221,27 +109,6 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
         <div class="row"><select id="rApt"></select><input id="rFirst" placeholder="שם פרטי" style="width:110px"><input id="rLast" placeholder="שם משפחה" style="width:120px"><input id="rPhone" placeholder="טלפון" style="width:120px;direction:ltr"><select id="rRole"><option>שוכר</option><option>בעלים</option></select></div>
         <div class="row"><label>כניסה: <select id="rEM"></select> <input id="rEY" type="number" min="2000" max="2100" style="width:80px"></label><label>יציאה (לא חובה): <select id="rXM"><option value="">—</option></select> <input id="rXY" type="number" min="2000" max="2100" style="width:80px"></label><button class="b" id="rAdd">הוסף דייר</button></div></div>
       <div class="box"><table class="t" id="aptTable"></table></div></div>
-  </section>
-
-  <!-- ===== buildings (super user / buildings managers) ===== -->
-  <section id="sec-buildings" class="hide">
-    <div id="b-list">
-      <div class="box pad">
-        <h3>בניינים</h3>
-        <div class="mute">מי שיצר בניין הופך למנהל שלו (מנהל בניינים) או לוועד שלו (ועד הבית). מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.</div>
-        <div class="mute" style="margin-top:8px">כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית.</div><div class="row" id="bPick"></div><div class="row"><input id="bApts" type="number" min="1" max="500" placeholder="מספר הדירות בבניין" style="width:170px"></div><div class="row"><input id="bAcct" placeholder="מספר חשבון הבנק של הבניין (לא חובה עכשיו)" inputmode="numeric" style="width:300px;direction:ltr"></div><div class="mute">קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.</div><div class="row"><button class="b" id="bAdd" disabled>צור בניין</button></div>
-      </div>
-      <div class="box"><table class="t" id="bTable"></table></div>
-      <div class="box pad hide" id="bEditBox"><h3 id="bEditT"></h3><div class="mute">בחרו את הכתובת החדשה מהרשימה.</div><div class="row" id="bEditPick"></div><div class="row"><button class="b" id="bEditSave" disabled>שמור כתובת</button><button class="g" id="bEditCancel">ביטול</button></div></div>
-    </div>
-    <div id="b-managers" class="hide">
-      <div class="box pad">
-        <h3>מנהלי בניינים</h3>
-        <div class="mute">רק מנהל העל ממנה מנהלי בניינים. מנהל בניינים מנהל את הבניינים שהוקצו לו, ויכול ליצור בניינים חדשים.</div>
-        <div class="row"><input id="mEmail" type="email" placeholder="אימייל" style="width:220px;direction:ltr"><button class="b" id="mAdd">הוסף מנהל בניינים</button></div>
-      </div>
-      <div class="box"><table class="t" id="mTable"></table></div>
-    </div>
   </section>
 
   <!-- ===== more: what tenants see, backup ===== -->

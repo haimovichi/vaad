@@ -306,32 +306,16 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   await blocked('tenant8', 't8@x.com', 'assign a manager', "insert into manager_buildings(building_id,email) values (1,'t8@x.com')");
 
   // create_building
-  const created = await asUser('m3@x.com', async (q) => {
-    const id = (await q("select public.create_building('  New  ') as id")).rows[0].id;
-    const mine = (await q(`select * from manager_buildings where building_id = ${id} and email = 'm3@x.com'`)).rows.length;
-    const visible = (await q('select * from buildings')).rows.length;
-    const name = (await q(`select name from buildings where id = ${id}`)).rows[0].name;
-    return `${mine}/${visible}/${name}`;
-  });
-  report(created === '1/2/New', 'manager3', 'creates a building and becomes its manager', '1/2/New', created);
   const superMade = await asUser('super@x.com', async (q) => {
     const id = (await q("select public.create_building('S') as id")).rows[0].id;
     return (await q(`select * from manager_buildings where building_id = ${id}`)).rows.length;
   });
   report(superMade === 0, 'super', 'creates a building (no manager row needed)', 0, superMade);
-  const leak = await asUser('m12@x.com', async (q) => { await q("select public.create_building('Z')"); return (await q('select * from buildings')).rows.length; });
-  report(leak === 3, 'manager12', 'sees own buildings plus the new one', 3, leak);
-  for (const [who, email] of [['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+  // only the super user creates buildings: managers and committee members are refused like everyone else
+  for (const [who, email] of [['manager3', 'm3@x.com'], ['manager12', 'm12@x.com'], ['committee1', 'c1@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
     await blocked(who, email, 'create a building', "select public.create_building('X')");
   }
-  const comMade = await asUser('c1@x.com', async (q) => {
-    const id = (await q("select public.create_building('Com') as id")).rows[0].id;
-    const role = (await q(`select role from members where building_id = ${id} and user_id = t_uid('c1@x.com')`)).rows.map((r) => r.role).join();
-    const mgr = (await q(`select * from manager_buildings where building_id = ${id}`)).rows.length;
-    return `${role}/${mgr}`;
-  });
-  report(comMade === 'committee/0', 'committee1', 'creates a building and becomes its committee', 'committee/0', comMade);
-  await blocked('manager3', 'm3@x.com', 'create a building with an empty name', "select public.create_building('   ')");
+  await blocked('super', 'super@x.com', 'create a building with an empty name', "select public.create_building('   ')");
   // the number of apartments is set when the building is created: apartments 1..N
   const aptsMade = await asUser('super@x.com', async (q) => {
     const id = (await q("select public.create_building('Apts', null, 12) as id")).rows[0].id;
