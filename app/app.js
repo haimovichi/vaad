@@ -287,7 +287,6 @@ $('#sec-home').addEventListener('click', async (e) => {
 /* ================= BANK FILE UPLOAD (review panel on the bank movements screen) ================= */
 let IMP = null; let FILE = null;
 $('#bankFile').onchange = (e) => { FILE = e.target.files[0]; preview(); };
-$('#reload').onclick = () => FILE && preview();
 // a file that is not loaded: say why where it stays visible, and forget it
 function rejectFile(msg) {
   FILE = null; $('#bankFile').value = ''; IMP = null;
