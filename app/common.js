@@ -39,8 +39,9 @@ window.Vaad = (function () {
     return { email, isSuper, isManager, canCreate: isSuper || isManager || memberships.some((m) => m.roles.includes('committee')), memberships, building: picked };
   }
   const chosenKey = 'vaad-building';
-  const getChosen = () => { try { return Number(localStorage.getItem(chosenKey)) || null; } catch (e) { return null; } };
-  const choose = (id) => { try { localStorage.setItem(chosenKey, String(id)); } catch (e) {} };
+  // the building a person opened lasts for this browser session only: whoever belongs to several buildings picks one each time they enter
+  const getChosen = () => { try { return Number(sessionStorage.getItem(chosenKey)) || null; } catch (e) { return null; } };
+  const choose = (id) => { try { sessionStorage.setItem(chosenKey, String(id)); } catch (e) {} };
 
   const DEMOS = { // ?demo=... people, all in building 1
     super: { isSuper: true, rows: [] },

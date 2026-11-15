@@ -555,10 +555,11 @@ async function loadPeople() {
   $('#uName').style.display = ME.isSuper ? '' : 'none';   // names belong to the users table: only the super user sets them
   $('#grantNote').textContent = g.includes('committee') ? 'אתם יכולים לתת את כל שלושת התפקידים.' : 'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.';
   PEOPLE = await api('GET', '/api/people');
-  $('#pB').innerHTML = (PLATFORM ? '<option value="">כל הבניינים</option>' : '') + ME.memberships.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
+  // inside a building everyone sees the people and roles of that building only; the super user may also look across buildings
+  $('#pB').innerHTML = (ME.isSuper ? '<option value="">כל הבניינים</option>' : '') + ME.memberships.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
   $('#pB').value = String(BLD.id);
-  $('#pB').classList.toggle('hide', !PLATFORM && ME.memberships.length < 2);
-  $('#peopleNote').textContent = PLATFORM && !ME.isSuper ? ' כמנהל בניינים אתם רואים את האנשים בבניינים שלכם בלבד.' : '';
+  $('#pB').classList.toggle('hide', !ME.isSuper);
+  $('#peopleNote').textContent = '';
   renderPeople();
 }
 function renderPeople() {
@@ -568,11 +569,11 @@ function renderPeople() {
   DB.owners.forEach((o) => tie(o.userId, { b: BLD.id, t: `בעל דירה ${o.apt}`, k: 'owner' }));
   DB.residents.forEach((r) => { const gone = r.status === 'עזב'; tie(r.userId, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant' }); tie(r.user2Id, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant' }); });
   const access = {};                    // user id -> app-access roles (any building)
-  for (const m of PEOPLE.members) (access[m.user_id] = access[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` ${m.apt}` : '') + (m.role === 'committee' ? '' : ' (כניסה)'), k: 'access', id: m.id, role: m.role });
+  for (const m of PEOPLE.members.filter((x) => ME.isSuper || x.building_id === BLD.id)) (access[m.user_id] = access[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` ${m.apt}` : '') + (m.role === 'committee' ? '' : ' (כניסה)'), k: 'access', id: m.id, role: m.role });
   const chipsFor = (u) => {
     const rs = [...(here[u.id] || []), ...(access[u.id] || [])];
     const mg = u.email ? PEOPLE.managers.find((x) => x.email === u.email) : null;
-    if (mg) { if (!mg.buildings.length) rs.push({ b: null, t: 'מנהל בניינים (עדיין בלי בניין)', k: 'manager' }); for (const b of mg.buildings) rs.push({ b, t: 'מנהל בניינים', k: 'manager' }); }
+    if (mg) { if (!mg.buildings.length) rs.push({ b: null, t: 'מנהל בניינים (עדיין בלי בניין)', k: 'manager' }); for (const b of mg.buildings.filter((x) => ME.isSuper || x === BLD.id)) rs.push({ b, t: 'מנהל בניינים', k: 'manager' }); }
     if (ME.isSuper && u.email && u.email === ME.email) rs.push({ b: null, t: 'מנהל על · כל הבניינים', k: 'super' });
     return rs;
   };
@@ -581,7 +582,7 @@ function renderPeople() {
   // logins that have no users row yet (a manager added by email, the super user): shown read-only
   for (const x of PEOPLE.managers) if (!byEmail[x.email]) { const u = { id: null, email: x.email, first: '', last: '', phone: '', account: '' }; byEmail[x.email] = u; people.push({ u, rs: chipsFor(u) }); }
   if (ME.isSuper && !byEmail[ME.email]) people.push({ u: { id: null, email: ME.email, first: '', last: '', phone: '', account: '' }, rs: [{ b: null, t: 'מנהל על · כל הבניינים', k: 'super' }] });
-  const q = $('#pQ').value.trim().toLowerCase(); const fb = $('#pB').value; const multi = $('#pMulti').checked;
+  const q = $('#pQ').value.trim().toLowerCase(); const fb = ME.isSuper ? $('#pB').value : String(BLD.id); const multi = $('#pMulti').checked;
   const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (!multi || rs.length > 1) && (rs.length || !fb))
     .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (a.u.last + ' ' + a.u.first).localeCompare(c.u.last + ' ' + c.u.first, 'he') || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
