@@ -30,7 +30,9 @@ button.g{background:none;color:var(--mute);border:1px solid var(--line)}
     <input id="email" type="email" required autocomplete="email" placeholder="name@example.com">
     <button>שלחו לי קישור כניסה</button>
   </form>
-  <div id="sent" class="hide"><p>שלחנו קישור לכתובת <b id="sentTo" dir="ltr"></b>. פתחו אותו במכשיר הזה כדי להיכנס.</p><button class="g" id="again">שלחו שוב</button></div>
+  <form id="sent" class="hide"><p>שלחנו אימייל לכתובת <b id="sentTo" dir="ltr"></b>. פתחו את הקישור שבו במכשיר הזה, או הקלידו כאן את הקוד שבאימייל:</p>
+    <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="קוד מהאימייל" required>
+    <button>כניסה עם קוד</button><button type="button" class="g" id="again">שלחו שוב</button></form>
 
   <div id="pick" class="hide"><p>לאיזה בניין להיכנס?</p><div id="pickList"></div></div>
 
@@ -56,6 +58,8 @@ const show=id=>{for(const x of ['loading','login','sent','noaccess','pick'])$('#
 })();
 $('#login').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';
   try{await Vaad.signIn($('#email').value.trim());$('#sentTo').textContent=$('#email').value.trim();show('sent')}catch(err){$('#error').textContent=err.message}};
+$('#sent').onsubmit=async e=>{e.preventDefault();$('#error').textContent='';
+  try{await Vaad.verifyCode($('#email').value.trim(),$('#code').value.trim());location.reload()}catch(err){$('#error').textContent='הקוד שגוי או שפג תוקפו. בקשו קוד חדש.'}};
 $('#pickList').onclick=e=>{const b=e.target.dataset.b;if(b){Vaad.choose(b);location.reload()}};
 $('#again').onclick=()=>show('login');
 $('#out').onclick=()=>Vaad.signOut();

@@ -130,6 +130,11 @@ window.Vaad = (function () {
     const { error } = await client().auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: location.origin + location.pathname.replace(/[^/]*$/, '') + 'index.html' } });
     if (error) throw error;
   };
+  // sign in with the code that came in the same email as the link (works on any device, unlike the link)
+  const verifyCode = async (email, code) => {
+    const { error } = await client().auth.verifyOtp({ email, token: String(code).replace(/\s+/g, ''), type: 'email' });
+    if (error) throw error;
+  };
   const signOut = async () => { if (!demo) await client().auth.signOut(); location.href = 'index.html' + keep; };
   const go = (page) => { location.href = page + keep; };
   const perms = (me) => ({ canCreate: !!me.canCreate, manage: !!(me.building && me.building.manage), isSuper: !!me.isSuper, isManager: !!me.isManager, grantable: me.building ? me.building.grantable : [] });
@@ -548,5 +553,5 @@ window.Vaad = (function () {
   }
 
   const store = (building, me) => (demo ? demoStore(building, me) : supabaseStore(building));
-  return { demo, keep, client, whoami, addressPicker, buildMe, mountSwitcher, choose, setViewAs, VIEW_LABEL, signIn, signOut, go, store, perms, ROLE_LABEL };
+  return { demo, keep, client, whoami, addressPicker, buildMe, mountSwitcher, choose, setViewAs, VIEW_LABEL, verifyCode, signIn, signOut, go, store, perms, ROLE_LABEL };
 })();
