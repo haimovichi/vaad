@@ -374,6 +374,8 @@ window.Vaad = (function () {
       async removeManagerBuilding(e, id) { ok(await c.from('manager_buildings').delete().eq('email', e).eq('building_id', id)); },
       async createBuilding(name, acct, apts) { return ok(await c.rpc('create_building', { nm: name, acct: acct || null, apts: apts || null })); },
       async renameBuilding(id, name) { ok(await c.from('buildings').update({ name }).eq('id', id)); },
+      async buildingCounts(id) { return ok(await c.rpc('building_counts', { b: id })); },
+      async deleteBuilding(id, confirm) { ok(await c.rpc('delete_building', { b: id, confirm: confirm || null })); },
     };
   }
 
@@ -523,6 +525,8 @@ window.Vaad = (function () {
       async addManagerBuilding(e, id) { managers = managers.map((x) => (x.email === e ? { ...x, buildings: [...x.buildings, id] } : x)); },
       async removeManagerBuilding(e, id) { managers = managers.map((x) => (x.email === e ? { ...x, buildings: x.buildings.filter((b) => b !== id) } : x)); },
       async renameBuilding(id, name) { buildings = buildings.map((b) => (b.id === id ? { ...b, name } : b)); },
+      async buildingCounts() { return { payments: 0, pending: 0, expenses: 0, bank: 0 }; },
+      async deleteBuilding(id) { buildings = buildings.filter((b) => b.id !== id); },
       async createBuilding(name) { const id = Math.max(...buildings.map((b) => b.id)) + 1; buildings = buildings.concat({ id, name }); return id; },
     };
   }

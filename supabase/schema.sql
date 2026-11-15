@@ -334,6 +334,35 @@ begin
   return nid;
 end $$;
 
+-- What a building holds that cannot be rebuilt: used to warn before deleting it. Super user only.
+create or replace function public.building_counts(b bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_super() then raise exception 'not allowed' using errcode = '42501'; end if;
+  return jsonb_build_object(
+    'payments', (select count(*) from public.payments where building_id = b),
+    'pending', (select count(*) from public.pending_payments where building_id = b),
+    'expenses', (select count(*) from public.expenses where building_id = b),
+    'bank', (select count(*) from public.bank_transactions where building_id = b));
+end $$;
+
+-- Delete a building and everything in it (every table cascades). Super user only. A building that holds payments, expenses or
+-- bank rows is deleted only when confirm is exactly its name.
+create or replace function public.delete_building(b bigint, confirm text default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare nm text; c jsonb;
+begin
+  if not public.is_super() then raise exception 'not allowed' using errcode = '42501'; end if;
+  select name into nm from public.buildings where id = b;
+  if nm is null then raise exception 'no such building'; end if;
+  c := public.building_counts(b);
+  if (c ->> 'payments')::int + (c ->> 'pending')::int + (c ->> 'expenses')::int + (c ->> 'bank')::int > 0
+     and confirm is distinct from nm then
+    raise exception 'type the building name to confirm' using errcode = 'P0001';
+  end if;
+  delete from public.buildings where id = b;
+end $$;
+
 -- the users row for an email, created (email only) when missing. Granting a role to a person who is not a user yet
 -- goes through this: the super user, buildings managers and committee members may call it.
 create or replace function public.user_for_email(e text) returns bigint
@@ -857,7 +886,7 @@ declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','add_tenancy','end_tenancy','edit_person','add_owner','remove_owner')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','end_tenancy','edit_person','add_owner','remove_owner')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);

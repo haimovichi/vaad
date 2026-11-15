@@ -664,7 +664,7 @@ $('#aptTable').onchange = async (e) => { const i = e.target.dataset.i; if (i ===
 /* ================= BUILDINGS (super user, managers) ================= */
 function loadBuildings() {
   $('#bTable').innerHTML = '<tr><th>#</th><th class="l">שם</th><th class="l">התפקידים שלכם</th><th></th></tr>' +
-    ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l">${esc(m.name)}</td><td class="l">${m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${ME.isSuper ? `<button class="g" data-edit="${m.id}">שנה כתובת</button> ` : ''}${m.id === BLD.id ? '<span class="mute">פתוח עכשיו</span>' : `<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
+    ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l">${esc(m.name)}</td><td class="l">${m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')}</td><td>${ME.isSuper ? `<button class="g" data-edit="${m.id}">שנה כתובת</button> <button class="g" data-del="${m.id}">מחק בניין</button> ` : ''}${m.id === BLD.id ? '<span class="mute">פתוח עכשיו</span>' : `<button class="g" data-open="${m.id}">פתח</button>`}</td></tr>`).join('');
 }
 let newAddr = null;
 const bPick = Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
@@ -677,7 +677,24 @@ $('#bEditSave').onclick = async () => {
   if (!editAddr) return;
   try { await api('PUT', '/api/building', { id: editId, name: editAddr }); const m = ME.memberships.find((x) => String(x.id) === String(editId)); if (m) m.name = editAddr; if (BLD.id === +editId) BLD.name = editAddr; closeEdit(); loadBuildings(); toast('הכתובת עודכנה'); } catch (err) { toast(err.message); }
 };
-$('#bTable').onclick = (e) => { const ed = e.target.dataset.edit; if (ed) { editId = ed; const m = ME.memberships.find((x) => String(x.id) === ed); $('#bEditT').textContent = 'שינוי כתובת: ' + m.name; $('#bEditBox').classList.remove('hide'); $('#bEditBox').scrollIntoView(); return; } const id = e.target.dataset.open; if (id) { Vaad.choose(id); Vaad.go('index.html'); } };
+// delete a building (super user): an empty building after one confirmation; one with payments, expenses or bank rows only when its address is typed
+async function deleteBuilding(id) {
+  const m = ME.memberships.find((x) => String(x.id) === String(id)); if (!m) return;
+  try {
+    const c = await api('GET', '/api/building/counts?id=' + id);
+    const n = c.payments + c.pending + c.expenses + c.bank;
+    let typed = '';
+    if (n) {
+      typed = prompt(`למחוק את הבניין "${m.name}"?\nיימחקו לצמיתות: ${c.payments} תשלומים, ${c.pending} תשלומים ממתינים, ${c.expenses} הוצאות, ${c.bank} שורות בנק, וכל הדירות והאנשים.\nאי אפשר לשחזר.\n\nלאישור, הקלידו את כתובת הבניין בדיוק:`);
+      if (typed === null) return;
+    } else if (!confirm(`למחוק את הבניין "${m.name}" וכל הדירות והאנשים שבו? אי אפשר לשחזר.`)) return;
+    await api('DELETE', '/api/building', { id, confirm: typed });
+    ME.memberships.splice(ME.memberships.indexOf(m), 1);
+    if (BLD.id === +id) return Vaad.go('index.html');
+    loadBuildings(); toast('הבניין נמחק');
+  } catch (err) { toast(err.message.includes('confirm') ? 'הכתובת שהוקלדה לא תואמת, הבניין לא נמחק' : err.message); }
+}
+$('#bTable').onclick = (e) => { if (e.target.dataset.del) return deleteBuilding(e.target.dataset.del); const ed = e.target.dataset.edit; if (ed) { editId = ed; const m = ME.memberships.find((x) => String(x.id) === ed); $('#bEditT').textContent = 'שינוי כתובת: ' + m.name; $('#bEditBox').classList.remove('hide'); $('#bEditBox').scrollIntoView(); return; } const id = e.target.dataset.open; if (id) { Vaad.choose(id); Vaad.go('index.html'); } };
 
 async function loadManagers() {
   const list = await api('GET', '/api/managers'); const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name])); const enc = encodeURIComponent;

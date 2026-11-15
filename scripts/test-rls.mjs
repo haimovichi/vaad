@@ -341,6 +341,27 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   report(aptsMade === '12/1/12', 'super', 'creates a building with 12 apartments numbered 1..12', '12/1/12', aptsMade);
   await blocked('super', 'super@x.com', 'create a building with 0 apartments', "select public.create_building('Z', null, 0)");
   await blocked('super', 'super@x.com', 'create a building with 501 apartments', "select public.create_building('Z', null, 501)");
+  // delete_building: super only; an empty building at once, one with money records only when its name is typed
+  {
+    const r = await asUser('super@x.com', async (q) => {
+      const out = [];
+      const empty = (await q("select public.create_building('Empty', null, 3) as id")).rows[0].id;
+      await q(`select public.delete_building(${empty})`);
+      out.push((await q(`select count(*)::int n from buildings where id = ${empty}`)).rows[0].n + (await q(`select count(*)::int n from apartments where building_id = ${empty}`)).rows[0].n);
+      const full = (await q("select public.create_building('Full', null, 2) as id")).rows[0].id;
+      await q(`insert into payments (building_id, key, apt, y, m, amount) values (${full}, 'x', 1, 2026, 1, 100)`);
+      for (const conf of ['null', "'wrong'"]) { await q('savepoint s'); try { await q(`select public.delete_building(${full}, ${conf})`); out.push('deleted'); } catch (e) { await q('rollback to s'); out.push('refused'); } }
+      out.push((await q(`select (building_counts(${full}) ->> 'payments')::int n`)).rows[0].n);
+      await q(`select public.delete_building(${full}, 'Full')`);
+      out.push((await q(`select count(*)::int n from payments where building_id = ${full}`)).rows[0].n);
+      return out.join('/');
+    });
+    report(r === '0/refused/refused/1/0', 'super', 'deletes an empty building at once; one with payments only with its name typed', '0/refused/refused/1/0', r);
+  }
+  for (const [who, email] of [['manager12', 'm12@x.com'], ['committee1', 'c1@x.com'], ['anon', null]]) {
+    await blocked(who, email, 'delete a building', 'select public.delete_building(1)');
+    await blocked(who, email, 'count what a building holds', 'select public.building_counts(1)');
+  }
 
   // match_payer: the bank-matching cascade of lib/match.js, in the database
   {
