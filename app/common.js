@@ -118,7 +118,8 @@ window.Vaad = (function () {
     const st = 'direction:rtl;text-align:right;width:auto;margin:0';
     el.innerHTML = `<label class="f"><span>עיר</span><input class="c" list="${id}c" autocomplete="off" style="${st};width:140px"></label><label class="f"><span>רחוב</span><input class="s" list="${id}s" autocomplete="off" style="${st};width:170px"></label><label class="f"><span>מספר</span><input class="n" type="number" min="1" style="${st};width:80px"></label><datalist id="${id}c"></datalist><datalist id="${id}s"></datalist><span class="mute msg" style="font-size:13px"></span>`;
     const q = (s) => el.querySelector(s); let cities = []; let streets = []; let forCity = '';
-    const say = (t) => { q('.msg').textContent = t; };
+    // loading is shown inside the field (a placeholder) so nothing on the page moves; only an error uses the text line
+    const say = (t, f) => { q('.c').placeholder = ''; q('.s').placeholder = ''; if (f && !/^לא ניתן/.test(t)) { q(f).placeholder = t; q('.msg').textContent = ''; } else q('.msg').textContent = t; };
     const fetchRows = async (filters, limit) => {
       const r = await fetch(`${API}?resource_id=${RES}&limit=${limit}&fields=${encodeURIComponent('שם_ישוב,שם_רחוב,סמל_רחוב')}&filters=${encodeURIComponent(JSON.stringify(filters))}`);
       const j = await r.json(); if (!j.success) throw new Error('lookup failed'); return j.result.records;
@@ -126,12 +127,12 @@ window.Vaad = (function () {
     const fill = (dl, list) => { dl.innerHTML = list.map((x) => `<option value="${x.replace(/"/g, '&quot;')}">`).join(''); };
     const get = () => { const c = norm(q('.c').value); const s = norm(q('.s').value); const n = Math.floor(+q('.n').value); return cities.includes(c) && forCity === c && streets.includes(s) && n > 0 ? `${s} ${n} ${c}` : null; };
     const changed = () => onchange && onchange(get());
-    (async () => { try { say('טוען ערים…'); cities = [...new Set((await fetchRows({ 'סמל_רחוב': 9000 }, 5000)).map((r) => norm(r['שם_ישוב'])))].sort(); fill(q('datalist'), cities); say(''); } catch (e) { say('לא ניתן לטעון את רשימת הערים. בדקו חיבור ונסו שוב.'); } })();
+    (async () => { try { say('טוען ערים…', '.c'); cities = [...new Set((await fetchRows({ 'סמל_רחוב': 9000 }, 5000)).map((r) => norm(r['שם_ישוב'])))].sort(); fill(q('datalist'), cities); say(''); } catch (e) { say('לא ניתן לטעון את רשימת הערים. בדקו חיבור ונסו שוב.'); } })();
     q('.c').oninput = async () => {
       const c = norm(q('.c').value); q('.s').value = ''; q('.n').value = ''; streets = []; forCity = '';
       changed();
       if (!cities.includes(c)) return;
-      try { say('טוען רחובות…'); const rows = await fetchRows({ 'שם_ישוב': c }, 20000); streets = [...new Set(rows.filter((r) => r['סמל_רחוב'] !== 9000).map((r) => norm(r['שם_רחוב'])))].sort(); forCity = c; fill(el.querySelectorAll('datalist')[1], streets); q('.s').disabled = q('.n').disabled = false; say(''); }
+      try { say('טוען רחובות…', '.s'); const rows = await fetchRows({ 'שם_ישוב': c }, 20000); streets = [...new Set(rows.filter((r) => r['סמל_רחוב'] !== 9000).map((r) => norm(r['שם_רחוב'])))].sort(); forCity = c; fill(el.querySelectorAll('datalist')[1], streets); q('.s').disabled = q('.n').disabled = false; say(''); }
       catch (e) { say('לא ניתן לטעון את רשימת הרחובות.'); }
       changed();
     };
