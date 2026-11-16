@@ -116,3 +116,10 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 .f>input,.f>select{font-size:16px}
 .f:has(>.hide){display:none}
 .row:has(>.f){align-items:flex-end}
+
+/* in-page confirm / question dialog (replaces the browser's own, which shows the site address as its title) */
+.dlg-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:100}
+.dlg{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.dlg p{margin:0 0 12px;white-space:pre-line;line-height:1.5}
+.dlg input{width:100%;box-sizing:border-box;margin-bottom:12px}
+.dlg .acts{display:flex;gap:8px;justify-content:flex-start}

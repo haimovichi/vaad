@@ -90,6 +90,25 @@ window.Vaad = (function () {
     return meFor({ email, isSuper: sup.data === true, isManager: !!mgr.data, managerOf: (mb.data || []).map((x) => x.building_id), rows: mem.data || [], buildings: blds.data || [] });
   }
   // fill a <select> with the person's buildings (stays hidden when there is only one)
+  // In-page question: ask({ text, ok, cancel, input }) -> true / the typed text (with input) / null when cancelled.
+  function ask(o) {
+    return new Promise((res) => {
+      const bg = document.createElement('div'); bg.className = 'dlg-bg';
+      const p = document.createElement('p'); p.textContent = o.text;
+      const d = document.createElement('div'); d.className = 'dlg'; d.setAttribute('role', 'dialog'); d.appendChild(p);
+      let inp = null; if (o.input !== undefined) { inp = document.createElement('input'); inp.placeholder = o.input || ''; d.appendChild(inp); }
+      const acts = document.createElement('div'); acts.className = 'acts';
+      const okB = document.createElement('button'); okB.className = 'b'; okB.textContent = o.ok || 'אישור';
+      const noB = document.createElement('button'); noB.className = 'g'; noB.textContent = o.cancel || 'ביטול';
+      acts.append(okB, noB); d.appendChild(acts); bg.appendChild(d); document.body.appendChild(bg);
+      const done = (v) => { bg.remove(); document.removeEventListener('keydown', key, true); res(v); };
+      const key = (e) => { if (e.key === 'Escape') done(null); else if (e.key === 'Enter' && inp) done(inp.value); };
+      document.addEventListener('keydown', key, true);
+      okB.onclick = () => done(inp ? inp.value : true); noB.onclick = () => done(null);
+      bg.onclick = (e) => { if (e.target === bg) done(null); };
+      (inp || okB).focus();
+    });
+  }
   // Address picker: city and street come from Israel's official street list (data.gov.il); only a listed city and street are accepted.
   // get() returns "street number city" once all three are valid, else null.
   let apSeq = 0;
@@ -568,5 +587,5 @@ window.Vaad = (function () {
   }
 
   const store = (building, me) => (demo ? demoStore(building, me) : supabaseStore(building));
-  return { demo, keep, client, whoami, addressPicker, buildMe, choose, setViewAs, VIEW_LABEL, verifyCode, signIn, signOut, go, store, perms, ROLE_LABEL };
+  return { demo, keep, client, whoami, addressPicker, buildMe, ask, choose, setViewAs, VIEW_LABEL, verifyCode, signIn, signOut, go, store, perms, ROLE_LABEL };
 })();

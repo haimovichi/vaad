@@ -305,7 +305,7 @@ $('#sec-home').addEventListener('click', async (e) => {
   }
   const del = e.target.closest('[data-delpay]');
   if (del) {
-    if (!confirm('למחוק את התשלום?')) return;
+    if (!(await Vaad.ask({ ok: 'מחק', text: 'למחוק את התשלום?' }))) return;
     try { await api('DELETE', '/api/payment/' + del.dataset.delpay); toast('התשלום נמחק'); renderHome(); } catch (err) { toast(err.message); }
     return;
   }
@@ -329,7 +329,7 @@ async function preview() {
   try { IMP = await api('POST', '/api/import/preview', buf); } catch (e) { return rejectFile(e.message); }
   if (IMP.needAccount) {   // the building has no bank account yet: the file's account becomes the building's account only if the user confirms it
     const a = IMP.needAccount;
-    if (!confirm(`לבניין עוד לא הוגדר חשבון בנק.\nהקובץ שייך לחשבון ${a.number}${a.name ? `\n(${a.name})` : ''}.\nלקבוע אותו כחשבון הבנק של הבניין ולטעון את הקובץ?`)) return rejectFile('הקובץ לא נטען: חשבון הבנק של הבניין לא הוגדר.');
+    if (!(await Vaad.ask({ ok: 'קבע וטען', text: `לבניין עוד לא הוגדר חשבון בנק.\nהקובץ שייך לחשבון ${a.number}${a.name ? `\n(${a.name})` : ''}.\nלקבוע אותו כחשבון הבנק של הבניין ולטעון את הקובץ?` }))) return rejectFile('הקובץ לא נטען: חשבון הבנק של הבניין לא הוגדר.');
     try { await api('POST', '/api/bank/account', { account: a.number }); } catch (e) { return rejectFile(e.message); }
     return preview();
   }
@@ -635,7 +635,7 @@ $('#nuAdd').onclick = async () => {
 ['#pQ', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
 $('#pTable').onclick = async (e) => {
   const rm = e.target.closest('a[data-rm]');
-  if (rm) { e.preventDefault(); if (!confirm('להסיר את הרשאת הכניסה?')) return; try { await api('DELETE', '/api/member/' + rm.dataset.rm); loadPeople(); } catch (err) { toast(err.message); } return; }
+  if (rm) { e.preventDefault(); if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את הרשאת הכניסה?' }))) return; try { await api('DELETE', '/api/member/' + rm.dataset.rm); loadPeople(); } catch (err) { toast(err.message); } return; }
 };
 
 /* ---------- apartments and the people in them: owners, tenants, or both; any number per apartment ---------- */
@@ -695,19 +695,19 @@ async function loadApts() {
 $('#aptTable').onclick = async (e) => {
   const ro = e.target.closest('[data-rmown]');
   if (ro) {
-    if (!confirm('להסיר את בעל הדירה? גם הרשאת הכניסה שלו לדירה הזו תוסר.')) return;
+    if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את בעל הדירה? גם הרשאת הכניסה שלו לדירה הזו תוסר.' }))) return;
     try { await api('DELETE', '/api/owner/' + ro.dataset.rmown); toast('בעל הדירה הוסר'); loadApts(); } catch (err) { toast(err.message); }
     return;
   }
   const hr = e.target.closest('[data-hrm]');
   if (hr) {
-    if (!confirm('להסיר את האדם מהדירה? שאר האנשים בדירה נשארים.')) return;
+    if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את האדם מהדירה? שאר האנשים בדירה נשארים.' }))) return;
     const [key, userId] = hr.dataset.hrm.split('|');
     try { await api('POST', '/api/household/remove', { key, userId }); toast('האדם הוסר מהדירה'); loadApts(); } catch (err) { toast(err.message); }
     return;
   }
   const b = e.target.closest('[data-end]'); if (!b) return;
-  const v = prompt('באיזה חודש הדיירים עזבו? (חודש/שנה, למשל 8/2026). כל האנשים בדירה נחשבים כעוזבים.'); if (!v) return;
+  const v = await Vaad.ask({ ok: 'סיים דיירות', input: 'חודש/שנה, למשל 8/2026', text: 'באיזה חודש הדיירים עזבו? כל האנשים בדירה נחשבים כעוזבים.' }); if (!v) return;
   const m = /^\s*(\d{1,2})\s*[\/.-]\s*(\d{4})\s*$/.exec(v);
   if (!m) return toast('פורמט: חודש/שנה, למשל 8/2026');
   try { await api('POST', '/api/tenancy/end', { key: b.dataset.end, exitMonth: m[1], exitYear: m[2] }); toast('הדיירות הסתיימה'); loadApts(); } catch (err) { toast(err.message); }

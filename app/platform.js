@@ -51,9 +51,9 @@ async function deleteBuilding(id) {
     const n = c.payments + c.pending + c.expenses + c.bank;
     let typed = '';
     if (n) {
-      typed = prompt(`למחוק את הבניין "${m.name}"?\nיימחקו לצמיתות: ${c.payments} תשלומים, ${c.pending} תשלומים ממתינים, ${c.expenses} הוצאות, ${c.bank} שורות בנק, וכל הדירות והאנשים.\nאי אפשר לשחזר.\n\nלאישור, הקלידו את כתובת הבניין בדיוק:`);
+      typed = await Vaad.ask({ ok: 'מחק לצמיתות', input: 'כתובת הבניין', text: `למחוק את הבניין "${m.name}"?\nיימחקו לצמיתות: ${c.payments} תשלומים, ${c.pending} תשלומים ממתינים, ${c.expenses} הוצאות, ${c.bank} שורות בנק, וכל הדירות והאנשים.\nאי אפשר לשחזר.\n\nלאישור, הקלידו את כתובת הבניין בדיוק:` });
       if (typed === null) return;
-    } else if (!confirm(`למחוק את הבניין "${m.name}" וכל הדירות והאנשים שבו? אי אפשר לשחזר.`)) return;
+    } else if (!(await Vaad.ask({ ok: 'מחק', text: `למחוק את הבניין "${m.name}" וכל הדירות והאנשים שבו? אי אפשר לשחזר.` }))) return;
     await api('DELETE', '/api/building', { id, confirm: typed });
     ME.memberships.splice(ME.memberships.indexOf(m), 1);
     loadBuildings(); loadManagers(); toast('הבניין נמחק');
@@ -80,7 +80,7 @@ $('#mTable').onclick = async (e) => {
   if (e.target.dataset.mb) e.preventDefault();
   try {
     if (e.target.dataset.mb) { await api('DELETE', '/api/manager-building/' + e.target.dataset.mb); loadManagers(); }
-    if (e.target.dataset.rmm && confirm('להסיר את מנהל הבניינים?')) { await api('DELETE', '/api/manager/' + e.target.dataset.rmm); loadManagers(); }
+    if (e.target.dataset.rmm && await Vaad.ask({ ok: 'הסר', text: 'להסיר את מנהל הבניינים?' })) { await api('DELETE', '/api/manager/' + e.target.dataset.rmm); loadManagers(); }
   } catch (err) { toast(err.message); }
 };
 
