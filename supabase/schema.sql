@@ -32,6 +32,7 @@ create table if not exists public.buildings (
 );
 -- the building's bank account as the bank prints it; a bank file is loaded only when its account is this one
 alter table public.buildings add column if not exists bank_account text;
+alter table public.buildings add column if not exists bank_code text;   -- the bank's number (12 = Hapoalim); the bank file does not say it, so it is for the record, not for the check
 -- an account number compared by its digits only, leading zeros ignored (0184949434 = 184-949434)
 create or replace function public.account_digits(a text) returns text
 language sql immutable set search_path = public as $$ select nullif(ltrim(regexp_replace(coalesce(a, ''), '\D', '', 'g'), '0'), '') $$;
@@ -327,14 +328,16 @@ $$;
 drop function if exists public.create_building(text);
 drop function if exists public.create_building(text, text);
 -- apts: how many apartments the building has, numbered 1..apts (apartments are not added one by one afterwards)
-create or replace function public.create_building(nm text, acct text default null, apts int default null) returns bigint
+drop function if exists public.create_building(text, text, int);
+create or replace function public.create_building(nm text, acct text default null, apts int default null, bank text default null) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare nid bigint;
 begin
   if not public.is_super() then raise exception 'not allowed' using errcode = '42501'; end if;
   if nm is null or length(trim(nm)) = 0 then raise exception 'name required'; end if;
   if apts is not null and apts not between 1 and 500 then raise exception 'apartments must be between 1 and 500'; end if;
-  insert into public.buildings (name, bank_account) values (trim(nm), nullif(btrim(acct), '')) returning id into nid;
+  if nullif(btrim(bank), '') is not null and btrim(bank) !~ '^[0-9]{1,2}$' then raise exception 'bank code must be 1-2 digits'; end if;
+  insert into public.buildings (name, bank_account, bank_code) values (trim(nm), nullif(btrim(acct), ''), nullif(btrim(bank), '')) returning id into nid;
   if apts is not null then insert into public.apartments (building_id, apt) select nid, g from generate_series(1, apts) g; end if;
   return nid;
 end $$;

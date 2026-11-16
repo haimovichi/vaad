@@ -323,6 +323,13 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     return `${r.n}/${r.lo}/${r.hi}`;
   });
   report(aptsMade === '12/1/12', 'super', 'creates a building with 12 apartments numbered 1..12', '12/1/12', aptsMade);
+  const bankMade = await asUser('super@x.com', async (q) => {
+    const id = (await q("select public.create_building('Bk', '184-949434', 3, '12') as id")).rows[0].id;
+    const r = (await q(`select bank_code, bank_account from buildings where id = ${id}`)).rows[0];
+    return `${r.bank_code}/${r.bank_account}`;
+  });
+  report(bankMade === '12/184-949434', 'super', 'creates a building with its bank number and account', '12/184-949434', bankMade);
+  await blocked('super', 'super@x.com', 'create a building with a bad bank number', "select public.create_building('Z', null, 3, 'abc')");
   await blocked('super', 'super@x.com', 'create a building with 0 apartments', "select public.create_building('Z', null, 0)");
   await blocked('super', 'super@x.com', 'create a building with 501 apartments', "select public.create_building('Z', null, 501)");
   // delete_building: super only; an empty building at once, one with money records only when its name is typed

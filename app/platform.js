@@ -31,7 +31,7 @@ $('#bAdd').onclick = async () => {
   if ((br || ac) && (br.length !== 3 || ac.length < 4)) return toast('חשבון הבנק: סניף של 3 ספרות ומספר חשבון (או להשאיר את שניהם ריקים)');
   const acct = br && ac ? br + '-' + ac : '';
   try {
-    const b = await api('POST', '/api/building', { name: newAddr, bankAccount: acct, apartments: $('#bApts').value });
+    const b = await api('POST', '/api/building', { name: newAddr, bankAccount: acct, bankCode: $('#bBank').value, apartments: $('#bApts').value });
     Vaad.choose(b.id); Vaad.go('app.html');
   } catch (e) { toast(e.message); }
 };

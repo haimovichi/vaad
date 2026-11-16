@@ -391,7 +391,7 @@ $('#commit').onclick = async () => {
 /* ================= BANK BALANCE (from the newest row of the bank file) ================= */
 let BANKINFO = null;
 async function refreshBankInfo() { if (!STAFF) return null; try { BANKINFO = await api('GET', '/api/bank/info'); } catch (e) { BANKINFO = null; } return BANKINFO; }
-const balLine = (i) => (i && i.balance ? `יתרת חשבון הבנק: <b class="${i.balance.amount < 0 ? 'bad' : 'good'}">${i.balance.amount < 0 ? '−' : ''}${fmt2(Math.abs(i.balance.amount))} ₪</b> <span class="mute">(לפי תנועות הבנק עד ${fdate(i.balance.date)})</span>` : '');
+const balLine = (i) => (i && i.balance ? `${i.bank ? `בנק ${esc(i.bank)}, ` : ''}יתרת חשבון הבנק: <b class="${i.balance.amount < 0 ? 'bad' : 'good'}">${i.balance.amount < 0 ? '−' : ''}${fmt2(Math.abs(i.balance.amount))} ₪</b> <span class="mute">(לפי תנועות הבנק עד ${fdate(i.balance.date)})</span>` : '');
 
 /* ================= COLLECTED VERSUS SPENT ================= */
 function renderSummary() {
