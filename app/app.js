@@ -41,7 +41,6 @@ document.title = BLD.name;
 $('#updated').textContent = STAFF ? '' : 'עודכן ' + SNAP.updated.split('-').reverse().join('/');
 $('#who').textContent = ME.email + ' · ' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ');
 $('#logout').onclick = (e) => { e.preventDefault(); Vaad.signOut(); };
-Vaad.mountSwitcher($('#bsel'), ME);
 
 /* ---------- menu and routing: one flat list of screens, ← בית on every screen but home ---------- */
 const SCREENS = [
@@ -65,9 +64,8 @@ for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
   menuHtml += `<a href="#${x[0]}" data-k="${x[0]}"><b>${x[2]}</b> ${x[1]}</a>`;
 }
-// the super user switches buildings (and creates, renames, deletes them) on the platform page; everyone else switches here
-const others = ME.isSuper || ME.realSuper ? [] : ME.memberships.filter((m) => !ME.building || m.id !== ME.building.id);
-menuHtml += '<h4>חשבון</h4>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> כל הבניינים</a><a href="#" id="mview"><b>👁️</b> צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend"><b>↩</b> חזרה למנהל על</a>' : '') + others.map((m) => `<a href="#" data-b="${m.id}"><b>🔄</b> עבור ל${esc(m.name)}</a>`).join('') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
+// inside a building there is no switching; only the super user leaves it, for the platform page
+menuHtml += '<h4>חשבון</h4>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> כל הבניינים</a><a href="#" id="mview"><b>👁️</b> צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend"><b>↩</b> חזרה למנהל על</a>' : '') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
 $('#menu').innerHTML = menuHtml;
 const setMenu = (on) => document.body.classList.toggle('mopen', on);
 $('#mbtn').onclick = () => setMenu(true);
@@ -78,7 +76,6 @@ $('#menu').onclick = (e) => {
   if (a.id === 'mout') { e.preventDefault(); return Vaad.signOut(); }
   if (a.id === 'mview') { e.preventDefault(); setMenu(false); return openViewAs(); }
   if (a.id === 'mviewend') { e.preventDefault(); Vaad.setViewAs(null); return (location.href = 'app.html' + Vaad.keep); }
-  if (a.dataset.b) { e.preventDefault(); Vaad.choose(a.dataset.b); return (location.href = 'index.html' + Vaad.keep); }
   setMenu(false);
 };
 
@@ -588,10 +585,6 @@ async function loadPeople() {
   $('#uName').style.display = ME.isSuper ? '' : 'none';   // names belong to the users table: only the super user sets them
   $('#grantNote').textContent = g.includes('committee') ? 'אתם יכולים לתת את כל שלושת התפקידים.' : 'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.';
   PEOPLE = await api('GET', '/api/people');
-  // inside a building everyone sees the people and roles of that building only; the super user may also look across buildings
-  $('#pB').innerHTML = (ME.isSuper ? '<option value="">כל הבניינים</option>' : '') + ME.memberships.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
-  $('#pB').value = String(BLD.id);
-  $('#pB').classList.toggle('hide', !ME.isSuper);
   $('#peopleNote').textContent = '';
   renderPeople();
 }
@@ -602,11 +595,11 @@ function renderPeople() {
   DB.owners.forEach((o) => tie(o.userId, { b: BLD.id, t: `בעל דירה ${o.apt}`, k: 'owner' }));
   DB.residents.forEach((r) => { const gone = r.status === 'עזב'; tie(r.userId, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant' }); tie(r.user2Id, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant' }); });
   const access = {};                    // user id -> app-access roles (any building)
-  for (const m of PEOPLE.members.filter((x) => ME.isSuper || x.building_id === BLD.id)) (access[m.user_id] = access[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` ${m.apt}` : '') + (m.role === 'committee' ? '' : ' (כניסה)'), k: 'access', id: m.id, role: m.role });
+  for (const m of PEOPLE.members.filter((x) => x.building_id === BLD.id)) (access[m.user_id] = access[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` ${m.apt}` : '') + (m.role === 'committee' ? '' : ' (כניסה)'), k: 'access', id: m.id, role: m.role });
   const chipsFor = (u) => {
     const rs = [...(here[u.id] || []), ...(access[u.id] || [])];
     const mg = u.email ? PEOPLE.managers.find((x) => x.email === u.email) : null;
-    if (mg) { if (!mg.buildings.length) rs.push({ b: null, t: 'מנהל בניינים (עדיין בלי בניין)', k: 'manager' }); for (const b of mg.buildings.filter((x) => ME.isSuper || x === BLD.id)) rs.push({ b, t: 'מנהל בניינים', k: 'manager' }); }
+    if (mg) { if (!mg.buildings.length) rs.push({ b: null, t: 'מנהל בניינים (עדיין בלי בניין)', k: 'manager' }); for (const b of mg.buildings.filter((x) => x === BLD.id)) rs.push({ b, t: 'מנהל בניינים', k: 'manager' }); }
     if (ME.isSuper && u.email && u.email === ME.email) rs.push({ b: null, t: 'מנהל על · כל הבניינים', k: 'super' });
     return rs;
   };
@@ -615,7 +608,7 @@ function renderPeople() {
   // logins that have no users row yet (a manager added by email, the super user): shown read-only
   for (const x of PEOPLE.managers) if (!byEmail[x.email]) { const u = { id: null, email: x.email, first: '', last: '', phone: '', account: '' }; byEmail[x.email] = u; people.push({ u, rs: chipsFor(u) }); }
   if (ME.isSuper && !byEmail[ME.email]) people.push({ u: { id: null, email: ME.email, first: '', last: '', phone: '', account: '' }, rs: [{ b: null, t: 'מנהל על · כל הבניינים', k: 'super' }] });
-  const q = $('#pQ').value.trim().toLowerCase(); const fb = ME.isSuper ? $('#pB').value : String(BLD.id); const multi = $('#pMulti').checked;
+  const q = $('#pQ').value.trim().toLowerCase(); const fb = String(BLD.id); const multi = $('#pMulti').checked;
   const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (!multi || rs.length > 1) && (rs.length || !fb))
     .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (a.u.last + ' ' + a.u.first).localeCompare(c.u.last + ' ' + c.u.first, 'he') || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
@@ -626,7 +619,6 @@ function renderPeople() {
       const rm = r.b === BLD.id && BLD.grantable.includes(r.role) && u.email !== ME.email ? ` <a href="#" data-rm="${r.id}" title="הסר הרשאה" style="text-decoration:none">✕</a>` : '';
       return `<span class="chip">${r.b === BLD.id ? '' : esc(names[r.b] || 'בניין ' + r.b) + ': '}${esc(r.t)}${rm}</span>`;
     }
-    if (r.b && r.b !== BLD.id) return `<a href="#" class="chip" data-open="${r.b}">${esc(names[r.b] || 'בניין ' + r.b)}: ${esc(r.t)}</a>`;
     return `<span class="chip${r.k === 'old' ? ' mute' : ''}">${esc(r.t)}</span>`;
   };
   $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבונות בנק</th><th class="l">קשרים</th></tr>' + (list.map(({ u, rs }) =>
@@ -640,11 +632,10 @@ $('#pTable').onchange = async (e) => {
 $('#nuAdd').onclick = async () => {
   try { await api('POST', '/api/user', { first: $('#nuFirst').value, last: $('#nuLast').value, email: $('#nuEmail').value, phone: $('#nuPhone').value, account: $('#nuAccount').value }); ['#nuFirst', '#nuLast', '#nuEmail', '#nuPhone', '#nuAccount'].forEach((s) => { $(s).value = ''; }); toast('נוסף'); loadPeople(); } catch (err) { toast(err.message); }
 };
-['#pQ', '#pB', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
+['#pQ', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
 $('#pTable').onclick = async (e) => {
   const rm = e.target.closest('a[data-rm]');
   if (rm) { e.preventDefault(); if (!confirm('להסיר את הרשאת הכניסה?')) return; try { await api('DELETE', '/api/member/' + rm.dataset.rm); loadPeople(); } catch (err) { toast(err.message); } return; }
-  const a = e.target.closest('a[data-open]'); if (!a) return; e.preventDefault(); Vaad.choose(a.dataset.open); location.href = 'app.html' + Vaad.keep + '#everyone';
 };
 
 /* ---------- apartments and the people in them: owners, tenants, or both; any number per apartment ---------- */

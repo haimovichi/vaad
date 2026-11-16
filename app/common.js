@@ -90,13 +90,6 @@ window.Vaad = (function () {
     return meFor({ email, isSuper: sup.data === true, isManager: !!mgr.data, managerOf: (mb.data || []).map((x) => x.building_id), rows: mem.data || [], buildings: blds.data || [] });
   }
   // fill a <select> with the person's buildings (stays hidden when there is only one)
-  function mountSwitcher(sel, me) {
-    if (!sel || !me || me.memberships.length < 2) return;
-    sel.innerHTML = me.memberships.map((m) => `<option value="${m.id}">${m.name}</option>`).join('');
-    sel.value = me.building ? me.building.id : '';
-    sel.classList.remove('hide'); sel.style.display = '';
-    sel.onchange = () => { choose(sel.value); location.href = 'index.html' + keep; };
-  }
   // Address picker: city and street come from Israel's official street list (data.gov.il); only a listed city and street are accepted.
   // get() returns "street number city" once all three are valid, else null.
   let apSeq = 0;
@@ -575,5 +568,5 @@ window.Vaad = (function () {
   }
 
   const store = (building, me) => (demo ? demoStore(building, me) : supabaseStore(building));
-  return { demo, keep, client, whoami, addressPicker, buildMe, mountSwitcher, choose, setViewAs, VIEW_LABEL, verifyCode, signIn, signOut, go, store, perms, ROLE_LABEL };
+  return { demo, keep, client, whoami, addressPicker, buildMe, choose, setViewAs, VIEW_LABEL, verifyCode, signIn, signOut, go, store, perms, ROLE_LABEL };
 })();

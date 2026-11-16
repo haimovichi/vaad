@@ -12,7 +12,7 @@
 <nav id="menu" aria-label="תפריט"></nav>
 <div class="wrap">
   <div class="head"><span class="sub" id="updated"></span></div>
-  <div class="sub" style="margin-bottom:4px"><select id="bsel" class="hide" style="padding:2px 6px;margin-inline-end:8px;font-size:13px"></select><span id="who"></span> · <a href="#" id="logout">יציאה</a></div>
+  <div class="sub" style="margin-bottom:4px"><span id="who"></span> · <a href="#" id="logout">יציאה</a></div>
 
   <!-- ===== home: my apartment / debtors / all ===== -->
   <section id="sec-home">
@@ -94,7 +94,7 @@
       <div class="box pad">
         <h3>אנשים</h3>
         <div class="mute">טבלה אחת לכל האנשים: כל אדם מופיע פעם אחת, עם שם, אימייל, טלפון וחשבון בנק, ובשורה שלו כל הקשרים שלו — דירות שהוא בעלים שלהן, דירות שהוא דייר בהן, והרשאות כניסה לאפליקציה, גם בכמה דירות וכמה בניינים. לא חייבים אימייל; מי שאין לו לא יכול להיכנס. אדם יכול להחזיק כמה קשרים, גם באותו בניין.<span id="peopleNote"></span></div>
-        <div class="row"><input id="pQ" type="search" placeholder="חפש שם, אימייל או טלפון" style="width:220px;margin:0"><select id="pB"></select><label><input type="checkbox" id="pMulti"> רק עם כמה קשרים</label><span class="mute" id="pCount"></span></div>
+        <div class="row"><input id="pQ" type="search" placeholder="חפש שם, אימייל או טלפון" style="width:220px;margin:0"><label><input type="checkbox" id="pMulti"> רק עם כמה קשרים</label><span class="mute" id="pCount"></span></div>
         <div class="row hide" id="nuRow"><input id="nuFirst" placeholder="שם פרטי" style="width:110px"><input id="nuLast" placeholder="שם משפחה" style="width:120px"><input id="nuEmail" type="email" placeholder="אימייל (לא חובה)" style="width:190px;direction:ltr"><input id="nuPhone" placeholder="טלפון" style="width:120px;direction:ltr"><input id="nuAccount" placeholder="חשבונות בנק (בפסיק)" style="width:150px;direction:ltr"><button class="b" id="nuAdd">הוסף אדם</button></div>
         <h3 style="margin-top:14px">הרשאת כניסה לאפליקציה</h3>
         <div class="mute">כל אחד נכנס עם קישור שנשלח לאימייל שלו, ורק כתובות שקיבלו כאן הרשאה נכנסות. <b>ועד הבית</b> — ניהול הבניין · <b>דייר</b> — מצב כל הדירות ופרטי הדירה שלו · <b>בעל דירה</b> — רק הדירות שלו, התשלומים של הדייר הנוכחי, ושם וטלפון של הדייר. שמות וטלפונים נערכים בטבלה על ידי מנהל העל.<br><span id="grantNote"></span></div>
