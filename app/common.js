@@ -116,7 +116,7 @@ window.Vaad = (function () {
     const RES = '9ad3862c-8391-4b2f-84a4-2d4c68625f4b'; const API = 'https://data.gov.il/api/3/action/datastore_search';
     const id = 'ap' + (++apSeq); const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
     const st = 'direction:rtl;text-align:right;width:auto;margin:0';
-    el.innerHTML = `<label class="f"><span>עיר</span><input class="c" list="${id}c" autocomplete="off" style="${st};width:140px"></label><label class="f"><span>רחוב</span><input class="s" list="${id}s" autocomplete="off" disabled style="${st};width:170px"></label><label class="f"><span>מספר</span><input class="n" type="number" min="1" disabled style="${st};width:80px"></label><datalist id="${id}c"></datalist><datalist id="${id}s"></datalist><span class="mute msg" style="font-size:13px"></span>`;
+    el.innerHTML = `<label class="f"><span>עיר</span><input class="c" list="${id}c" autocomplete="off" style="${st};width:140px"></label><label class="f"><span>רחוב</span><input class="s" list="${id}s" autocomplete="off" style="${st};width:170px"></label><label class="f"><span>מספר</span><input class="n" type="number" min="1" style="${st};width:80px"></label><datalist id="${id}c"></datalist><datalist id="${id}s"></datalist><span class="mute msg" style="font-size:13px"></span>`;
     const q = (s) => el.querySelector(s); let cities = []; let streets = []; let forCity = '';
     const say = (t) => { q('.msg').textContent = t; };
     const fetchRows = async (filters, limit) => {
@@ -129,14 +129,14 @@ window.Vaad = (function () {
     (async () => { try { say('טוען ערים…'); cities = [...new Set((await fetchRows({ 'סמל_רחוב': 9000 }, 5000)).map((r) => norm(r['שם_ישוב'])))].sort(); fill(q('datalist'), cities); say(''); } catch (e) { say('לא ניתן לטעון את רשימת הערים. בדקו חיבור ונסו שוב.'); } })();
     q('.c').oninput = async () => {
       const c = norm(q('.c').value); q('.s').value = ''; q('.n').value = ''; streets = []; forCity = '';
-      q('.s').disabled = q('.n').disabled = true; changed();
+      changed();
       if (!cities.includes(c)) return;
       try { say('טוען רחובות…'); const rows = await fetchRows({ 'שם_ישוב': c }, 20000); streets = [...new Set(rows.filter((r) => r['סמל_רחוב'] !== 9000).map((r) => norm(r['שם_רחוב'])))].sort(); forCity = c; fill(el.querySelectorAll('datalist')[1], streets); q('.s').disabled = q('.n').disabled = false; say(''); }
       catch (e) { say('לא ניתן לטעון את רשימת הרחובות.'); }
       changed();
     };
     q('.s').oninput = changed; q('.n').oninput = changed;
-    return { get, reset() { q('.c').value = q('.s').value = q('.n').value = ''; q('.s').disabled = q('.n').disabled = true; changed(); } };
+    return { get, reset() { q('.c').value = q('.s').value = q('.n').value = ''; changed(); } };
   }
   const signIn = async (email) => {
     const { error } = await client().auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: location.origin + location.pathname.replace(/[^/]*$/, '') + 'index.html' } });
