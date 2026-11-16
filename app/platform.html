@@ -23,8 +23,8 @@
     <div class="mute">מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.</div>
     <div class="mute" style="margin-top:8px">כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית.</div>
     <div class="row" id="bPick"></div>
-    <div class="row"><input id="bApts" type="number" min="1" max="500" placeholder="מספר הדירות בבניין" style="width:170px"></div>
-    <div class="row"><input id="bAcct" placeholder="מספר חשבון הבנק של הבניין (לא חובה עכשיו)" inputmode="numeric" style="width:300px;direction:ltr"></div>
+    <div class="row"><label class="f"><span>מספר הדירות בבניין</span><input id="bApts" type="number" min="1" max="500" style="width:170px"></label></div>
+    <div class="row"><label class="f"><span>מספר חשבון הבנק של הבניין (לא חובה עכשיו)</span><input id="bAcct" inputmode="numeric" style="width:300px;direction:ltr"></label></div>
     <div class="mute">קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.</div>
     <div class="row"><button class="b" id="bAdd" disabled>צור בניין</button></div>
   </div>
@@ -32,7 +32,7 @@
   <div class="box pad">
     <h3>מנהלי בניינים</h3>
     <div class="mute">רק מנהל העל ממנה מנהלי בניינים. מנהל בניינים מנהל את הבניינים שהוקצו לו, ואינו יוצר בניינים חדשים.</div>
-    <div class="row"><input id="mEmail" type="email" placeholder="אימייל" style="width:220px;direction:ltr"><button class="b" id="mAdd">הוסף מנהל בניינים</button></div>
+    <div class="row"><label class="f"><span>אימייל</span><input id="mEmail" type="email" style="width:220px;direction:ltr"></label><button class="b" id="mAdd">הוסף מנהל בניינים</button></div>
   </div>
   <div class="box"><table class="t" id="mTable"></table></div>
 </div>

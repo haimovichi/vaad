@@ -92,8 +92,9 @@ table.p td{padding:5px 2px;border-top:1px solid var(--line)}
 table.p td.n{font-variant-numeric:tabular-nums;font-weight:600}
 table.p tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 .balrow{font-size:15px;margin-bottom:6px}
-.addp{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.addp{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
 .addp select,.addp input{padding:6px 8px;font-size:14px}
+.addp .f>input,.addp .f>select{font-size:14px}
 .addp input[type=number]{width:90px}
 .foot{color:var(--mute);font-size:12px;margin-top:6px}
 .res{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)}
@@ -109,3 +110,9 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 .checklist a{color:var(--acc);text-decoration:none}.checklist li{padding:4px 0}.checklist .done{color:var(--mute);text-decoration:line-through}
 .pendbadge{display:block;background:var(--warnbg);color:#a67700;border:1px solid var(--partial);border-radius:12px;padding:10px 14px;margin:10px 0;text-decoration:none;font-weight:600}
 #msg{position:fixed;bottom:16px;left:16px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;display:none;z-index:20}
+
+/* a visible name above each field of a form row; stays when the field is filled */
+.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mute)}
+.f>input,.f>select{font-size:16px}
+.f:has(>.hide){display:none}
+.row:has(>.f){align-items:flex-end}

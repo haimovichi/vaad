@@ -97,7 +97,7 @@ window.Vaad = (function () {
     const RES = '9ad3862c-8391-4b2f-84a4-2d4c68625f4b'; const API = 'https://data.gov.il/api/3/action/datastore_search';
     const id = 'ap' + (++apSeq); const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
     const st = 'direction:rtl;text-align:right;width:auto;margin:0';
-    el.innerHTML = `<input class="c" list="${id}c" placeholder="עיר" autocomplete="off" style="${st};width:140px"><input class="s" list="${id}s" placeholder="רחוב" autocomplete="off" disabled style="${st};width:170px"><input class="n" type="number" min="1" placeholder="מספר" disabled style="${st};width:80px"><datalist id="${id}c"></datalist><datalist id="${id}s"></datalist><span class="mute msg" style="font-size:13px"></span>`;
+    el.innerHTML = `<label class="f"><span>עיר</span><input class="c" list="${id}c" autocomplete="off" style="${st};width:140px"></label><label class="f"><span>רחוב</span><input class="s" list="${id}s" autocomplete="off" disabled style="${st};width:170px"></label><label class="f"><span>מספר</span><input class="n" type="number" min="1" disabled style="${st};width:80px"></label><datalist id="${id}c"></datalist><datalist id="${id}s"></datalist><span class="mute msg" style="font-size:13px"></span>`;
     const q = (s) => el.querySelector(s); let cities = []; let streets = []; let forCity = '';
     const say = (t) => { q('.msg').textContent = t; };
     const fetchRows = async (filters, limit) => {

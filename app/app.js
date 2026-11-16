@@ -200,9 +200,9 @@ function detailPanel(r) {
         `<tr class="tot"><td colspan="2">סה״כ שולם</td><td class="n">${fmt(total)} ₪</td><td colspan="2"></td></tr></table>` +
         (list.some((p) => !p.date) ? '<div class="foot">תשלומים שנרשמו לפני המעבר לאפליקציה מוצגים בלי תאריך.</div>' : '')
       : `<div class="foot">אין תשלומים רשומים בשנת ${year}.</div>`) +
-    `<div class="addp" data-key="${esc(r.key)}"><select class="ap-m">${cells.map((c) => `<option value="${c.m}" ${pick && c.m === pick.m ? 'selected' : ''}>${MF[c.m - 1]}</option>`).join('')}</select>` +
-    `<input class="ap-a" type="number" min="1" placeholder="סכום ₪" value="${sugg}"><select class="ap-t"><option>מזומן</option><option>שיק</option><option>העברה בנקאית</option><option>הוראת קבע</option></select>` +
-    `<input class="ap-d" type="date" value="${new Date().toISOString().slice(0, 10)}"><button class="b ap-go">הוסף תשלום</button></div></div>`;
+    `<div class="addp" data-key="${esc(r.key)}"><label class="f"><span>חודש</span><select class="ap-m">${cells.map((c) => `<option value="${c.m}" ${pick && c.m === pick.m ? 'selected' : ''}>${MF[c.m - 1]}</option>`).join('')}</select></label>` +
+    `<label class="f"><span>סכום ₪</span><input class="ap-a" type="number" min="1" value="${sugg}"></label><label class="f"><span>אמצעי תשלום</span><select class="ap-t"><option>מזומן</option><option>שיק</option><option>העברה בנקאית</option><option>הוראת קבע</option></select></label>` +
+    `<label class="f"><span>תאריך</span><input class="ap-d" type="date" value="${new Date().toISOString().slice(0, 10)}"></label><button class="b ap-go">הוסף תשלום</button></div></div>`;
 }
 const idOf = (r) => r.key || (r.apt + '|' + (r.tag || ''));
 function card(r, withMore) {
