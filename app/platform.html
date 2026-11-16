@@ -22,9 +22,8 @@
     <h3>בניין חדש</h3>
     <div class="mute">מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.</div>
     <div class="mute" style="margin-top:8px">כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית.</div>
-    <div class="row" id="bPick"></div>
-    <div class="row"><label class="f"><span>מספר הדירות בבניין</span><input id="bApts" type="number" min="1" max="500" style="width:170px"></label></div>
-    <div class="row"><label class="f"><span>מספר חשבון הבנק של הבניין (לא חובה עכשיו)</span><input id="bAcct" inputmode="numeric" style="width:300px;direction:ltr"></label></div>
+    <div class="row"><div id="bPick" style="display:contents"></div><label class="f"><span>מספר דירות</span><input id="bApts" type="number" min="1" max="500" style="width:70px"></label></div>
+    <div class="row"><label class="f"><span>סניף</span><input id="bBranch" inputmode="numeric" style="width:70px;direction:ltr"></label><label class="f"><span>חשבון</span><input id="bAcct" inputmode="numeric" style="width:130px;direction:ltr"></label><span class="mute">חשבון הבנק של הבניין, לא חובה עכשיו</span></div>
     <div class="mute">קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.</div>
     <div class="row"><button class="b" id="bAdd" disabled>צור בניין</button></div>
   </div>

@@ -22,10 +22,16 @@ function loadBuildings() {
 }
 let newAddr = null;
 Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
+const digits = (el, n) => { el.oninput = () => { el.value = el.value.replace(/\D/g, '').slice(0, n); }; };
+digits($('#bBranch'), 3); digits($('#bAcct'), 9);
+$('#bApts').oninput = (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 3); };
 $('#bAdd').onclick = async () => {
   if (!newAddr) return;
+  const br = $('#bBranch').value, ac = $('#bAcct').value;
+  if ((br || ac) && (br.length !== 3 || ac.length < 4)) return toast('חשבון הבנק: סניף של 3 ספרות ומספר חשבון (או להשאיר את שניהם ריקים)');
+  const acct = br && ac ? br + '-' + ac : '';
   try {
-    const b = await api('POST', '/api/building', { name: newAddr, bankAccount: $('#bAcct').value, apartments: $('#bApts').value });
+    const b = await api('POST', '/api/building', { name: newAddr, bankAccount: acct, apartments: $('#bApts').value });
     Vaad.choose(b.id); Vaad.go('app.html');
   } catch (e) { toast(e.message); }
 };
