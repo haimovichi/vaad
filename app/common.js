@@ -273,7 +273,7 @@ window.Vaad = (function () {
       },
       async deletePayment(id) { ok(await c.from('payments').delete().eq('id', id).eq('building_id', B)); },
       async addTenancy(t) {
-        const { data, error } = await c.rpc('add_tenancy', { b: B, a: t.apt, p_first: t.first, p_last: t.last, p_phone: t.phone, p_role: t.role, entry_y: t.entryYear, entry_m: t.entryMonth, exit_y: t.exitYear, exit_m: t.exitMonth });
+        const { data, error } = await c.rpc('add_tenancy', { b: B, a: t.apt, p_first: t.first, p_last: t.last, p_phone: t.phone, p_role: t.role, entry_y: t.entryYear, entry_m: t.entryMonth, exit_y: t.exitYear, exit_m: t.exitMonth, p_email: t.email || null });
         if (error) throw new Error(/overlap/.test(error.message) ? 'התאריכים חופפים לדיירות אחרת בדירה' : error.code === '42501' ? 'אין לך הרשאה להוסיף דיירים' : error.message);
         return data;
       },
@@ -284,7 +284,7 @@ window.Vaad = (function () {
       },
       async removeOwner(id) { ok(await c.rpc('remove_owner', { b: B, owner_id: Number(id) })); },
       async addHouseholdMember(key, p) {
-        const { error } = await c.rpc('add_household_member', { b: B, tenancy_key: key, p_first: p.first, p_last: p.last, p_phone: p.phone });
+        const { error } = await c.rpc('add_household_member', { b: B, tenancy_key: key, p_first: p.first, p_last: p.last, p_phone: p.phone, p_email: p.email || null });
         if (error) throw new Error(/already in this household/.test(error.message) ? 'האדם הזה כבר רשום בדירה' : error.code === '42501' ? 'אין לך הרשאה להוסיף דיירים' : error.message);
       },
       async removeHouseholdMember(key, userId) {

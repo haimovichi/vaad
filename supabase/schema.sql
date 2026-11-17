@@ -768,16 +768,19 @@ end $$;
 -- month. The tenancies of an apartment must not overlap (FR3). The person is created, or an existing one is reused when
 -- name and phone match and the person is already tied to this building or to no building at all. Returns the tenancy key.
 -- The committee (and managers) may do this for their own building; people tied to other buildings stay out of reach.
+drop function if exists public.add_tenancy(bigint, int, text, text, text, text, int, int, int, int);
+drop function if exists public.add_household_member(bigint, text, text, text, text);
 create or replace function public.add_tenancy(b bigint, a int, p_first text, p_last text, p_phone text, p_role text,
-                                              entry_y int, entry_m int, exit_y int default null, exit_m int default null) returns text
+                                              entry_y int, entry_m int, exit_y int default null, exit_m int default null, p_email text default null) returns text
 language plpgsql security definer set search_path = public as $$
 declare
   f int; t int; fn text := nullif(btrim(p_first), ''); ln text := nullif(btrim(p_last), ''); ph text := nullif(btrim(p_phone), '');
-  uid bigint; k text; n int := 1;
+  em text := lower(nullif(btrim(p_email), '')); uid bigint; k text; n int := 1;
 begin
   if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
   if not exists (select 1 from public.apartments x where x.building_id = b and x.apt = a) then raise exception 'no such apartment'; end if;
   if ln is null then raise exception 'last name required'; end if;
+  if em is not null and em !~ '^\S+@\S+\.\S+$' then raise exception 'invalid email'; end if;
   if p_role is null or p_role not in ('בעלים', 'שוכר') then raise exception 'role must be owner or tenant'; end if;
   if entry_y is null or entry_y not between 2000 and 2100 or entry_m is null or entry_m not between 1 and 12 then raise exception 'bad entry month'; end if;
   if (exit_y is null) <> (exit_m is null) then raise exception 'exit needs a year and a month'; end if;
@@ -793,13 +796,26 @@ begin
       and (case when coalesce(r.entry_year, 0) <> 0 then r.entry_year * 12 + coalesce(nullif(r.entry_month, 0), 1) - 1 else 2022 * 12 + 5 end) <= t)
   then raise exception 'the dates overlap another tenancy of this apartment'; end if;
 
-  uid := public.person_for(b, fn, ln, ph);
+  uid := public.person_with_login(b, fn, ln, ph, em);
 
   k := a || '-' || ln;
   while exists (select 1 from public.residents r where r.building_id = b and r.key = k) loop n := n + 1; k := a || '-' || ln || '-' || n; end loop;
   insert into public.residents (building_id, key, apt, user_id, role, status, entry_month, entry_year, exit_month, exit_year)
   values (b, k, a, uid, p_role, case when exit_y is null then 'פעיל' else 'עזב' end, entry_m, entry_y, exit_m, exit_y);
+  if em is not null and exit_y is null then insert into public.members (building_id, user_id, role, apt) values (b, uid, 'tenant', a) on conflict do nothing; end if;
   return k;
+end $$;
+
+-- The person for a tenancy or household member: with an email, the user who has that email (created when there is none), so
+-- the person can log in; without one, person_for. Internal helper: not callable from the app.
+create or replace function public.person_with_login(b bigint, fn text, ln text, ph text, em text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare uid bigint;
+begin
+  if em is null then return public.person_for(b, fn, ln, ph); end if;
+  select u.id into uid from public.users u where u.email = em;
+  if uid is null then insert into public.users (email, first_name, last_name, phone) values (em, fn, ln, ph) returning id into uid; end if;
+  return uid;
 end $$;
 
 -- Find or create the person (name + phone, no login) a tenancy or an ownership points at. An existing person is reused only when
@@ -824,16 +840,17 @@ begin
 end $$;
 
 -- Add a person to the household of a current tenancy (a couple, a family, flatmates): any number of people live in one tenancy.
-create or replace function public.add_household_member(b bigint, tenancy_key text, p_first text, p_last text, p_phone text) returns bigint
+create or replace function public.add_household_member(b bigint, tenancy_key text, p_first text, p_last text, p_phone text, p_email text default null) returns bigint
 language plpgsql security definer set search_path = public as $$
-declare r record; fn text := nullif(btrim(p_first), ''); ln text := nullif(btrim(p_last), ''); ph text := nullif(btrim(p_phone), ''); uid bigint;
+declare r record; fn text := nullif(btrim(p_first), ''); ln text := nullif(btrim(p_last), ''); ph text := nullif(btrim(p_phone), ''); em text := lower(nullif(btrim(p_email), '')); uid bigint;
 begin
   if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
   select * into r from public.residents x where x.building_id = b and x.key = tenancy_key;
   if not found then raise exception 'no such tenancy'; end if;
   if r.status = 'עזב' then raise exception 'the tenancy has ended'; end if;
   if ln is null then raise exception 'last name required'; end if;
-  uid := public.person_for(b, fn, ln, ph);
+  if em is not null and em !~ '^\S+@\S+\.\S+$' then raise exception 'invalid email'; end if;
+  uid := public.person_with_login(b, fn, ln, ph, em);
   if uid in (coalesce(r.user_id, 0), coalesce(r.user2_id, 0)) or exists (select 1 from public.resident_people rp where rp.resident_id = r.id and rp.user_id = uid) then
     raise exception 'already in this household';
   end if;
@@ -841,6 +858,7 @@ begin
   elsif r.user2_id is null then update public.residents set user2_id = uid where id = r.id;
   else insert into public.resident_people (building_id, resident_id, user_id) values (b, r.id, uid);
   end if;
+  if em is not null then insert into public.members (building_id, user_id, role, apt) values (b, uid, 'tenant', r.apt) on conflict do nothing; end if;
   return uid;
 end $$;
 
@@ -955,6 +973,7 @@ end $$;
 revoke all on function public.tariff_due(bigint, int, int, int) from public, anon, authenticated;   -- internal helpers
 revoke all on function public.tenancy_at(bigint, int, int) from public, anon, authenticated;
 revoke all on function public.person_for(bigint, text, text, text) from public, anon, authenticated;
+revoke all on function public.person_with_login(bigint, text, text, text, text) from public, anon, authenticated;
 
 -- ---------- row level security ----------
 alter table public.buildings         enable row level security;

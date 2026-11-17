@@ -57,7 +57,7 @@ export function makeRunner(db) {
       if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
       await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
       return await fn((sql) => db.query(sql));
-    } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+    } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
   };
   const one = async (email, sql) => asUser(email, async (q) => {
     const r = await q(sql);
@@ -375,7 +375,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         const r = await db.query('select * from public.match_payer($1, $2)', [b, descr]);
         const x = r.rows[0];
         return `${x.apt ?? '-'}|${x.how}|${x.sure}|${(x.candidates || []).join(',')}`;
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     // two people are named דוד כהן here (apartments 10 and 13), so "full name" is only unambiguous with another first name
     const cases = [
@@ -422,7 +422,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         const r = await db.query(sql, [apt, amount, date, already]);
         return r.rows.map((x) => `${x.yr}-${x.mo}:${+x.part}`).join(',');
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const cases = [
       ['transaction month, then the oldest unpaid of the last 6', 20, 1000, '2026-04-10', '2026-4:570,2026-2:285,2026-3:145'],
@@ -471,7 +471,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return (await db.query(sql)).rows;
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const n = (r) => (r === 'ERR' ? r : r.length);
     for (const [who, email, expect] of [['committee1', 'c1@x.com', 1], ['manager12', 'm12@x.com', 2], ['super', 'super@x.com', 2], ['committee2', 'c2@x.com', 1]]) {
@@ -519,7 +519,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return await fn((sql, params) => db.query(sql, params));
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const save = (q, list) => q('select public.save_pending_credits(1, $1::jsonb) as n', [JSON.stringify(list)]).then((r) => r.rows[0].n);
     const out = await withDb('c1@x.com', async (q) => {
@@ -581,7 +581,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
           await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         }
         return await fn((sql, params) => db.query(sql, params));
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const pid = async (q, key) => (await q('select id from pending_payments where tx_key = $1', [key])).rows[0]?.id;
     const approved = await go('c1@x.com', async (q) => {
@@ -647,7 +647,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return await fn((sql, params) => db.query(sql, params));
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const J = (o) => JSON.stringify(o);
     const prop = (q, credits) => q('select public.propose_credits(1, $1::jsonb) as r', [J(credits)]).then((r) => r.rows[0].r);
@@ -718,7 +718,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         const r = await db.query(sql);
         return r.rows;
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const added = await tryAs('c1@x.com', "insert into apartments(building_id, apt, floor, rooms, sqm) values (1, 50, '3', 4, 95) returning apt, floor, rooms, sqm");
     report(added !== 'ERR' && added.length === 1 && added[0].floor === '3' && added[0].rooms === 4 && added[0].sqm === 95, 'committee1', 'adds an apartment with floor, rooms and sqm', 1, added === 'ERR' ? added : added.length);
@@ -744,7 +744,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return (await db.query(sql)).rows;
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const ins = (cols, vals) => `insert into tariffs(building_id, year, ${cols}) values (1, ${vals}) returning id`;
     const ok1 = await tryAs('c1@x.com', ins('month, apt, amount', '2027, null, null, 600'));
@@ -795,7 +795,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return await fn((sql, params) => db.query(sql, params));
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const add = (q, apt, first, last, phone, role, ey, em, xy = null, xm = null, b = 1) =>
       q('select public.add_tenancy($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) as k', [b, apt, first, last, phone, role, ey, em, xy, xm]).then((r) => r.rows[0].k);
@@ -902,6 +902,26 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
       return `${n}/${inHh}`;
     });
     report(both === '1/1', 'committee1', 'an owner with a login who also lives there is the same person', '1/1', both);
+    // an email on a new tenant or household member gives that person a login as a tenant of the apartment
+    const tLogin = await as('c1@x.com', async (q) => {
+      const k = (await q("select public.add_tenancy(1, 31, 'מיכל', 'דיירת', '050-5', 'שוכר', 2026, 1, null, null, 'Michal@X.com') as k")).rows[0].k;
+      await db.exec('reset role');
+      const m = (await q("select m.role, m.apt, u.email, r.user_id = m.user_id as same from residents r join users u on u.id = r.user_id join members m on m.user_id = u.id and m.building_id = 1 where r.key = $1", [k])).rows[0];
+      return `${m.role}/${m.apt}/${m.email}/${m.same}`;
+    });
+    report(tLogin === 'tenant/31/michal@x.com/true', 'committee1', 'a new tenant with an email is the login: tenant of that apartment', 'tenant/31/michal@x.com/true', tLogin);
+    const hLogin = await as('c1@x.com', async (q) => {
+      await q("select public.add_household_member(1, '30-כהן', 'גיל', 'כהן', '050-6', 'gil@x.com')");
+      await db.exec('reset role');
+      const m = (await q("select m.role, m.apt from members m join users u on u.id = m.user_id where u.email = 'gil@x.com' and m.building_id = 1")).rows[0];
+      const inHh = (await people(q, '30-כהן')).c.includes('גיל') || (await people(q, '30-כהן')).b === 'גיל';
+      return `${m.role}/${m.apt}/${inHh}`;
+    });
+    report(hLogin === 'tenant/30/true', 'committee1', 'a household member with an email gets a tenant login for the apartment', 'tenant/30/true', hLogin);
+    const badMail = await as('c1@x.com', (q) => q("select public.add_tenancy(1, 31, 'א', 'ב', '1', 'שוכר', 2026, 1, null, null, 'not-an-email')"));
+    report(badMail === 'ERR', 'committee1', 'a tenant with a malformed email is refused', 'ERR', badMail === 'ERR' ? badMail : 'ok');
+    const noMail = await as('c1@x.com', async (q) => { await add(q, 31, 'ללא', 'אימייל', '7', 'שוכר', 2026, 1); await db.exec('reset role'); return (await q("select count(*)::int n from members where apt = 31 and role = 'tenant' and building_id = 1")).rows[0].n; });
+    report(noMail === 0, 'committee1', 'a tenant without an email gets no login', 0, noMail);
     // a person of a third place in a household is found by name when matching a bank credit
     const matched = await as('c1@x.com', async (q) => {
       await join(q, '30-כהן', 'שרה', 'כהן', '050-31'); await join(q, '30-כהן', 'יוסי', 'כהן', '050-32'); await join(q, '30-כהן', 'נועה', 'לבנון', '050-33');
@@ -924,7 +944,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return await fn((sql, params) => db.query(sql, params));
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const add = (q, apt, first, last, phone, email = null, b = 1) => q('select public.add_owner($1, $2, $3, $4, $5, $6) as id', [b, apt, first, last, phone, email]).then((r) => r.rows[0].id);
 
@@ -990,7 +1010,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         const r = await db.query(sql);
         return r.rows;
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const n = (r) => (r === 'ERR' ? r : r.length);
     for (const [who, email, expect] of [['committee1', 'c1@x.com', 2], ['manager12', 'm12@x.com', 3], ['super', 'super@x.com', 3], ['committee2', 'c2@x.com', 1]]) {
@@ -1022,7 +1042,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return (await db.query(sql)).rows;
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const n = (r) => (r === 'ERR' ? r : r.length);
     const e1 = "building_id = 1";
@@ -1069,7 +1089,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return await fn((sql, params) => db.query(sql, params));
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const J = (o) => JSON.stringify(o);
     const save = (q, items) => q('select public.save_import(1, $1::jsonb) as r', [J(items)]).then((r) => r.rows[0].r);
@@ -1133,7 +1153,7 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
         if (email) await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
         await db.exec(`set local role ${email === null ? 'anon' : 'authenticated'}`);
         return await fn((sql, params) => db.query(sql, params));
-      } catch (e) { return 'ERR'; } finally { await db.exec('rollback'); }
+      } catch (e) { if (process.env.DBG) console.log('DBG', e.message); return 'ERR'; } finally { await db.exec('rollback'); }
     };
     const J = (o) => JSON.stringify(o);
     const row = (key, date, amount, extra = {}) => ({ key, date, valueDate: date, desc: 'העברה מדוגמה', amount, balance: 1234.56, ref: '988', fee: 'ערוץ ישיר', channel: 'יזום מחשב', raw: [date, date, 'העברה מדוגמה', amount, 1234.56, '988      ', 'ערוץ ישיר', 'יזום מחשב'], ...extra });

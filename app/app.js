@@ -226,18 +226,17 @@ function tenantsBox(list, apt) {
 }
 
 let seq = 0;
-// what a committee enters first in a new building; it disappears when all four are done
+// what a committee enters first in a new building; it disappears when all three are done
 function renderChecklist() {
   const box = $('#checklist');
   const steps = STAFF ? [
-    ['הוסיפו את דירות הבניין', DB.apartments.length > 0, '#apts'],
     ['הגדירו תעריף חודשי', DB.tariffs.some((t) => !t.month && !t.apt), '#tariffs'],
     ['הוסיפו את הדיירים', DB.residents.length > 0, '#apts'],
     ['רשמו את בעלי הדירות', DB.owners.length > 0, '#apts'],
   ] : [];
   box.classList.toggle('hide', !steps.length || steps.every((x) => x[1]));
   box.classList.add('checklist');
-  box.innerHTML = '<h3>להתחיל להפעיל את הבניין</h3><div class="mute">ארבעה צעדים ראשונים, אחד אחרי השני:</div><ul style="padding-inline-start:20px;margin:8px 0 0">' +
+  box.innerHTML = '<h3>להתחיל להפעיל את הבניין</h3><div class="mute">שלושה צעדים ראשונים, אחד אחרי השני:</div><ul style="padding-inline-start:20px;margin:8px 0 0">' +
     steps.map((x) => `<li class="${x[1] ? 'done' : ''}">${x[1] ? '✅' : '⬜'} <a href="${x[2]}">${x[0]}</a></li>`).join('') + '</ul>';
 }
 async function renderHome() {
@@ -652,7 +651,6 @@ const curTenancy = (apt) => (APTS ? APTS.residents.find((r) => r.apt === apt && 
 // what the form needs depends on the apartment: with people living there a new one joins them; an empty apartment needs an entry month
 function syncAddForm() {
   const apt = +$('#hApt').value; const cur = apt ? curTenancy(apt) : null; const tenant = $('#hTenant').checked;
-  $('#hMail').classList.toggle('hide', !$('#hOwner').checked);
   $('#hInfo').textContent = !apt ? '' : cur ? `גרים כאן עכשיו: ${household(cur).map(pname).join(', ')} (${cur.role}). אדם חדש יצטרף אליהם.` : 'אין דיירים פעילים בדירה.';
   $('#hNew').classList.toggle('hide', !(apt && tenant && !cur));
 }
@@ -663,10 +661,12 @@ $('#hAdd').onclick = async () => {
     if (!apt) throw new Error('בחרו דירה');
     if (!tenant && !owner) throw new Error('בחרו אם האדם דייר, בעל דירה או שניהם');
     const who = { apt, first: $('#hFirst').value, last: $('#hLast').value, phone: $('#hPhone').value };
-    if (owner) await api('POST', '/api/owner', { ...who, email: $('#hMail').value });   // first, so a login created here is the same person the tenancy then finds
+    // the email gives the person a login: as the apartment's owner when they are one, otherwise as a tenant
+    if (owner) await api('POST', '/api/owner', { ...who, email: $('#hMail').value });
+    const login = owner ? {} : { email: $('#hMail').value };   // first, so a login created here is the same person the tenancy then finds
     if (tenant) {
-      if (curTenancy(+apt)) await api('POST', '/api/household', who);
-      else await api('POST', '/api/tenancy', { ...who, role: $('#hRole').value, entryMonth: $('#hEM').value, entryYear: $('#hEY').value, exitMonth: '', exitYear: '' });
+      if (curTenancy(+apt)) await api('POST', '/api/household', { ...who, ...login });
+      else await api('POST', '/api/tenancy', { ...who, ...login, role: $('#hRole').value, entryMonth: $('#hEM').value, entryYear: $('#hEY').value, exitMonth: '', exitYear: '' });
     }
     ['#hFirst', '#hLast', '#hPhone', '#hMail'].forEach((i) => { $(i).value = ''; });
     toast('נוסף'); loadApts();
