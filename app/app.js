@@ -610,6 +610,7 @@ function personDialog(u) {
       { k: 'last', label: 'שם משפחה', width: 120, value: val('last'), row: 'name' },
       { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: val('phone'), row: 'contact' },
       { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email'), row: 'contact' },
+      { k: 'emailNote', type: 'note', text: () => 'אימייל נותן כניסה לאפליקציה: לכל דירה שהאדם הוא בעליה או גר בה כעת.' },
       { k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account') },
     ],
     onSubmit: async (v) => {

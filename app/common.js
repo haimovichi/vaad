@@ -351,6 +351,7 @@ window.Vaad = (function () {
         if (error) throw new Error(/last person/.test(error.message) ? 'זה האדם האחרון בדירה. כדי להסיר אותו סיימו את הדיירות.' : error.code === '42501' ? 'אין לך הרשאה' : error.message);
       },
       async endTenancy(key, y, m) { ok(await c.rpc('end_tenancy', { b: B, tenancy_key: key, exit_y: y, exit_m: m })); },
+      async syncLogin(uid) { ok(await c.rpc('sync_person_login', { b: B, uid })); },
       async editPerson(uid, first, last, phone) {
         if (!uid) throw new Error('אין אדם רשום בדיירות הזו');
         const { error } = await c.rpc('edit_person', { b: B, uid, p_first: first, p_last: last, p_phone: phone });
@@ -552,6 +553,7 @@ window.Vaad = (function () {
       async removeHouseholdMember(key, userId) { throw new Error('בתצוגת הדגמה אי אפשר להסיר אנשים'); },
       async endTenancy(key, y, m) { const r = (await this.load()).residents.find((x) => x.key === key); r.status = 'עזב'; r.exitYear = y; r.exitMonth = m; },
       async editPerson() {},
+      async syncLogin() {},
       async addTariff(t) { return { ...t, id: nextId++ }; }, async updateTariff() {}, async deleteTariff() {},
       // demo mode only: the same rules as the server functions propose_credits and save_import, in memory
       async proposeCredits(list) {

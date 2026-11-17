@@ -922,6 +922,24 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     report(badMail === 'ERR', 'committee1', 'a tenant with a malformed email is refused', 'ERR', badMail === 'ERR' ? badMail : 'ok');
     const noMail = await as('c1@x.com', async (q) => { await add(q, 31, 'ללא', 'אימייל', '7', 'שוכר', 2026, 1); await db.exec('reset role'); return (await q("select count(*)::int n from members where apt = 31 and role = 'tenant' and building_id = 1")).rows[0].n; });
     report(noMail === 0, 'committee1', 'a tenant without an email gets no login', 0, noMail);
+    // an email set later (on a person already recorded) gives the same access: sync_person_login, for managers of that building only
+    const late = await as('c1@x.com', async (q) => {
+      await add(q, 31, 'מאוחר', 'אימייל', '8', 'שוכר', 2026, 1);
+      await db.exec('reset role');
+      await db.exec("update users set email = 'late@x.com' where first_name = 'מאוחר' and last_name = 'אימייל'");
+      const uid = (await q("select id from users where email = 'late@x.com'")).rows[0].id;
+      const none = (await q("select count(*)::int n from members where user_id = $1", [uid])).rows[0].n;
+      await db.exec('set local role authenticated');
+      const first = (await q('select public.sync_person_login(1, $1) n', [uid])).rows[0].n;
+      const again = (await q('select public.sync_person_login(1, $1) n', [uid])).rows[0].n;
+      await db.exec('reset role');
+      const rows = (await q('select role, apt from members where user_id = $1 and building_id = 1', [uid])).rows.map((r) => `${r.role}/${r.apt}`).join(',');
+      await db.exec('set local role authenticated');
+      await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email: 'c2@x.com' })}', true)`);
+      const other = await q('select public.sync_person_login(1, $1)', [uid]).then(() => 'ok', () => 'ERR');
+      return `${none}/${first}/${again}/${rows}/${other}`;
+    });
+    report(late === '0/1/0/tenant/31/ERR', 'committee1', 'an email set later gives access once, adds nothing twice; another building cannot', '0/1/0/tenant/31/ERR', late);
     // a person of a third place in a household is found by name when matching a bank credit
     const matched = await as('c1@x.com', async (q) => {
       await join(q, '30-כהן', 'שרה', 'כהן', '050-31'); await join(q, '30-כהן', 'יוסי', 'כהן', '050-32'); await join(q, '30-כהן', 'נועה', 'לבנון', '050-33');

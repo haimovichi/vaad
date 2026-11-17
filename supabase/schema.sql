@@ -915,6 +915,29 @@ begin
   update public.users set first_name = nullif(btrim(p_first), ''), last_name = btrim(p_last), phone = nullif(btrim(p_phone), '') where id = uid;
 end $$;
 
+-- Give the person (who has an email) app access for every current tie in building b: apartment-owner for each apartment they
+-- own, tenant for each apartment they live in now (a tenancy that has ended gives none). Existing access is kept as it is.
+-- Called after an email is set or changed. Whoever manages the building. Returns how many access rows were added.
+create or replace function public.sync_person_login(b bigint, uid bigint) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int := 0; c int;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  if not exists (select 1 from public.users u where u.id = uid and u.email is not null) then return 0; end if;
+  insert into public.members (building_id, user_id, role, apt)
+    select b, uid, 'apt_owner', o.apt from public.owners o where o.building_id = b and o.user_id = uid
+  on conflict do nothing;
+  get diagnostics c = row_count; n := n + c;
+  insert into public.members (building_id, user_id, role, apt)
+    select b, uid, 'tenant', r.apt from public.residents r
+     where r.building_id = b and r.status is distinct from 'עזב'
+       and (uid in (coalesce(r.user_id, 0), coalesce(r.user2_id, 0))
+            or exists (select 1 from public.resident_people rp where rp.resident_id = r.id and rp.user_id = uid))
+  on conflict do nothing;
+  get diagnostics c = row_count; n := n + c;
+  return n;
+end $$;
+
 -- ---------- owners of apartments ----------
 -- Record who owns apartment a. The person is created or reused like in add_tenancy. With an email, the person also gets
 -- the apartment-owner role for that apartment (they log in and see only their apartments); an existing login is reused
@@ -964,7 +987,7 @@ declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','add_household_member','remove_household_member','end_tenancy','edit_person','add_owner','remove_owner')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','add_household_member','remove_household_member','end_tenancy','edit_person','sync_person_login','add_owner','remove_owner')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);
