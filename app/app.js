@@ -626,7 +626,7 @@ function renderPeople() {
 }
 $('#pTable').onchange = async (e) => {
   const i = e.target; if (!i.dataset.uid) return;
-  try { await api('PUT', '/api/user', { id: i.dataset.uid, patch: { [i.dataset.k]: i.value } }); const u = PEOPLE.users.find((x) => String(x.id) === i.dataset.uid); if (u) u[i.dataset.k] = i.value.trim(); toast('נשמר'); } catch (err) { toast(err.message); loadPeople(); }
+  try { await api('PUT', '/api/user', { id: i.dataset.uid, patch: { [i.dataset.k]: i.value } }); const u = PEOPLE.users.find((x) => String(x.id) === i.dataset.uid); if (u) u[i.dataset.k] = i.value.trim(); toast('נשמר'); if (i.dataset.k === 'phone') loadPeople(); } catch (err) { toast(err.message); loadPeople(); }
 };
 $('#nuAdd').onclick = async () => {
   try { await api('POST', '/api/user', { first: $('#nuFirst').value, last: $('#nuLast').value, email: $('#nuEmail').value, phone: $('#nuPhone').value, account: $('#nuAccount').value }); ['#nuFirst', '#nuLast', '#nuEmail', '#nuPhone', '#nuAccount'].forEach((s) => { $(s).value = ''; }); toast('נוסף'); loadPeople(); } catch (err) { toast(err.message); }
@@ -687,7 +687,7 @@ async function loadApts() {
     h += `<tr><td><b>${a.apt}</b></td><td>${esc(a.floor)}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td>` +
       `<td class="l">${d.owners.filter((o) => o.apt === a.apt).map((o) => `${esc(o.first)} ${esc(o.last)} <button class="g" data-rmown="${o.id}" aria-label="הסר">✕</button>`).join('<br>')}</td>` +
       `<td class="l">${people.map(({ p, x, n }) => `${esc(pname(p))} <span class="mute">(${esc(x.r.role)})</span>${n > 1 && p.userId ? ` <button class="g" data-hrm="${esc(x.r.key)}|${p.userId}" aria-label="הסר מהדירה">✕</button>` : ''}`).join('<br>')}</td>` +
-      `<td>${people.map(({ p }) => (p.userId ? `<input data-uid="${p.userId}" data-f="${esc(p.first)}" data-l="${esc(p.last)}" value="${esc(p.phone)}" style="width:110px;direction:ltr">` : '<span class="mute">—</span>')).join('<br>')}</td>` +
+      `<td>${people.map(({ p }) => (p.userId ? `<input data-uid="${p.userId}" data-f="${esc(p.first)}" data-l="${esc(p.last)}" type="tel" value="${esc(p.phone)}" style="width:110px;direction:ltr">` : '<span class="mute">—</span>')).join('<br>')}</td>` +
       `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="account" value="${esc(x.r.account)}" style="width:100px" ${ME.isSuper ? '' : 'disabled'} title="מספר חשבון בנק של הדייר — משמש לזיהוי אוטומטי">`).join('<br>')}</td><td>${rs.map((x) => `<button class="g" data-end="${esc(x.r.key)}">עזב</button>`).join('<br>')}</td></tr>`;
   });
   $('#aptTable').innerHTML = h;
@@ -718,8 +718,8 @@ $('#aptTable').onchange = async (e) => {
     if (t.dataset.uid) await api('PUT', '/api/person', { userId: t.dataset.uid, first: t.dataset.f, last: t.dataset.l, phone: t.value });
     else if (t.dataset.i !== undefined) await api('PUT', '/api/resident', { index: +t.dataset.i, patch: { [t.dataset.k]: t.value } });
     else return;
-    toast('נשמר');
-  } catch (err) { toast(err.message); }
+    toast('נשמר'); loadApts();
+  } catch (err) { toast(err.message); loadApts(); }
 };
 
 /* ================= MORE: what tenants see, backup ================= */
