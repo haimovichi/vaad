@@ -81,9 +81,7 @@
     <div class="box pad">
       <h3>תעריפים</h3>
       <div class="mute">התשלום החודשי של דירה = התעריף הבסיסי של השנה, או התעריף המיוחד של הדירה אם הוגדר, ועוד תוספות חד-פעמיות של אותו חודש. הגדרה חוזרת של תעריף קיים משנה את הסכום שלו.</div>
-      <div class="row"><label class="f"><span>סוג</span><select id="tKind"><option value="base">תעריף בסיס לשנה</option><option value="apt">תעריף מיוחד לדירה</option><option value="extra">תוספת חד-פעמית לחודש</option></select></label>
-        <label class="f"><span>שנה</span><input id="tYear" type="number" min="2000" max="2100" style="width:90px"></label><label class="f"><span>חודש</span><select id="tMonth" class="hide"></select></label><label class="f"><span>דירה</span><select id="tApt" class="hide"></select></label>
-        <label class="f"><span>סכום ₪</span><input id="tAmount" type="number" step="1" style="width:100px"></label><label class="f"><span>הערה (לא חובה)</span><input id="tNote" style="width:160px"></label><button class="b" id="tAdd">שמור</button></div>
+      <div class="row"><button class="b" id="tNew">+ תעריף</button></div>
     </div>
     <div class="box"><table class="t" id="tTable"></table></div>
   </section>
@@ -94,22 +92,17 @@
       <div class="box pad">
         <h3>אנשים</h3>
         <div class="mute">טבלה אחת לכל האנשים: כל אדם מופיע פעם אחת, עם שם, אימייל, טלפון וחשבון בנק, ובשורה שלו כל הקשרים שלו — דירות שהוא בעלים שלהן, דירות שהוא דייר בהן, והרשאות כניסה לאפליקציה, גם בכמה דירות וכמה בניינים. לא חייבים אימייל; מי שאין לו לא יכול להיכנס. אדם יכול להחזיק כמה קשרים, גם באותו בניין.<span id="peopleNote"></span></div>
-        <div class="row"><input id="pQ" type="search" placeholder="חפש שם, אימייל או טלפון" style="width:220px;margin:0"><label><input type="checkbox" id="pMulti"> רק עם כמה קשרים</label><span class="mute" id="pCount"></span></div>
-        <div class="row hide" id="nuRow"><label class="f"><span>שם פרטי</span><input id="nuFirst" style="width:110px"></label><label class="f"><span>שם משפחה</span><input id="nuLast" style="width:120px"></label><label class="f"><span>אימייל (לא חובה)</span><input id="nuEmail" type="email" style="width:190px;direction:ltr"></label><label class="f"><span>טלפון</span><input id="nuPhone" type="tel" style="width:120px;direction:ltr"></label><label class="f"><span>חשבונות בנק (בפסיק)</span><input id="nuAccount" style="width:150px;direction:ltr"></label><button class="b" id="nuAdd">הוסף אדם</button></div>
+        <div class="row"><input id="pQ" type="search" placeholder="חפש שם, אימייל או טלפון" style="width:220px;margin:0"><label><input type="checkbox" id="pMulti"> רק עם כמה קשרים</label><span class="mute" id="pCount"></span><button class="b hide" id="pNew">+ הוסף אדם</button></div>
         <h3 style="margin-top:14px">הרשאת כניסה לאפליקציה</h3>
-        <div class="mute">כל אחד נכנס עם קישור שנשלח לאימייל שלו, ורק כתובות שקיבלו כאן הרשאה נכנסות. <b>ועד הבית</b> — ניהול הבניין · <b>דייר</b> — מצב כל הדירות ופרטי הדירה שלו · <b>בעל דירה</b> — רק הדירות שלו, התשלומים של הדייר הנוכחי, ושם וטלפון של הדייר. שמות וטלפונים נערכים בטבלה על ידי מנהל העל.<br><span id="grantNote"></span></div>
-        <div class="row"><label class="f"><span>אימייל</span><input id="uEmail" type="email" style="width:210px;direction:ltr"></label><label class="f"><span>תפקיד</span><select id="uRole"></select></label><label class="f"><span>דירה</span><input id="uApt" type="number" min="1" style="width:80px"></label><label class="f"><span>שם (לא חובה)</span><input id="uName" style="width:140px"></label><button class="b" id="uAdd">הוסף הרשאה</button></div>
+        <div class="mute">כל אחד נכנס עם קישור שנשלח לאימייל שלו, ורק כתובות שקיבלו כאן הרשאה נכנסות. <b>ועד הבית</b> — ניהול הבניין · <b>דייר</b> — מצב כל הדירות ופרטי הדירה שלו · <b>בעל דירה</b> — רק הדירות שלו, התשלומים של הדייר הנוכחי, ושם וטלפון של הדייר. שמות וטלפונים נערכים (בכפתור ״עריכה״ בשורה של האדם) על ידי מנהל העל.</div>
+        <div class="row"><button class="b" id="pGrant">+ הרשאת כניסה</button></div>
       </div>
       <div class="box"><table class="t" id="pTable"></table></div>
     </div>
     <div id="p-apts" class="hide">
-      <div class="box pad"><h3>הוספת אדם לדירה</h3>
-        <div class="mute">אדם יכול להיות דייר, בעל דירה, או שניהם, וכמה אנשים יכולים להיות באותה דירה (זוג, משפחה, שותפים). אדם שנוסף לדירה שיש בה דיירים מצטרף לדיירות הקיימת, עם אותו חודש כניסה.</div>
-        <div class="row"><label class="f"><span>דירה</span><select id="hApt"></select></label><label class="f"><span>שם פרטי</span><input id="hFirst" style="width:110px"></label><label class="f"><span>שם משפחה</span><input id="hLast" style="width:120px"></label><label class="f"><span>טלפון</span><input id="hPhone" type="tel" style="width:120px;direction:ltr"></label><label class="f"><span>אימייל לכניסה לאפליקציה (לא חובה)</span><input id="hMail" type="email" style="width:240px;direction:ltr"></label></div>
-        <div class="row"><label><input type="checkbox" id="hTenant" checked> דייר</label><label><input type="checkbox" id="hOwner"> בעל דירה</label></div>
-        <div class="mute" id="hInfo"></div>
-        <div class="row hide" id="hNew"><label>בדירה אין דיירים.</label><label>חודש כניסה: <select id="hEM"></select> <input id="hEY" type="number" min="2000" max="2100" style="width:80px"></label></div>
-        <div class="row"><button class="b" id="hAdd">הוסף</button></div></div>
+      <div class="box pad"><h3>דירות ואנשים</h3>
+        <div class="mute">אדם יכול להיות דייר, בעל דירה, או שניהם, וכמה אנשים יכולים להיות באותה דירה (זוג, משפחה, שותפים). אדם שנוסף לדירה שיש בה דיירים מצטרף לדיירות הקיימת, עם אותו חודש כניסה. בשורה של כל דירה: ״הוסף אדם״, ״עריכה״ לפרטי הדירה, ו״✎״ ליד כל אדם לעריכת הפרטים שלו.</div>
+        <div class="row"><button class="b" id="hOpen">+ הוסף אדם</button></div></div>
       <div class="box"><table class="t" id="aptTable"></table></div></div>
   </section>
 

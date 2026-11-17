@@ -109,6 +109,60 @@ window.Vaad = (function () {
       (inp || okB).focus();
     });
   }
+  // In-page form dialog for adding or editing one record. Vaad.form({ title, fields, ok, onSubmit }) -> true after a save, null when cancelled.
+  // fields: { k, label, type: text | tel | email | number | select | check | note | custom, digits: n (digits only, at most n), build(box, notify) -> getter (custom), value, options: [{ v, t }], width, ltr, show(vals), text(vals) (a note), hint }
+  // onSubmit(vals) may throw: the message appears inside the dialog and the dialog stays open, so nothing typed is lost.
+  function form(o) {
+    return new Promise((res) => {
+      const bg = document.createElement('div'); bg.className = 'dlg-bg';
+      const d = document.createElement('div'); d.className = 'dlg dlg-form'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', o.title || '');
+      const h = document.createElement('h3'); h.textContent = o.title || ''; d.appendChild(h);
+      const body = document.createElement('div'); body.className = 'fm'; d.appendChild(body);
+      const els = {};   // key -> { box, input | get }
+      const customs = [];
+      for (const f of o.fields) {
+        let box = document.createElement(f.type === 'note' || f.type === 'custom' ? 'div' : 'label'); let input = null;
+        if (f.type === 'note') { box.className = 'mute fm-note'; }
+        else if (f.type === 'custom') { box.style.display = 'contents'; }
+        else if (f.type === 'check') {
+          box.className = 'fm-check'; input = document.createElement('input'); input.type = 'checkbox'; input.checked = !!f.value;
+          box.append(input, ' ' + f.label);
+        } else {
+          box.className = 'f'; const sp = document.createElement('span'); sp.textContent = f.label; box.appendChild(sp);
+          if (f.type === 'select') { input = document.createElement('select'); for (const op of f.options || []) { const e = document.createElement('option'); e.value = op.v; e.textContent = op.t; input.appendChild(e); } }
+          else { input = document.createElement('input'); input.type = f.type || 'text'; if (f.type === 'tel') input.inputMode = 'tel'; }
+          if (f.value != null || f.type !== 'select') input.value = f.value == null ? '' : f.value;   // a select without a default keeps its first option
+          if (f.width) input.style.width = f.width + 'px'; if (f.ltr) input.style.direction = 'ltr';
+          if (f.hint) { const s = document.createElement('small'); s.className = 'mute'; s.textContent = f.hint; box.appendChild(s); }
+          box.appendChild(input);
+        }
+        body.appendChild(box); els[f.k] = { box, input, f };
+        if (f.type === 'custom') customs.push(f);
+        if (f.digits && input) { input.inputMode = 'numeric'; input.addEventListener('input', () => { input.value = input.value.replace(/\D/g, '').slice(0, f.digits); }); }
+      }
+      const vals = () => { const v = {}; for (const f of o.fields) { const e = els[f.k]; if (e.input) v[f.k] = f.type === 'check' ? e.input.checked : e.input.value; else if (e.get) v[f.k] = e.get(); } return v; };
+      const sync = () => { const v = vals(); for (const f of o.fields) { const e = els[f.k]; if (f.type !== 'custom') e.box.style.display = f.show && !f.show(v) ? 'none' : ''; if (f.type === 'note') e.box.textContent = f.text ? f.text(v) : ''; } };
+      const err = document.createElement('div'); err.className = 'fm-err'; err.setAttribute('role', 'alert'); d.appendChild(err);
+      const acts = document.createElement('div'); acts.className = 'acts';
+      const okB = document.createElement('button'); okB.className = 'b'; okB.textContent = o.ok || 'שמור';
+      const noB = document.createElement('button'); noB.className = 'g'; noB.textContent = o.cancel || 'ביטול';
+      acts.append(okB, noB); d.appendChild(acts); bg.appendChild(d); document.body.appendChild(bg);
+      const done = (v) => { bg.remove(); document.removeEventListener('keydown', key, true); res(v); };
+      let busy = false;
+      const save = async () => {
+        if (busy) return; busy = true; okB.disabled = true; err.textContent = '';
+        try { await o.onSubmit(vals()); done(true); } catch (e) { err.textContent = e.message; busy = false; okB.disabled = false; }
+      };
+      const key = (e) => { if (e.key === 'Escape') done(null); else if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') { e.preventDefault(); save(); } };
+      document.addEventListener('keydown', key, true);
+      d.addEventListener('input', sync); d.addEventListener('change', sync);
+      okB.onclick = save; noB.onclick = () => done(null); bg.onclick = (e) => { if (e.target === bg) done(null); };
+      for (const f of customs) els[f.k].get = f.build(els[f.k].box, sync);
+      sync();
+      const first = o.fields.find((f) => f.type !== 'note' && f.type !== 'check' && !f.noFocus && (!f.show || f.show(vals())));
+      (first ? els[first.k].input : okB).focus();
+    });
+  }
   // Address picker: city and street come from Israel's official street list (data.gov.il); only a listed city and street are accepted.
   // get() returns "street number city" once all three are valid, else null.
   let apSeq = 0;
@@ -311,6 +365,10 @@ window.Vaad = (function () {
         const { error } = await c.from('apartments').insert({ building_id: B, apt: a.apt, floor: a.floor || null, rooms: a.rooms, sqm: a.sqm });
         if (error) throw new Error(error.code === '23505' ? `דירה ${a.apt} כבר קיימת בבניין` : error.code === '42501' ? 'אין לך הרשאה להוסיף דירות' : error.message);
       },
+      async updateApartment(a) {
+        const { error } = await c.from('apartments').update({ floor: a.floor || null, rooms: a.rooms, sqm: a.sqm }).eq('building_id', B).eq('apt', a.apt);
+        if (error) throw new Error(error.code === '42501' ? 'אין לך הרשאה לשנות דירות' : error.message);
+      },
       async proposeCredits(list) { return ok(await c.rpc('propose_credits', { b: B, credits: list.map((t) => ({ key: t.key, date: t.date, desc: t.desc, amount: t.amount, apt: t.apt || null })) })); },
       async saveImport(items) { return ok(await c.rpc('save_import', { b: B, items })); },
       async bankAccount() { const b = ok(await c.from('buildings').select('bank_account').eq('id', B).maybeSingle()); return b ? b.bank_account || '' : ''; },
@@ -463,6 +521,7 @@ window.Vaad = (function () {
       async exportAll() { const d = await this.load(); return { building: { id: 1, name: 'demo' }, tables: { apartments: d.apartments, residents: d.residents, owners: d.owners, tariffs: d.tariffs, payments: d.payments, expenses: d.expenses || [], meta: [], members }, demo: true }; },
       async deletePayment() {}, async updateResident() {}, async saveMeta() {},
       async addApartment() {},
+      async updateApartment() {},
       async setExpenseComment() {},
       async addTenancy(t) {
         const d = await this.load();
@@ -590,5 +649,5 @@ window.Vaad = (function () {
   }
 
   const store = (building, me) => (demo ? demoStore(building, me) : supabaseStore(building));
-  return { demo, keep, client, whoami, addressPicker, buildMe, ask, choose, setViewAs, VIEW_LABEL, verifyCode, signIn, signOut, go, store, perms, ROLE_LABEL };
+  return { demo, keep, client, whoami, addressPicker, buildMe, ask, form, choose, setViewAs, VIEW_LABEL, verifyCode, signIn, signOut, go, store, perms, ROLE_LABEL };
 })();

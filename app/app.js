@@ -191,6 +191,7 @@ function detailPanel(r) {
   const balTxt = bal > 0 ? `<b class="bad">חוב ${fmt(bal)} ₪</b>` : bal < 0 ? `<b class="good">זכות ${fmt(-bal)} ₪</b>` : '<b>מאוזן</b>';
   const pick = cells.find((c) => ['unpaid', 'partial', 'pending'].includes(c.status)) || cells.find((c) => c.m === now.m) || cells[0];
   const sugg = pick ? Math.max(0, pick.due - pick.paid) || pick.due : '';
+  PAYROW[r.key] = { cells, pick, sugg };
   return `<div class="pays"><div class="balrow">יתרה כוללת: ${balTxt}</div>` +
     (cells.length ? `<h3>חודשים ב-${year}</h3><table class="p"><tr><th>חודש</th><th>לתשלום</th><th>שולם</th><th>מצב</th></tr>` +
       cells.map((c) => `<tr><td>${MF[c.m - 1]}</td><td class="n">${fmt(c.due)} ₪</td><td class="n">${fmt(c.paid)} ₪</td><td>${STATUS_TXT[c.status]}</td></tr>`).join('') + '</table>' : '') +
@@ -200,9 +201,23 @@ function detailPanel(r) {
         `<tr class="tot"><td colspan="2">סה״כ שולם</td><td class="n">${fmt(total)} ₪</td><td colspan="2"></td></tr></table>` +
         (list.some((p) => !p.date) ? '<div class="foot">תשלומים שנרשמו לפני המעבר לאפליקציה מוצגים בלי תאריך.</div>' : '')
       : `<div class="foot">אין תשלומים רשומים בשנת ${year}.</div>`) +
-    `<div class="addp" data-key="${esc(r.key)}"><label class="f"><span>חודש</span><select class="ap-m">${cells.map((c) => `<option value="${c.m}" ${pick && c.m === pick.m ? 'selected' : ''}>${MF[c.m - 1]}</option>`).join('')}</select></label>` +
-    `<label class="f"><span>סכום ₪</span><input class="ap-a" type="number" min="1" value="${sugg}"></label><label class="f"><span>אמצעי תשלום</span><select class="ap-t"><option>מזומן</option><option>שיק</option><option>העברה בנקאית</option><option>הוראת קבע</option></select></label>` +
-    `<label class="f"><span>תאריך</span><input class="ap-d" type="date" value="${new Date().toISOString().slice(0, 10)}"></label><button class="b ap-go">הוסף תשלום</button></div></div>`;
+    `<div class="row"><button class="b" data-addpay="${esc(r.key)}">+ הוסף תשלום</button></div></div>`;
+}
+// recording a payment for one apartment (the apartment's open panel only shows a button): month, amount, method and date in a dialog
+const PAYROW = {};   // apartment key -> the months and the suggested month and amount of its panel
+function addPaymentDialog(key) {
+  const c = PAYROW[key]; if (!c) return Promise.resolve(null);
+  return Vaad.form({
+    title: 'הוספת תשלום',
+    ok: 'הוסף תשלום',
+    fields: [
+      { k: 'm', label: 'חודש', type: 'select', options: c.cells.map((x) => ({ v: String(x.m), t: MF[x.m - 1] })), value: c.pick ? String(c.pick.m) : undefined },
+      { k: 'amount', label: 'סכום ₪', type: 'number', width: 100, value: c.sugg },
+      { k: 'method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'שיק', 'העברה בנקאית', 'הוראת קבע'].map((t) => ({ v: t, t })) },
+      { k: 'date', label: 'תאריך', type: 'date', value: new Date().toISOString().slice(0, 10) },
+    ],
+    onSubmit: (v) => api('POST', '/api/payment', { key, y: year, m: +v.m, amount: v.amount, method: v.method, date: v.date || null }),
+  });
 }
 const idOf = (r) => r.key || (r.apt + '|' + (r.tag || ''));
 function card(r, withMore) {
@@ -293,15 +308,8 @@ $$('.tab').forEach((b) => { b.onclick = () => { openId = null; location.hash = '
 $('#year').onchange = (e) => { year = +e.target.value; openId = null; renderHome(); };
 $('#q').oninput = renderHome;
 $('#sec-home').addEventListener('click', async (e) => {
-  const go = e.target.closest('.ap-go');
-  if (go) {
-    const box = go.closest('.addp');
-    try {
-      await api('POST', '/api/payment', { key: box.dataset.key, y: year, m: +box.querySelector('.ap-m').value, amount: box.querySelector('.ap-a').value, method: box.querySelector('.ap-t').value, date: box.querySelector('.ap-d').value || null });
-      toast('התשלום נוסף'); renderHome();
-    } catch (err) { toast(err.message); }
-    return;
-  }
+  const ap = e.target.closest('[data-addpay]');
+  if (ap) { if (await addPaymentDialog(ap.dataset.addpay)) { toast('התשלום נוסף'); renderHome(); } return; }
   const del = e.target.closest('[data-delpay]');
   if (del) {
     if (!(await Vaad.ask({ ok: 'מחק', text: 'למחוק את התשלום?' }))) return;
@@ -532,31 +540,53 @@ $('#xTable').onchange = async (e) => {
 $('#xYear').onchange = renderExpenses; $('#xCat').onchange = renderExpenses;
 
 /* ================= TARIFFS ================= */
-function tKindSync() {
-  const k = $('#tKind').value;
-  $('#tMonth').classList.toggle('hide', k !== 'extra'); $('#tApt').classList.toggle('hide', k === 'base');
-  $('#tApt').innerHTML = (k === 'extra' ? '<option value="">כל הדירות</option>' : '<option value="">בחרו דירה</option>') + DB.apartments.map((a) => `<option>${a.apt}</option>`).join('');
+const tariffWhat = (t) => (t.month ? `תוספת ל${MF[t.month - 1]}${t.apt ? `, דירה ${t.apt}` : ', כל הדירות'}` : t.apt ? `תעריף מיוחד לדירה ${t.apt}` : 'תעריף בסיס');
+// add a tariff, or (with t) change the amount and note of an existing one: setting the same tariff again replaces it
+function tariffDialog(t) {
+  const aptOpts = (first) => [{ v: '', t: first }, ...DB.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) }))];
+  const save = (v, ident) => api('POST', '/api/tariff', { ...ident, amount: v.amount, note: v.note });
+  if (t) {
+    return Vaad.form({
+      title: 'עריכת תעריף',
+      fields: [
+        { k: 'what', type: 'note', text: () => `${tariffWhat(t)}, שנת ${t.year}` },
+        { k: 'amount', label: 'סכום ₪', type: 'number', width: 100, value: t.amount },
+        { k: 'note', label: 'הערה (לא חובה)', width: 200, value: t.note || '' },
+      ],
+      onSubmit: (v) => save(v, { year: t.year, month: t.month || '', apt: t.apt || '' }),
+    });
+  }
+  return Vaad.form({
+    title: 'תעריף חדש',
+    ok: 'שמור',
+    fields: [
+      { k: 'kind', label: 'סוג', type: 'select', options: [{ v: 'base', t: 'תעריף בסיס לשנה' }, { v: 'apt', t: 'תעריף מיוחד לדירה' }, { v: 'extra', t: 'תוספת חד-פעמית לחודש' }] },
+      { k: 'year', label: 'שנה', type: 'number', width: 90, value: now.y },
+      { k: 'month', label: 'חודש', type: 'select', options: MF.map((m, i) => ({ v: String(i + 1), t: m })), show: (v) => v.kind === 'extra' },
+      { k: 'aptA', label: 'דירה', type: 'select', options: aptOpts('בחרו דירה'), show: (v) => v.kind === 'apt' },
+      { k: 'aptX', label: 'דירה', type: 'select', options: aptOpts('כל הדירות'), show: (v) => v.kind === 'extra' },
+      { k: 'amount', label: 'סכום ₪', type: 'number', width: 100 },
+      { k: 'note', label: 'הערה (לא חובה)', width: 200 },
+      { k: 'hint', type: 'note', text: () => 'הגדרה חוזרת של תעריף קיים משנה את הסכום שלו.' },
+    ],
+    onSubmit: (v) => {
+      if (v.kind === 'apt' && !v.aptA) throw new Error('בחרו דירה');
+      return save(v, { year: v.year, month: v.kind === 'extra' ? v.month : '', apt: v.kind === 'apt' ? v.aptA : v.kind === 'extra' ? v.aptX : '' });
+    },
+  });
 }
-$('#tKind').onchange = tKindSync;
-$('#tMonth').innerHTML = MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
 async function loadTariffs() {
-  if (!$('#tYear').value) $('#tYear').value = now.y;
-  tKindSync();
   const list = await api('GET', '/api/tariffs');
-  const what = (t) => (t.month ? `תוספת ל${MF[t.month - 1]}${t.apt ? `, דירה ${t.apt}` : ', כל הדירות'}` : t.apt ? `תעריף מיוחד לדירה ${t.apt}` : 'תעריף בסיס');
+  TARIFFS = list;
   const rows = [...list].sort((a, b) => b.year - a.year || (a.month || 0) - (b.month || 0) || (a.apt || 0) - (b.apt || 0));
   $('#tTable').innerHTML = '<tr><th>שנה</th><th class="l">מה</th><th>סכום</th><th class="l">הערה</th><th></th></tr>' +
-    (rows.length ? rows.map((t) => `<tr><td>${t.year}</td><td class="l">${what(t)}</td><td class="n">${fmt(t.amount)} ₪</td><td class="l mute">${esc(t.note)}</td><td><button class="g" data-deltar="${t.id}" aria-label="מחק">✕</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">עוד לא הוגדרו תעריפים.</td></tr>');
+    (rows.length ? rows.map((t) => `<tr><td>${t.year}</td><td class="l">${tariffWhat(t)}</td><td class="n">${fmt(t.amount)} ₪</td><td class="l mute">${esc(t.note)}</td><td><button class="g" data-edtr="${t.id}" aria-label="עריכה">✎ עריכה</button> <button class="g" data-deltar="${t.id}" aria-label="מחק">✕</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">עוד לא הוגדרו תעריפים.</td></tr>');
 }
-$('#tAdd').onclick = async () => {
-  const k = $('#tKind').value;
-  if (k === 'apt' && !$('#tApt').value) return toast('בחרו דירה');
-  try {
-    await api('POST', '/api/tariff', { year: $('#tYear').value, month: k === 'extra' ? $('#tMonth').value : '', apt: k === 'base' ? '' : $('#tApt').value, amount: $('#tAmount').value, note: $('#tNote').value });
-    $('#tAmount').value = ''; $('#tNote').value = ''; toast('התעריף נשמר'); loadTariffs();
-  } catch (e) { toast(e.message); }
-};
+let TARIFFS = [];
+$('#tNew').onclick = async () => { if (await tariffDialog(null)) { toast('התעריף נשמר'); loadTariffs(); } };
 $('#tTable').onclick = async (e) => {
+  const ed = e.target.closest('[data-edtr]');
+  if (ed) { const t = TARIFFS.find((x) => String(x.id) === ed.dataset.edtr); if (t && await tariffDialog(t)) { toast('התעריף נשמר'); loadTariffs(); } return; }
   const b = e.target.closest('[data-deltar]'); if (!b) return;
   try { await api('DELETE', '/api/tariff/' + b.dataset.deltar); toast('נמחק'); loadTariffs(); } catch (err) { toast(err.message); }
 };
@@ -569,20 +599,51 @@ function updatePend() {
 }
 
 /* ================= PEOPLE ================= */
-function syncAptField() { $('#uApt').style.display = $('#uRole').value === 'committee' ? 'none' : ''; }
-$('#uRole').onchange = syncAptField;
-$('#uAdd').onclick = async () => {
-  try { await api('POST', '/api/member', { email: $('#uEmail').value, role: $('#uRole').value, apt: $('#uApt').value, name: $('#uName').value }); ['#uEmail', '#uApt', '#uName'].forEach((i) => { $(i).value = ''; }); toast('נוסף'); loadPeople(); } catch (e) { toast(e.message); }
-};
+// A person of the users table (the super user adds and edits them): name, phone, email and bank accounts.
+function personDialog(u) {
+  const edit = !!u; const val = (k) => (edit ? u[k] || '' : '');
+  return Vaad.form({
+    title: edit ? `עריכת ${(val('first') + ' ' + val('last')).trim() || val('email') || 'אדם'}` : 'הוספת אדם',
+    ok: edit ? 'שמור' : 'הוסף',
+    fields: [
+      { k: 'first', label: 'שם פרטי', width: 110, value: val('first') },
+      { k: 'last', label: 'שם משפחה', width: 120, value: val('last') },
+      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: val('phone') },
+      { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email') },
+      { k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account') },
+    ],
+    onSubmit: async (v) => {
+      if (!edit) { await api('POST', '/api/user', v); return; }
+      const patch = {};   // only what changed, so an untouched old-format phone is not rewritten
+      for (const k of ['first', 'last', 'phone', 'email', 'account']) if ((v[k] || '').trim() !== val(k)) patch[k] = v[k];
+      if (Object.keys(patch).length) await api('PUT', '/api/user', { id: u.id, patch });
+    },
+  });
+}
+// App access: an email, a role and (for a tenant or an apartment owner) an apartment
+function grantDialog(email) {
+  const g = BLD.grantable;
+  return Vaad.form({
+    title: 'הרשאת כניסה לאפליקציה',
+    ok: 'הוסף הרשאה',
+    fields: [
+      { k: 'email', label: 'אימייל', type: 'email', width: 220, ltr: true, value: email || '' },
+      { k: 'role', label: 'תפקיד', type: 'select', options: g.map((r) => ({ v: r, t: ROLE[r] })) },
+      { k: 'apt', label: 'דירה', type: 'number', width: 80, show: (v) => v.role !== 'committee' },
+      ...(ME.isSuper ? [{ k: 'name', label: 'שם (לא חובה)', width: 140 }] : []),
+      { k: 'note', type: 'note', text: () => (g.includes('committee') ? 'אתם יכולים לתת את כל שלושת התפקידים.' : 'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.') },
+    ],
+    onSubmit: (v) => api('POST', '/api/member', { email: v.email, role: v.role, apt: v.role === 'committee' ? '' : v.apt, name: v.name || '' }),
+  });
+}
+$('#pNew').onclick = async () => { if (await personDialog(null)) { toast('נוסף'); loadPeople(); } };
+$('#pGrant').onclick = async () => { if (await grantDialog('')) { toast('נוסף'); loadPeople(); } };
 
 /* One table of people: each person once, with every tie they have (apartments owned, apartments rented, app access) */
 let PEOPLE = null;
 async function loadPeople() {
   const g = BLD.grantable;
-  $('#uRole').innerHTML = g.map((r) => `<option value="${r}">${ROLE[r]}</option>`).join('');
-  syncAptField();
-  $('#uName').style.display = ME.isSuper ? '' : 'none';   // names belong to the users table: only the super user sets them
-  $('#grantNote').textContent = g.includes('committee') ? 'אתם יכולים לתת את כל שלושת התפקידים.' : 'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.';
+  $('#pNew').classList.toggle('hide', !ME.isSuper);
   PEOPLE = await api('GET', '/api/people');
   $('#peopleNote').textContent = '';
   renderPeople();
@@ -611,8 +672,7 @@ function renderPeople() {
   const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (!multi || rs.length > 1) && (rs.length || !fb))
     .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (a.u.last + ' ' + a.u.first).localeCompare(c.u.last + ' ' + c.u.first, 'he') || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
-  $('#nuRow').classList.toggle('hide', !ME.isSuper);
-  const cell = (u, k, w, ltr) => (ME.isSuper && u.id ? `<input data-uid="${u.id}" data-k="${k}" value="${esc(u[k])}" style="width:${w}px${ltr ? ';direction:ltr' : ''}"${k === 'account' ? ' title="כמה חשבונות — מופרדים בפסיק"' : ''}>` : `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`);
+  const cell = (u, k, ltr) => `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`;
   const chip = (r, u) => {
     if (r.k === 'access') {
       const rm = r.b === BLD.id && BLD.grantable.includes(r.role) && u.email !== ME.email ? ` <a href="#" data-rm="${r.id}" title="הסר הרשאה" style="text-decoration:none">✕</a>` : '';
@@ -620,25 +680,21 @@ function renderPeople() {
     }
     return `<span class="chip${r.k === 'old' ? ' mute' : ''}">${esc(r.t)}</span>`;
   };
-  $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבונות בנק</th><th class="l">קשרים</th></tr>' + (list.map(({ u, rs }) =>
-    `<tr><td class="l">${cell(u, 'first', 90)}</td><td class="l">${cell(u, 'last', 100)}</td><td class="l">${cell(u, 'email', 170, true)}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', 110, true)}</td><td class="l">${cell(u, 'account', 130, true)}</td><td class="l">` +
-    (rs.length ? rs.map((r) => chip(r, u)).join(' ') : '<span class="mute">בלי קשרים</span>') + '</td></tr>').join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
+  $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבונות בנק</th><th class="l">קשרים</th><th></th></tr>' + (list.map(({ u, rs }) =>
+    `<tr><td class="l">${cell(u, 'first')}</td><td class="l">${cell(u, 'last')}</td><td class="l">${cell(u, 'email', true)}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${cell(u, 'account', true)}</td><td class="l">` +
+    (rs.length ? rs.map((r) => chip(r, u)).join(' ') : '<span class="mute">בלי קשרים</span>') + '</td><td>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + (u.email ? `<button class="g" data-pg="${esc(u.email)}">+ הרשאה</button>` : '') + '</td></tr>').join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
-$('#pTable').onchange = async (e) => {
-  const i = e.target; if (!i.dataset.uid) return;
-  try { await api('PUT', '/api/user', { id: i.dataset.uid, patch: { [i.dataset.k]: i.value } }); const u = PEOPLE.users.find((x) => String(x.id) === i.dataset.uid); if (u) u[i.dataset.k] = i.value.trim(); toast('נשמר'); if (i.dataset.k === 'phone') loadPeople(); } catch (err) { toast(err.message); loadPeople(); }
-};
-$('#nuAdd').onclick = async () => {
-  try { await api('POST', '/api/user', { first: $('#nuFirst').value, last: $('#nuLast').value, email: $('#nuEmail').value, phone: $('#nuPhone').value, account: $('#nuAccount').value }); ['#nuFirst', '#nuLast', '#nuEmail', '#nuPhone', '#nuAccount'].forEach((s) => { $(s).value = ''; }); toast('נוסף'); loadPeople(); } catch (err) { toast(err.message); }
-};
 ['#pQ', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
 $('#pTable').onclick = async (e) => {
+  const pe = e.target.closest('[data-pe]');
+  if (pe) { if (await personDialog(PEOPLE.users.find((x) => String(x.id) === pe.dataset.pe))) { toast('נשמר'); loadPeople(); } return; }
+  const pg = e.target.closest('[data-pg]');
+  if (pg) { if (await grantDialog(pg.dataset.pg)) { toast('נוסף'); loadPeople(); } return; }
   const rm = e.target.closest('a[data-rm]');
   if (rm) { e.preventDefault(); if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את הרשאת הכניסה?' }))) return; try { await api('DELETE', '/api/member/' + rm.dataset.rm); loadPeople(); } catch (err) { toast(err.message); } return; }
 };
 
 /* ---------- apartments and the people in them: owners, tenants, or both; any number per apartment ---------- */
-$('#hEM').innerHTML = MF.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
 let APTS = null;   // the last GET /api/apartments
 // everyone living in a tenancy: the first two people, then the others
 const household = (r) => [
@@ -648,51 +704,101 @@ const household = (r) => [
 ];
 const pname = (p) => `${p.first || ''} ${p.last || ''}`.trim();
 const curTenancy = (apt) => (APTS ? APTS.residents.find((r) => r.apt === apt && r.status !== 'עזב') : null);
-// what the form needs depends on the apartment: with people living there a new one joins them; an empty apartment needs an entry month
-function syncAddForm() {
-  const apt = +$('#hApt').value; const cur = apt ? curTenancy(apt) : null; const tenant = $('#hTenant').checked;
-  $('#hInfo').textContent = !apt ? '' : cur ? `גרים כאן עכשיו: ${household(cur).map(pname).join(', ')} (${cur.role}). אדם חדש יצטרף אליהם.` : 'אין דיירים פעילים בדירה.';
-  $('#hNew').classList.toggle('hide', !(apt && tenant && !cur));
+// The people of the apartments are added and edited in a dialog (Vaad.form); the table only shows them.
+// A person is added to an apartment as a tenant, an owner or both; an email gives them a login (as the owner when they are one, otherwise as a tenant).
+const monthOptions = MF.map((m, i) => ({ v: String(i + 1), t: m }));
+function addPersonDialog(preApt) {
+  const aptOpts = [{ v: '', t: 'בחרו דירה' }, ...APTS.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) }))];
+  const curOf = (v) => (v.apt ? curTenancy(+v.apt) : null);
+  return Vaad.form({
+    title: preApt ? `הוספת אדם לדירה ${preApt}` : 'הוספת אדם לדירה',
+    ok: 'הוסף',
+    fields: [
+      { k: 'apt', label: 'דירה', type: 'select', options: aptOpts, value: preApt ? String(preApt) : '' },
+      { k: 'first', label: 'שם פרטי', width: 110 },
+      { k: 'last', label: 'שם משפחה', width: 120 },
+      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true },
+      { k: 'email', label: 'אימייל לכניסה לאפליקציה (לא חובה)', type: 'email', width: 240, ltr: true },
+      { k: 'tenant', label: 'דייר', type: 'check', value: true },
+      { k: 'owner', label: 'בעל דירה', type: 'check', value: false },
+      { k: 'info', type: 'note', text: (v) => { const cur = curOf(v); return !v.apt ? '' : cur ? `גרים כאן עכשיו: ${household(cur).map(pname).join(', ')} (${cur.role}). אדם חדש יצטרף אליהם.` : 'אין דיירים פעילים בדירה.'; } },
+      { k: 'em', label: 'חודש כניסה', type: 'select', options: monthOptions, value: String(now.m), show: (v) => v.apt && v.tenant && !curOf(v) },
+      { k: 'ey', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => v.apt && v.tenant && !curOf(v) },
+    ],
+    onSubmit: async (v) => {
+      if (!v.apt) throw new Error('בחרו דירה');
+      if (!v.tenant && !v.owner) throw new Error('בחרו אם האדם דייר, בעל דירה או שניהם');
+      const who = { apt: v.apt, first: v.first, last: v.last, phone: v.phone };
+      // the owner goes first, so a login created here is the same person the tenancy then finds
+      if (v.owner) await api('POST', '/api/owner', { ...who, email: v.email });
+      const login = v.owner ? {} : { email: v.email };
+      if (v.tenant) {
+        if (curTenancy(+v.apt)) await api('POST', '/api/household', { ...who, ...login });
+        else await api('POST', '/api/tenancy', { ...who, ...login, role: v.owner ? 'בעלים' : 'שוכר', entryMonth: v.em, entryYear: v.ey, exitMonth: '', exitYear: '' });
+      }
+    },
+  });
 }
-['#hApt', '#hTenant', '#hOwner'].forEach((i) => { $(i).onchange = syncAddForm; });
-$('#hAdd').onclick = async () => {
-  try {
-    const apt = $('#hApt').value; const tenant = $('#hTenant').checked; const owner = $('#hOwner').checked;
-    if (!apt) throw new Error('בחרו דירה');
-    if (!tenant && !owner) throw new Error('בחרו אם האדם דייר, בעל דירה או שניהם');
-    const who = { apt, first: $('#hFirst').value, last: $('#hLast').value, phone: $('#hPhone').value };
-    // the email gives the person a login: as the apartment's owner when they are one, otherwise as a tenant
-    if (owner) await api('POST', '/api/owner', { ...who, email: $('#hMail').value });
-    const login = owner ? {} : { email: $('#hMail').value };   // first, so a login created here is the same person the tenancy then finds
-    if (tenant) {
-      if (curTenancy(+apt)) await api('POST', '/api/household', { ...who, ...login });
-      else await api('POST', '/api/tenancy', { ...who, ...login, role: owner ? 'בעלים' : 'שוכר', entryMonth: $('#hEM').value, entryYear: $('#hEY').value, exitMonth: '', exitYear: '' });
-    }
-    ['#hFirst', '#hLast', '#hPhone', '#hMail'].forEach((i) => { $(i).value = ''; });
-    toast('נוסף'); loadApts();
-  } catch (e) { toast(e.message); }
-};
+// one person of the table: the name and phone (and, for the super user, the bank account of the tenancy)
+function editPersonDialog(p) {
+  return Vaad.form({
+    title: `עריכת ${pname(p) || 'אדם'}`,
+    fields: [
+      { k: 'first', label: 'שם פרטי', width: 110, value: p.first },
+      { k: 'last', label: 'שם משפחה', width: 120, value: p.last },
+      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: p.phone },
+      ...(ME.isSuper && p.resIndex !== undefined ? [{ k: 'account', label: 'חשבון בנק של הדיירות', width: 140, ltr: true, value: p.account, hint: 'משמש לזיהוי אוטומטי של תשלומים' }] : []),
+      { k: 'note', type: 'note', text: () => 'אימייל והרשאות כניסה נקבעים במסך ״אנשים״.' },
+    ],
+    onSubmit: async (v) => {
+      await api('PUT', '/api/person', { userId: p.userId, first: v.first, last: v.last, phone: v.phone });
+      if (ME.isSuper && p.resIndex !== undefined && v.account !== (p.account || '')) await api('PUT', '/api/resident', { index: p.resIndex, patch: { account: v.account } });
+    },
+  });
+}
+function editAptDialog(a) {
+  return Vaad.form({
+    title: `פרטי דירה ${a.apt}`,
+    fields: [
+      { k: 'floor', label: 'קומה', width: 70, value: a.floor },
+      { k: 'rooms', label: 'חדרים', type: 'number', width: 70, value: a.rooms },
+      { k: 'sqm', label: 'מ״ר', type: 'number', width: 80, value: a.sqm },
+    ],
+    onSubmit: (v) => api('PUT', '/api/apartment', { apt: a.apt, floor: v.floor, rooms: v.rooms, sqm: v.sqm }),
+  });
+}
+let PERSONS = {};   // what the edit buttons of the table point at
 async function loadApts() {
   const d = APTS = await api('GET', '/api/apartments');
-  const keepApt = $('#hApt').value;
-  $('#hApt').innerHTML = '<option value="">בחרו דירה</option>' + d.apartments.map((a) => `<option>${a.apt}</option>`).join('');
-  $('#hApt').value = keepApt;
-  if (!$('#hEY').value) $('#hEY').value = now.y;
-  if (!$('#hEM').value) $('#hEM').value = String(now.m);
-  syncAddForm();
-  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">בעלים</th><th class="l">דיירים (פעילים)</th><th>טלפון</th><th>חשבון בנק</th><th></th></tr>';
+  PERSONS = {};
+  const btn = (cls, attr, label, text) => `<button class="${cls}" ${attr} aria-label="${label}">${text}</button>`;
+  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">בעלים</th><th class="l">דיירים (פעילים)</th><th>חשבון בנק</th><th></th></tr>';
   d.apartments.forEach((a) => {
     const rs = d.residents.map((r, i) => ({ r, i })).filter((x) => x.r.apt === a.apt && x.r.status !== 'עזב');
-    const people = rs.flatMap((x) => household(x.r).map((p) => ({ p, x, n: household(x.r).length })));
+    const ph = (p) => (p.phone ? ` <span class="mute" dir="ltr">${esc(p.phone)}</span>` : '');
+    const owners = d.owners.filter((o) => o.apt === a.apt).map((o) => {
+      const id = 'o' + o.id; PERSONS[id] = { userId: o.userId, first: o.first, last: o.last, phone: o.phone };
+      return `${esc(o.first)} ${esc(o.last)}${ph(o)} ${o.userId ? btn('g', `data-ep="${id}"`, 'עריכה', '✎') : ''} ${btn('g', `data-rmown="${o.id}"`, 'הסר', '✕')}`;
+    });
+    const people = rs.flatMap((x) => household(x.r).map((p, j, all) => {
+      const id = `t${x.i}_${j}`; PERSONS[id] = { ...p, resIndex: x.i, account: x.r.account };
+      return `${esc(pname(p))} <span class="mute">(${esc(x.r.role)})</span>${ph(p)}${p.userId ? ` ${btn('g', `data-ep="${id}"`, 'עריכה', '✎')}` : ''}${all.length > 1 && p.userId ? ` ${btn('g', `data-hrm="${esc(x.r.key)}|${p.userId}"`, 'הסר מהדירה', '✕')}` : ''}`;
+    }));
     h += `<tr><td><b>${a.apt}</b></td><td>${esc(a.floor)}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td>` +
-      `<td class="l">${d.owners.filter((o) => o.apt === a.apt).map((o) => `${esc(o.first)} ${esc(o.last)} <button class="g" data-rmown="${o.id}" aria-label="הסר">✕</button>`).join('<br>')}</td>` +
-      `<td class="l">${people.map(({ p, x, n }) => `${esc(pname(p))} <span class="mute">(${esc(x.r.role)})</span>${n > 1 && p.userId ? ` <button class="g" data-hrm="${esc(x.r.key)}|${p.userId}" aria-label="הסר מהדירה">✕</button>` : ''}`).join('<br>')}</td>` +
-      `<td>${people.map(({ p }) => (p.userId ? `<input data-uid="${p.userId}" data-f="${esc(p.first)}" data-l="${esc(p.last)}" type="tel" value="${esc(p.phone)}" style="width:110px;direction:ltr">` : '<span class="mute">—</span>')).join('<br>')}</td>` +
-      `<td>${rs.map((x) => `<input data-i="${x.i}" data-k="account" value="${esc(x.r.account)}" style="width:100px" ${ME.isSuper ? '' : 'disabled'} title="מספר חשבון בנק של הדייר — משמש לזיהוי אוטומטי">`).join('<br>')}</td><td>${rs.map((x) => `<button class="g" data-end="${esc(x.r.key)}">עזב</button>`).join('<br>')}</td></tr>`;
+      `<td class="l">${owners.join('<br>')}</td><td class="l">${people.join('<br>')}</td>` +
+      `<td dir="ltr">${rs.map((x) => esc(x.r.account) || '<span class="mute">—</span>').join('<br>')}</td>` +
+      `<td>${btn('b', `data-add="${a.apt}"`, 'הוסף אדם', '+ אדם')} ${btn('g', `data-ea="${a.apt}"`, 'עריכת פרטי הדירה', 'עריכה')} ${rs.map((x) => btn('g', `data-end="${esc(x.r.key)}"`, 'עזב', 'עזב')).join(' ')}</td></tr>`;
   });
   $('#aptTable').innerHTML = h;
 }
+$('#hOpen').onclick = async () => { if (!APTS) await loadApts(); if (await addPersonDialog('')) { toast('נוסף'); loadApts(); } };
 $('#aptTable').onclick = async (e) => {
+  const ad = e.target.closest('[data-add]');
+  if (ad) { if (await addPersonDialog(ad.dataset.add)) { toast('נוסף'); loadApts(); } return; }
+  const ep = e.target.closest('[data-ep]');
+  if (ep) { if (await editPersonDialog(PERSONS[ep.dataset.ep])) { toast('נשמר'); loadApts(); } return; }
+  const ea = e.target.closest('[data-ea]');
+  if (ea) { if (await editAptDialog(APTS.apartments.find((a) => String(a.apt) === ea.dataset.ea))) { toast('נשמר'); loadApts(); } return; }
   const ro = e.target.closest('[data-rmown]');
   if (ro) {
     if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את בעל הדירה? גם הרשאת הכניסה שלו לדירה הזו תוסר.' }))) return;
@@ -711,15 +817,6 @@ $('#aptTable').onclick = async (e) => {
   const m = /^\s*(\d{1,2})\s*[\/.-]\s*(\d{4})\s*$/.exec(v);
   if (!m) return toast('פורמט: חודש/שנה, למשל 8/2026');
   try { await api('POST', '/api/tenancy/end', { key: b.dataset.end, exitMonth: m[1], exitYear: m[2] }); toast('הדיירות הסתיימה'); loadApts(); } catch (err) { toast(err.message); }
-};
-$('#aptTable').onchange = async (e) => {
-  const t = e.target;
-  try {
-    if (t.dataset.uid) await api('PUT', '/api/person', { userId: t.dataset.uid, first: t.dataset.f, last: t.dataset.l, phone: t.value });
-    else if (t.dataset.i !== undefined) await api('PUT', '/api/resident', { index: +t.dataset.i, patch: { [t.dataset.k]: t.value } });
-    else return;
-    toast('נשמר'); loadApts();
-  } catch (err) { toast(err.message); loadApts(); }
 };
 
 /* ================= MORE: what tenants see, backup ================= */

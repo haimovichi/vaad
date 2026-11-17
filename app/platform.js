@@ -18,31 +18,45 @@ $('#logout').onclick = (e) => { e.preventDefault(); Vaad.signOut(); };
 function loadBuildings() {
   $('#bTable').innerHTML = '<tr><th>#</th><th class="l">שם</th><th></th></tr>' +
     (ME.memberships.map((m) => `<tr><td>${m.id}</td><td class="l">${esc(m.name)}</td><td><button class="b" data-open="${m.id}">פתח</button> <button class="g" data-edit="${m.id}">שנה כתובת</button> <button class="g" data-del="${m.id}">מחק בניין</button></td></tr>`).join('')
-      || '<tr><td colspan="3" class="empty">עוד אין בניינים. צרו את הראשון למטה.</td></tr>');
+      || '<tr><td colspan="3" class="empty">עוד אין בניינים. צרו את הראשון בכפתור ״בניין חדש״.</td></tr>');
 }
-let newAddr = null;
-Vaad.addressPicker($('#bPick'), (a) => { newAddr = a; $('#bAdd').disabled = !a; });
-const digits = (el, n) => { el.oninput = () => { el.value = el.value.replace(/\D/g, '').slice(0, n); }; };
-digits($('#bBranch'), 3); digits($('#bAcct'), 9);
-$('#bApts').oninput = (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 3); };
-$('#bAdd').onclick = async () => {
-  if (!newAddr) return;
-  const br = $('#bBranch').value, ac = $('#bAcct').value;
-  if ((br || ac) && (br.length !== 3 || ac.length < 4)) return toast('חשבון הבנק: סניף של 3 ספרות ומספר חשבון (או להשאיר את שניהם ריקים)');
-  const acct = br && ac ? br + '-' + ac : '';
-  try {
-    const b = await api('POST', '/api/building', { name: newAddr, bankAccount: acct, bankCode: $('#bBank').value, apartments: $('#bApts').value });
-    Vaad.choose(b.id); Vaad.go('app.html');
-  } catch (e) { toast(e.message); }
-};
-let editId = null; let editAddr = null;
-const editPick = Vaad.addressPicker($('#bEditPick'), (a) => { editAddr = a; $('#bEditSave').disabled = !a; });
-const closeEdit = () => { editId = null; $('#bEditBox').classList.add('hide'); editPick.reset(); };
-$('#bEditCancel').onclick = closeEdit;
-$('#bEditSave').onclick = async () => {
-  if (!editAddr) return;
-  try { await api('PUT', '/api/building', { id: editId, name: editAddr }); const m = ME.memberships.find((x) => String(x.id) === String(editId)); if (m) m.name = editAddr; closeEdit(); loadBuildings(); loadManagers(); toast('הכתובת עודכנה'); } catch (err) { toast(err.message); }
-};
+const BANKS = [['12', 'הפועלים'], ['10', 'לאומי'], ['11', 'דיסקונט'], ['20', 'מזרחי טפחות'], ['31', 'הבינלאומי'], ['14', 'אוצר החייל'], ['13', 'איגוד'], ['17', 'מרכנתיל'], ['4', 'יהב'], ['9', 'הדואר'], ['46', 'מסד'], ['52', 'פועלי אגודת ישראל'], ['54', 'ירושלים']];
+// the address picker inside a dialog: the dialog gets the chosen address (or null) as the value of this field
+const addressField = (k) => ({ k, type: 'custom', build: (box, notify) => { let addr = null; Vaad.addressPicker(box, (a) => { addr = a; notify(); }); return () => addr; } });
+const needAddress = 'בחרו עיר ורחוב מהרשימה והקלידו מספר בית';
+function newBuildingDialog() {
+  return Vaad.form({
+    title: 'בניין חדש',
+    ok: 'צור בניין',
+    fields: [
+      { k: 'intro', type: 'note', text: () => 'כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית. מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.' },
+      addressField('addr'),
+      { k: 'apts', label: 'מספר דירות', width: 70, digits: 3 },
+      { k: 'bank', label: 'בנק', type: 'select', options: [{ v: '', t: '—' }, ...BANKS.map(([v, t]) => ({ v, t: `${t} (${v})` }))] },
+      { k: 'branch', label: 'סניף', width: 70, ltr: true, digits: 3 },
+      { k: 'acct', label: 'חשבון', width: 130, ltr: true, digits: 9 },
+      { k: 'bankNote', type: 'note', text: () => 'חשבון הבנק של הבניין, לא חובה עכשיו. קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.' },
+    ],
+    onSubmit: async (v) => {
+      if (!v.addr) throw new Error(needAddress);
+      if ((v.branch || v.acct) && (v.branch.length !== 3 || v.acct.length < 4)) throw new Error('חשבון הבנק: סניף של 3 ספרות ומספר חשבון (או להשאיר את שניהם ריקים)');
+      const b = await api('POST', '/api/building', { name: v.addr, bankAccount: v.branch && v.acct ? v.branch + '-' + v.acct : '', bankCode: v.bank, apartments: v.apts });
+      Vaad.choose(b.id); Vaad.go('app.html');
+    },
+  });
+}
+function editAddressDialog(m) {
+  return Vaad.form({
+    title: 'שינוי כתובת: ' + m.name,
+    ok: 'שמור כתובת',
+    fields: [{ k: 'intro', type: 'note', text: () => 'בחרו את הכתובת החדשה מהרשימה.' }, addressField('addr')],
+    onSubmit: async (v) => {
+      if (!v.addr) throw new Error(needAddress);
+      await api('PUT', '/api/building', { id: m.id, name: v.addr });
+      m.name = v.addr;
+    },
+  });
+}
 // delete a building: an empty one after one confirmation; one with payments, expenses or bank rows only when its address is typed
 async function deleteBuilding(id) {
   const m = ME.memberships.find((x) => String(x.id) === String(id)); if (!m) return;
@@ -59,27 +73,49 @@ async function deleteBuilding(id) {
     loadBuildings(); loadManagers(); toast('הבניין נמחק');
   } catch (err) { toast(err.message.includes('confirm') ? 'הכתובת שהוקלדה לא תואמת, הבניין לא נמחק' : err.message); }
 }
-$('#bTable').onclick = (e) => {
+$('#bNew').onclick = () => { newBuildingDialog(); };
+$('#bTable').onclick = async (e) => {
   const d = e.target.dataset;
   if (d.open) { Vaad.choose(d.open); return Vaad.go('app.html'); }
   if (d.del) return deleteBuilding(d.del);
-  if (d.edit) { editId = d.edit; const m = ME.memberships.find((x) => String(x.id) === d.edit); $('#bEditT').textContent = 'שינוי כתובת: ' + m.name; $('#bEditBox').classList.remove('hide'); $('#bEditBox').scrollIntoView(); }
+  if (d.edit) { const m = ME.memberships.find((x) => String(x.id) === d.edit); if (m && await editAddressDialog(m)) { loadBuildings(); loadManagers(); toast('הכתובת עודכנה'); } }
 };
 
 /* ---------- the buildings managers ---------- */
+let MGRS = [];
 async function loadManagers() {
-  const list = await api('GET', '/api/managers'); const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name])); const enc = encodeURIComponent;
-  $('#mTable').innerHTML = '<tr><th class="l">אימייל</th><th class="l">הבניינים שלו</th><th>הוסף בניין</th><th></th></tr>' +
-    list.map((x) => `<tr><td class="l" dir="ltr">${esc(x.email)}</td><td class="l">${x.buildings.map((b) => `<span class="chip">${esc(names[b] || b)} <a href="#" data-mb="${enc(x.email)}~${b}">✕</a></span>`).join('') || '<span class="mute">אין בניינים</span>'}</td>` +
-      `<td><select data-addb="${enc(x.email)}"><option value="">בחרו…</option>${ME.memberships.filter((m) => !x.buildings.includes(m.id)).map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></td>` +
-      `<td><button class="g" data-rmm="${enc(x.email)}">הסר מנהל</button></td></tr>`).join('');
+  MGRS = await api('GET', '/api/managers'); const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name])); const enc = encodeURIComponent;
+  $('#mTable').innerHTML = '<tr><th class="l">אימייל</th><th class="l">הבניינים שלו</th><th></th></tr>' +
+    (MGRS.map((x, i) => `<tr><td class="l" dir="ltr">${esc(x.email)}</td><td class="l">${x.buildings.map((b) => `<span class="chip">${esc(names[b] || b)}</span>`).join('') || '<span class="mute">אין בניינים</span>'}</td>` +
+      `<td><button class="g" data-me="${i}">עריכה</button> <button class="g" data-rmm="${enc(x.email)}">הסר מנהל</button></td></tr>`).join('') || '<tr><td colspan="3" class="empty">עוד אין מנהלי בניינים.</td></tr>');
 }
-$('#mAdd').onclick = async () => { try { await api('POST', '/api/manager', { email: $('#mEmail').value }); $('#mEmail').value = ''; toast('נוסף'); loadManagers(); } catch (e) { toast(e.message); } };
-$('#mTable').onchange = async (e) => { const em = e.target.dataset.addb; if (!em || !e.target.value) return; try { await api('POST', '/api/manager-building', { email: decodeURIComponent(em), building_id: e.target.value }); loadManagers(); } catch (err) { toast(err.message); } };
+// add a buildings manager (with the buildings they manage), or (with x) change which buildings they manage
+function managerDialog(x) {
+  const has = (id) => !!x && x.buildings.includes(id);
+  return Vaad.form({
+    title: x ? `הבניינים של ${x.email}` : 'מנהל בניינים חדש',
+    ok: x ? 'שמור' : 'הוסף מנהל',
+    fields: [
+      ...(x ? [] : [{ k: 'email', label: 'אימייל', type: 'email', width: 240, ltr: true }]),
+      { k: 'intro', type: 'note', text: () => 'מנהל בניינים מנהל את הבניינים שמסומנים כאן, ואינו יוצר בניינים חדשים.' },
+      ...ME.memberships.map((m) => ({ k: 'b' + m.id, label: m.name, type: 'check', value: has(m.id) })),
+    ],
+    onSubmit: async (v) => {
+      const email = x ? x.email : String(v.email || '').trim().toLowerCase();
+      if (!x) await api('POST', '/api/manager', { email });
+      for (const m of ME.memberships) {
+        const want = !!v['b' + m.id];
+        if (want && !has(m.id)) await api('POST', '/api/manager-building', { email, building_id: m.id });
+        if (!want && has(m.id)) await api('DELETE', '/api/manager-building/' + encodeURIComponent(email) + '~' + m.id);
+      }
+    },
+  });
+}
+$('#mNew').onclick = async () => { if (await managerDialog(null)) { toast('נוסף'); loadManagers(); } };
 $('#mTable').onclick = async (e) => {
-  if (e.target.dataset.mb) e.preventDefault();
+  const me = e.target.closest('[data-me]');
+  if (me) { if (await managerDialog(MGRS[+me.dataset.me])) { toast('נשמר'); loadManagers(); } return; }
   try {
-    if (e.target.dataset.mb) { await api('DELETE', '/api/manager-building/' + e.target.dataset.mb); loadManagers(); }
     if (e.target.dataset.rmm && await Vaad.ask({ ok: 'הסר', text: 'להסיר את מנהל הבניינים?' })) { await api('DELETE', '/api/manager/' + e.target.dataset.rmm); loadManagers(); }
   } catch (err) { toast(err.message); }
 };

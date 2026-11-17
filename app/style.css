@@ -123,3 +123,18 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 .dlg p{margin:0 0 12px;white-space:pre-line;line-height:1.5}
 .dlg input{width:100%;box-sizing:border-box;margin-bottom:12px}
 .dlg .acts{display:flex;gap:8px;justify-content:flex-start}
+
+/* form dialog: add or edit one record */
+.dlg-form{max-width:520px;max-height:90vh;overflow:auto}
+.dlg-form h3{margin:0 0 12px}
+.dlg .fm{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-end;margin-bottom:12px}
+.dlg .fm .f input,.dlg .fm .f select{margin-bottom:0;width:auto;max-width:100%}
+.dlg .fm .f small{font-size:12px}
+.dlg .fm-check{display:flex;align-items:center;gap:6px;cursor:pointer}
+.dlg .fm-check input{width:auto;margin:0}
+.dlg .fm-note{flex-basis:100%}
+.dlg .fm-err{color:var(--unpaid,#c0392b);min-height:0;margin:0 0 10px;font-size:14px}
+.dlg .fm-err:empty{display:none}
+.dlg-form{overflow-x:hidden}
+.dlg .fm .f{min-width:0;max-width:100%}
+.dlg .fm .f input,.dlg .fm .f select{box-sizing:border-box}

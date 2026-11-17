@@ -10,6 +10,7 @@ const store = {
   addTenancy: async (t) => { seen.push(t); return '1-x'; },
   addHouseholdMember: async (key, p) => { seen.push(p); },
   addOwner: async (o) => { seen.push(o); return 1; },
+  updateApartment: async (a) => { seen.push(a); },
   load: async () => ({}), saveSnapshot: async () => {},
 };
 const db = { apartments: [{ apt: 1 }], residents: [], owners: [], tariffs: [], payments: [], expenses: [], settings: {} };
@@ -34,5 +35,12 @@ db.residents.push({ key: '1-a', apt: 1, status: 'פעיל' });
 seen.length = 0; await svc.call('POST', '/api/household', { apt: 1, first: 'ג', last: 'ד', phone: '0521234567', email: '' });
 check('a household member phone is normalized too', seen[0].phone === '052-1234567');
 
+// editing an apartment: floor, rooms and area
+seen.length = 0; await svc.call('PUT', '/api/apartment', { apt: 1, floor: ' 2 ', rooms: '4', sqm: '' });
+check('an apartment is updated with trimmed floor and numeric rooms', seen[0].floor === '2' && seen[0].rooms === 4 && seen[0].sqm === null);
+for (const [what, b] of [['rooms 0', { apt: 1, rooms: '0' }], ['rooms 3.5', { apt: 1, rooms: '3.5' }], ['area -5', { apt: 1, sqm: '-5' }], ['a missing apartment', { apt: 99 }]]) {
+  let m = ''; try { await svc.call('PUT', '/api/apartment', b); } catch (e) { m = e.message; }
+  check(`an apartment update with ${what} is refused`, m !== '');
+}
 console.log(bad ? `${bad} FAILED` : 'all ok');
 process.exit(bad ? 1 : 0);

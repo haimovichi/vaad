@@ -14,24 +14,14 @@
   <div class="box pad">
     <h3>הבניינים</h3>
     <div class="mute">בחרו בניין כדי להיכנס אליו. רק מנהל העל יוצר, משנה כתובת ומוחק בניינים.</div>
+    <div class="row"><button class="b" id="bNew">+ בניין חדש</button></div>
   </div>
   <div class="box"><table class="t" id="bTable"></table></div>
-  <div class="box pad hide" id="bEditBox"><h3 id="bEditT"></h3><div class="mute">בחרו את הכתובת החדשה מהרשימה.</div><div class="row" id="bEditPick"></div><div class="row"><button class="b" id="bEditSave" disabled>שמור כתובת</button><button class="g" id="bEditCancel">ביטול</button></div></div>
-
-  <div class="box pad">
-    <h3>בניין חדש</h3>
-    <div class="mute">מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.</div>
-    <div class="mute" style="margin-top:8px">כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית.</div>
-    <div class="row"><div id="bPick" style="display:contents"></div><label class="f"><span>מספר דירות</span><input id="bApts" type="number" min="1" max="500" style="width:70px"></label></div>
-    <div class="row"><label class="f"><span>בנק</span><select id="bBank"><option value="">—</option><option value="12">הפועלים (12)</option><option value="10">לאומי (10)</option><option value="11">דיסקונט (11)</option><option value="20">מזרחי טפחות (20)</option><option value="31">הבינלאומי (31)</option><option value="14">אוצר החייל (14)</option><option value="13">איגוד (13)</option><option value="17">מרכנתיל (17)</option><option value="4">יהב (4)</option><option value="9">הדואר (9)</option><option value="46">מסד (46)</option><option value="52">פועלי אגודת ישראל (52)</option><option value="54">ירושלים (54)</option></select></label><label class="f"><span>סניף</span><input id="bBranch" inputmode="numeric" style="width:70px;direction:ltr"></label><label class="f"><span>חשבון</span><input id="bAcct" inputmode="numeric" style="width:130px;direction:ltr"></label><span class="mute">חשבון הבנק של הבניין, לא חובה עכשיו</span></div>
-    <div class="mute">קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.</div>
-    <div class="row"><button class="b" id="bAdd" disabled>צור בניין</button></div>
-  </div>
 
   <div class="box pad">
     <h3>מנהלי בניינים</h3>
     <div class="mute">רק מנהל העל ממנה מנהלי בניינים. מנהל בניינים מנהל את הבניינים שהוקצו לו, ואינו יוצר בניינים חדשים.</div>
-    <div class="row"><label class="f"><span>אימייל</span><input id="mEmail" type="email" style="width:220px;direction:ltr"></label><button class="b" id="mAdd">הוסף מנהל בניינים</button></div>
+    <div class="row"><button class="b" id="mNew">+ מנהל בניינים</button></div>
   </div>
   <div class="box"><table class="t" id="mTable"></table></div>
 </div>
