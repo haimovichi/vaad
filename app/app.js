@@ -666,7 +666,7 @@ $('#hAdd').onclick = async () => {
     const login = owner ? {} : { email: $('#hMail').value };   // first, so a login created here is the same person the tenancy then finds
     if (tenant) {
       if (curTenancy(+apt)) await api('POST', '/api/household', { ...who, ...login });
-      else await api('POST', '/api/tenancy', { ...who, ...login, role: $('#hRole').value, entryMonth: $('#hEM').value, entryYear: $('#hEY').value, exitMonth: '', exitYear: '' });
+      else await api('POST', '/api/tenancy', { ...who, ...login, role: owner ? 'בעלים' : 'שוכר', entryMonth: $('#hEM').value, entryYear: $('#hEY').value, exitMonth: '', exitYear: '' });
     }
     ['#hFirst', '#hLast', '#hPhone', '#hMail'].forEach((i) => { $(i).value = ''; });
     toast('נוסף'); loadApts();
