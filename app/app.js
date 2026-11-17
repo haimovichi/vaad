@@ -211,10 +211,10 @@ function addPaymentDialog(key) {
     title: 'הוספת תשלום',
     ok: 'הוסף תשלום',
     fields: [
-      { k: 'm', label: 'חודש', type: 'select', options: c.cells.map((x) => ({ v: String(x.m), t: MF[x.m - 1] })), value: c.pick ? String(c.pick.m) : undefined },
-      { k: 'amount', label: 'סכום ₪', type: 'number', width: 100, value: c.sugg },
-      { k: 'method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'שיק', 'העברה בנקאית', 'הוראת קבע'].map((t) => ({ v: t, t })) },
-      { k: 'date', label: 'תאריך', type: 'date', value: new Date().toISOString().slice(0, 10) },
+      { k: 'm', label: 'חודש', type: 'select', options: c.cells.map((x) => ({ v: String(x.m), t: MF[x.m - 1] })), value: c.pick ? String(c.pick.m) : undefined, row: 'for' },
+      { k: 'amount', label: 'סכום ₪', type: 'number', width: 100, value: c.sugg, row: 'for' },
+      { k: 'method', label: 'אמצעי תשלום', type: 'select', options: ['מזומן', 'שיק', 'העברה בנקאית', 'הוראת קבע'].map((t) => ({ v: t, t })), row: 'how' },
+      { k: 'date', label: 'תאריך', type: 'date', value: new Date().toISOString().slice(0, 10), row: 'how' },
     ],
     onSubmit: (v) => api('POST', '/api/payment', { key, y: year, m: +v.m, amount: v.amount, method: v.method, date: v.date || null }),
   });
@@ -550,8 +550,8 @@ function tariffDialog(t) {
       title: 'עריכת תעריף',
       fields: [
         { k: 'what', type: 'note', text: () => `${tariffWhat(t)}, שנת ${t.year}` },
-        { k: 'amount', label: 'סכום ₪', type: 'number', width: 100, value: t.amount },
-        { k: 'note', label: 'הערה (לא חובה)', width: 200, value: t.note || '' },
+        { k: 'amount', label: 'סכום ₪', type: 'number', width: 100, value: t.amount, row: 'value' },
+        { k: 'note', label: 'הערה (לא חובה)', width: 200, value: t.note || '', row: 'value' },
       ],
       onSubmit: (v) => save(v, { year: t.year, month: t.month || '', apt: t.apt || '' }),
     });
@@ -560,13 +560,13 @@ function tariffDialog(t) {
     title: 'תעריף חדש',
     ok: 'שמור',
     fields: [
-      { k: 'kind', label: 'סוג', type: 'select', options: [{ v: 'base', t: 'תעריף בסיס לשנה' }, { v: 'apt', t: 'תעריף מיוחד לדירה' }, { v: 'extra', t: 'תוספת חד-פעמית לחודש' }] },
-      { k: 'year', label: 'שנה', type: 'number', width: 90, value: now.y },
-      { k: 'month', label: 'חודש', type: 'select', options: MF.map((m, i) => ({ v: String(i + 1), t: m })), show: (v) => v.kind === 'extra' },
-      { k: 'aptA', label: 'דירה', type: 'select', options: aptOpts('בחרו דירה'), show: (v) => v.kind === 'apt' },
-      { k: 'aptX', label: 'דירה', type: 'select', options: aptOpts('כל הדירות'), show: (v) => v.kind === 'extra' },
-      { k: 'amount', label: 'סכום ₪', type: 'number', width: 100 },
-      { k: 'note', label: 'הערה (לא חובה)', width: 200 },
+      { k: 'kind', label: 'סוג', type: 'select', options: [{ v: 'base', t: 'תעריף בסיס לשנה' }, { v: 'apt', t: 'תעריף מיוחד לדירה' }, { v: 'extra', t: 'תוספת חד-פעמית לחודש' }], row: 'what' },
+      { k: 'year', label: 'שנה', type: 'number', width: 90, value: now.y, row: 'what' },
+      { k: 'month', label: 'חודש', type: 'select', options: MF.map((m, i) => ({ v: String(i + 1), t: m })), show: (v) => v.kind === 'extra', row: 'what' },
+      { k: 'aptA', label: 'דירה', type: 'select', options: aptOpts('בחרו דירה'), show: (v) => v.kind === 'apt', row: 'what' },
+      { k: 'aptX', label: 'דירה', type: 'select', options: aptOpts('כל הדירות'), show: (v) => v.kind === 'extra', row: 'what' },
+      { k: 'amount', label: 'סכום ₪', type: 'number', width: 100, row: 'value' },
+      { k: 'note', label: 'הערה (לא חובה)', width: 200, row: 'value' },
       { k: 'hint', type: 'note', text: () => 'הגדרה חוזרת של תעריף קיים משנה את הסכום שלו.' },
     ],
     onSubmit: (v) => {
@@ -606,10 +606,10 @@ function personDialog(u) {
     title: edit ? `עריכת ${(val('first') + ' ' + val('last')).trim() || val('email') || 'אדם'}` : 'הוספת אדם',
     ok: edit ? 'שמור' : 'הוסף',
     fields: [
-      { k: 'first', label: 'שם פרטי', width: 110, value: val('first') },
-      { k: 'last', label: 'שם משפחה', width: 120, value: val('last') },
-      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: val('phone') },
-      { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email') },
+      { k: 'first', label: 'שם פרטי', width: 110, value: val('first'), row: 'name' },
+      { k: 'last', label: 'שם משפחה', width: 120, value: val('last'), row: 'name' },
+      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: val('phone'), row: 'contact' },
+      { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email'), row: 'contact' },
       { k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account') },
     ],
     onSubmit: async (v) => {
@@ -627,10 +627,11 @@ function grantDialog(email) {
     title: 'הרשאת כניסה לאפליקציה',
     ok: 'הוסף הרשאה',
     fields: [
-      { k: 'email', label: 'אימייל', type: 'email', width: 220, ltr: true, value: email || '' },
-      { k: 'role', label: 'תפקיד', type: 'select', options: g.map((r) => ({ v: r, t: ROLE[r] })) },
-      { k: 'apt', label: 'דירה', type: 'number', width: 80, show: (v) => v.role !== 'committee' },
-      ...(ME.isSuper ? [{ k: 'name', label: 'שם (לא חובה)', width: 140 }] : []),
+      { k: 'email', label: 'אימייל', type: 'email', width: 220, ltr: true, value: email || '', row: 'who' },
+      ...(ME.isSuper ? [{ k: 'name', label: 'שם (לא חובה)', width: 140, row: 'who' }] : []),
+      { k: 'role', label: 'תפקיד', type: 'select', options: g.map((r) => ({ v: r, t: ROLE[r] })), row: 'access' },
+      { k: 'apt', label: 'דירה', type: 'number', width: 80, show: (v) => v.role !== 'committee', row: 'access' },
+      // (the optional name sits next to the email, above)
       { k: 'note', type: 'note', text: () => (g.includes('committee') ? 'אתם יכולים לתת את כל שלושת התפקידים.' : 'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.') },
     ],
     onSubmit: (v) => api('POST', '/api/member', { email: v.email, role: v.role, apt: v.role === 'committee' ? '' : v.apt, name: v.name || '' }),
@@ -715,15 +716,15 @@ function addPersonDialog(preApt) {
     ok: 'הוסף',
     fields: [
       { k: 'apt', label: 'דירה', type: 'select', options: aptOpts, value: preApt ? String(preApt) : '' },
-      { k: 'first', label: 'שם פרטי', width: 110 },
-      { k: 'last', label: 'שם משפחה', width: 120 },
-      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true },
-      { k: 'email', label: 'אימייל לכניסה לאפליקציה (לא חובה)', type: 'email', width: 240, ltr: true },
-      { k: 'tenant', label: 'דייר', type: 'check', value: true },
-      { k: 'owner', label: 'בעל דירה', type: 'check', value: false },
+      { k: 'first', label: 'שם פרטי', width: 110, row: 'name' },
+      { k: 'last', label: 'שם משפחה', width: 120, row: 'name' },
+      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, row: 'contact' },
+      { k: 'email', label: 'אימייל לכניסה לאפליקציה (לא חובה)', type: 'email', width: 240, ltr: true, row: 'contact' },
+      { k: 'tenant', label: 'דייר', type: 'check', value: true, row: 'kind' },
+      { k: 'owner', label: 'בעל דירה', type: 'check', value: false, row: 'kind' },
       { k: 'info', type: 'note', text: (v) => { const cur = curOf(v); return !v.apt ? '' : cur ? `גרים כאן עכשיו: ${household(cur).map(pname).join(', ')} (${cur.role}). אדם חדש יצטרף אליהם.` : 'אין דיירים פעילים בדירה.'; } },
-      { k: 'em', label: 'חודש כניסה', type: 'select', options: monthOptions, value: String(now.m), show: (v) => v.apt && v.tenant && !curOf(v) },
-      { k: 'ey', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => v.apt && v.tenant && !curOf(v) },
+      { k: 'em', label: 'חודש כניסה', type: 'select', options: monthOptions, value: String(now.m), show: (v) => v.apt && v.tenant && !curOf(v), row: 'entry' },
+      { k: 'ey', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => v.apt && v.tenant && !curOf(v), row: 'entry' },
     ],
     onSubmit: async (v) => {
       if (!v.apt) throw new Error('בחרו דירה');
@@ -744,8 +745,8 @@ function editPersonDialog(p) {
   return Vaad.form({
     title: `עריכת ${pname(p) || 'אדם'}`,
     fields: [
-      { k: 'first', label: 'שם פרטי', width: 110, value: p.first },
-      { k: 'last', label: 'שם משפחה', width: 120, value: p.last },
+      { k: 'first', label: 'שם פרטי', width: 110, value: p.first, row: 'name' },
+      { k: 'last', label: 'שם משפחה', width: 120, value: p.last, row: 'name' },
       { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: p.phone },
       ...(ME.isSuper && p.resIndex !== undefined ? [{ k: 'account', label: 'חשבון בנק של הדיירות', width: 140, ltr: true, value: p.account, hint: 'משמש לזיהוי אוטומטי של תשלומים' }] : []),
       { k: 'note', type: 'note', text: () => 'אימייל והרשאות כניסה נקבעים במסך ״אנשים״.' },
@@ -760,9 +761,9 @@ function editAptDialog(a) {
   return Vaad.form({
     title: `פרטי דירה ${a.apt}`,
     fields: [
-      { k: 'floor', label: 'קומה', width: 70, value: a.floor },
-      { k: 'rooms', label: 'חדרים', type: 'number', width: 70, value: a.rooms },
-      { k: 'sqm', label: 'מ״ר', type: 'number', width: 80, value: a.sqm },
+      { k: 'floor', label: 'קומה', width: 70, value: a.floor, row: 'details' },
+      { k: 'rooms', label: 'חדרים', type: 'number', width: 70, value: a.rooms, row: 'details' },
+      { k: 'sqm', label: 'מ״ר', type: 'number', width: 80, value: a.sqm, row: 'details' },
     ],
     onSubmit: (v) => api('PUT', '/api/apartment', { apt: a.apt, floor: v.floor, rooms: v.rooms, sqm: v.sqm }),
   });

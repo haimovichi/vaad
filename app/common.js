@@ -115,11 +115,11 @@ window.Vaad = (function () {
   function form(o) {
     return new Promise((res) => {
       const bg = document.createElement('div'); bg.className = 'dlg-bg';
-      const d = document.createElement('div'); d.className = 'dlg dlg-form'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', o.title || '');
+      const d = document.createElement('div'); d.className = 'dlg dlg-form'; if (o.width) d.style.maxWidth = o.width + 'px'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', o.title || '');
       const h = document.createElement('h3'); h.textContent = o.title || ''; d.appendChild(h);
       const body = document.createElement('div'); body.className = 'fm'; d.appendChild(body);
       const els = {};   // key -> { box, input | get }
-      const customs = [];
+      const customs = []; const rowEls = []; let grp = null;
       for (const f of o.fields) {
         let box = document.createElement(f.type === 'note' || f.type === 'custom' ? 'div' : 'label'); let input = null;
         if (f.type === 'note') { box.className = 'mute fm-note'; }
@@ -136,12 +136,17 @@ window.Vaad = (function () {
           if (f.hint) { const s = document.createElement('small'); s.className = 'mute'; s.textContent = f.hint; box.appendChild(s); }
           box.appendChild(input);
         }
-        body.appendChild(box); els[f.k] = { box, input, f };
+        // fields with the same consecutive `row` key share one row (the same context: first and last name, bank, branch and account...)
+        if (f.row) {
+          if (!grp || grp.key !== f.row) { const d = document.createElement('div'); d.className = 'fm-row'; body.appendChild(d); grp = { key: f.row, el: d }; rowEls.push(d); }
+          grp.el.appendChild(box);
+        } else { grp = null; body.appendChild(box); }
+        els[f.k] = { box, input, f };
         if (f.type === 'custom') customs.push(f);
         if (f.digits && input) { input.inputMode = 'numeric'; input.addEventListener('input', () => { input.value = input.value.replace(/\D/g, '').slice(0, f.digits); }); }
       }
       const vals = () => { const v = {}; for (const f of o.fields) { const e = els[f.k]; if (e.input) v[f.k] = f.type === 'check' ? e.input.checked : e.input.value; else if (e.get) v[f.k] = e.get(); } return v; };
-      const sync = () => { const v = vals(); for (const f of o.fields) { const e = els[f.k]; if (f.type !== 'custom') e.box.style.display = f.show && !f.show(v) ? 'none' : ''; if (f.type === 'note') e.box.textContent = f.text ? f.text(v) : ''; } };
+      const sync = () => { const v = vals(); for (const f of o.fields) { const e = els[f.k]; if (f.type !== 'custom') e.box.style.display = f.show && !f.show(v) ? 'none' : ''; if (f.type === 'note') e.box.textContent = f.text ? f.text(v) : ''; } for (const r of rowEls) r.style.display = [...r.children].every((c) => c.style.display === 'none') ? 'none' : ''; };
       const err = document.createElement('div'); err.className = 'fm-err'; err.setAttribute('role', 'alert'); d.appendChild(err);
       const acts = document.createElement('div'); acts.className = 'acts';
       const okB = document.createElement('button'); okB.className = 'b'; okB.textContent = o.ok || 'שמור';

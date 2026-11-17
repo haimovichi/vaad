@@ -22,19 +22,20 @@ function loadBuildings() {
 }
 const BANKS = [['12', 'הפועלים'], ['10', 'לאומי'], ['11', 'דיסקונט'], ['20', 'מזרחי טפחות'], ['31', 'הבינלאומי'], ['14', 'אוצר החייל'], ['13', 'איגוד'], ['17', 'מרכנתיל'], ['4', 'יהב'], ['9', 'הדואר'], ['46', 'מסד'], ['52', 'פועלי אגודת ישראל'], ['54', 'ירושלים']];
 // the address picker inside a dialog: the dialog gets the chosen address (or null) as the value of this field
-const addressField = (k) => ({ k, type: 'custom', build: (box, notify) => { let addr = null; Vaad.addressPicker(box, (a) => { addr = a; notify(); }); return () => addr; } });
+const addressField = (k) => ({ k, type: 'custom', row: 'address', build: (box, notify) => { let addr = null; Vaad.addressPicker(box, (a) => { addr = a; notify(); }); return () => addr; } });
 const needAddress = 'בחרו עיר ורחוב מהרשימה והקלידו מספר בית';
 function newBuildingDialog() {
   return Vaad.form({
     title: 'בניין חדש',
+    width: 640,
     ok: 'צור בניין',
     fields: [
       { k: 'intro', type: 'note', text: () => 'כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית. מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.' },
       addressField('addr'),
-      { k: 'apts', label: 'מספר דירות', width: 70, digits: 3 },
-      { k: 'bank', label: 'בנק', type: 'select', options: [{ v: '', t: '—' }, ...BANKS.map(([v, t]) => ({ v, t: `${t} (${v})` }))] },
-      { k: 'branch', label: 'סניף', width: 70, ltr: true, digits: 3 },
-      { k: 'acct', label: 'חשבון', width: 130, ltr: true, digits: 9 },
+      { k: 'apts', label: 'מספר דירות', width: 70, digits: 3, row: 'address' },
+      { k: 'bank', label: 'בנק', type: 'select', options: [{ v: '', t: '—' }, ...BANKS.map(([v, t]) => ({ v, t: `${t} (${v})` }))], width: 150, row: 'bank' },
+      { k: 'branch', label: 'סניף', width: 70, ltr: true, digits: 3, row: 'bank' },
+      { k: 'acct', label: 'חשבון', width: 130, ltr: true, digits: 9, row: 'bank' },
       { k: 'bankNote', type: 'note', text: () => 'חשבון הבנק של הבניין, לא חובה עכשיו. קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.' },
     ],
     onSubmit: async (v) => {
@@ -98,7 +99,7 @@ function managerDialog(x) {
     fields: [
       ...(x ? [] : [{ k: 'email', label: 'אימייל', type: 'email', width: 240, ltr: true }]),
       { k: 'intro', type: 'note', text: () => 'מנהל בניינים מנהל את הבניינים שמסומנים כאן, ואינו יוצר בניינים חדשים.' },
-      ...ME.memberships.map((m) => ({ k: 'b' + m.id, label: m.name, type: 'check', value: has(m.id) })),
+      ...ME.memberships.map((m) => ({ k: 'b' + m.id, label: m.name, type: 'check', value: has(m.id), row: 'buildings' })),
     ],
     onSubmit: async (v) => {
       const email = x ? x.email : String(v.email || '').trim().toLowerCase();

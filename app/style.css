@@ -138,3 +138,5 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 .dlg-form{overflow-x:hidden}
 .dlg .fm .f{min-width:0;max-width:100%}
 .dlg .fm .f input,.dlg .fm .f select{box-sizing:border-box}
+.dlg .fm-row{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-end;flex-basis:100%}
+.dlg .fm-row .fm-check{margin-bottom:6px}
