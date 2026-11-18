@@ -294,6 +294,26 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   let second = false;
   try { await db.exec("insert into super_users(email) values ('b@x.com')"); } catch (e) { second = true; }
   report(second, 'sql', 'even the SQL editor cannot add a second super user', 'refused', second ? 'refused' : 'ADDED');
+  // the super user is invisible to everyone else (their person row and their access rows), but sees themselves
+  {
+    const look = async (email) => {
+      await db.exec('begin');
+      try {
+        await db.exec("insert into users(email, first_name, last_name) values ('super@x.com','Boss','Man')");
+        await db.exec("insert into members(building_id, user_id, role, apt) select 1, id, 'committee', null from users where email = 'super@x.com'");
+        await db.exec("insert into members(building_id, user_id, role, apt) select 1, id, 'apt_owner', 8 from users where email = 'super@x.com'");
+        await db.exec(`select set_config('request.jwt.claims', '${JSON.stringify({ email })}', true)`);
+        await db.exec('set local role authenticated');
+        const u = (await db.query("select count(*)::int n from users where email = 'super@x.com'")).rows[0].n;
+        const m = (await db.query("select count(*)::int n from members m join users x on x.id = m.user_id where x.email = 'super@x.com'")).rows[0].n;
+        return `${u}/${m}`;
+      } catch (e) { return 'ERR ' + e.message; } finally { await db.exec('rollback'); }
+    };
+    for (const [who, email, want] of [['committee1', 'c1@x.com', '0/0'], ['manager12', 'm12@x.com', '0/0'], ['tenant8', 't8@x.com', '0/0'], ['super', 'super@x.com', '1/2']]) {
+      const got = await look(email);
+      report(got === want, who, 'sees the super user rows (person/access)', want, got);
+    }
+  }
   await rows('super', 'super@x.com', 'add a manager', "insert into managers(email) values ('new@x.com')", 1);
   await rows('super', 'super@x.com', 'assign a manager to a building', "insert into manager_buildings(building_id,email) values (3,'m12@x.com')", 1);
   await rows('super', 'super@x.com', 'read managers', 'select * from managers', 2);

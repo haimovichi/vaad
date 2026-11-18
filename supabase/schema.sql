@@ -1079,6 +1079,14 @@ create policy staff_read on public.users for select to authenticated using (
   or exists (select 1 from public.owners o where o.user_id = users.id and public.can_manage(o.building_id)));
 create policy super_all  on public.users for all to authenticated using (public.is_super()) with check (public.is_super());
 grant select, insert, update, delete on public.users to authenticated;
+-- the super user is invisible to everyone else: a restrictive policy hides the super user's person row from all but the super user and themselves
+create or replace function public.user_is_super(uid bigint) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.users u join public.super_users s on s.email = u.email where u.id = uid)
+$$;
+drop policy if exists hide_super on public.users;
+create policy hide_super on public.users as restrictive for select to authenticated
+  using (public.is_super() or email = public.me() or not public.user_is_super(id));
 
 -- bank accounts follow the person: you read the accounts of the users you may read (your own, or your building's people);
 -- only the super user writes them
@@ -1093,6 +1101,9 @@ create policy grant_roles on public.members for all to authenticated
   using      (public.is_super() or public.is_manager_of(building_id) or (public.has_role(building_id, 'committee') and role in ('tenant', 'apt_owner')))
   with check (public.is_super() or public.is_manager_of(building_id) or (public.has_role(building_id, 'committee') and role in ('tenant', 'apt_owner')));
 grant select, insert, update, delete on public.members to authenticated;
+drop policy if exists hide_super on public.members;
+create policy hide_super on public.members as restrictive for select to authenticated
+  using (public.is_super() or user_id = public.my_uid() or not public.user_is_super(user_id));
 
 -- snapshot: whoever may see the board reads it (apartment owners use my_snapshot()); whoever manages the building writes it
 create policy board_read   on public.snapshot for select to authenticated using (public.can_see_board(building_id));
