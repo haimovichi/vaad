@@ -16,7 +16,7 @@
 --             without an email is still a user, he just can't log in. Only the super user edits users directly; the staff of a
 --             building (committee, managers) read the users of their building, and add tenants / edit a person's name and
 --             phone through the functions add_tenancy and edit_person (people tied only to buildings they manage).
---   bank_accounts : a person's bank accounts (none, one or several), linked to the user. Same read/write rules as users.
+--   bank_accounts : a person's bank accounts (none, one or several), linked to the user. Read only by the super user (and each person their own); written only by the super user.
 --   members : the roles (user, building, role, apartment). One user can hold many rows, even in one building
 --             (owner of three apartments, tenant in one of them, committee member), and in other buildings too.
 --   residents / owners point at users (user_id, and user2_id for a second person on a tenancy).
@@ -1088,9 +1088,11 @@ drop policy if exists hide_super on public.users;
 create policy hide_super on public.users as restrictive for select to authenticated
   using (public.is_super() or email = public.me() or not public.user_is_super(id));
 
--- bank accounts follow the person: you read the accounts of the users you may read (your own, or your building's people);
+-- bank accounts follow the person: only the super user reads them all (each person reads their own);
 -- only the super user writes them
-create policy read_via_users on public.bank_accounts for select to authenticated using (exists (select 1 from public.users u where u.id = bank_accounts.user_id));
+drop policy if exists read_via_users on public.bank_accounts;
+drop policy if exists read_own on public.bank_accounts;
+create policy read_own on public.bank_accounts for select to authenticated using (exists (select 1 from public.users u where u.id = bank_accounts.user_id and u.email = public.me()));
 create policy super_all      on public.bank_accounts for all to authenticated using (public.is_super()) with check (public.is_super());
 grant select, insert, update, delete on public.bank_accounts to authenticated;
 

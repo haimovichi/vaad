@@ -621,25 +621,7 @@ function personDialog(u) {
     },
   });
 }
-// App access: an email, a role and (for a tenant or an apartment owner) an apartment
-function grantDialog(email) {
-  const g = BLD.grantable;
-  return Vaad.form({
-    title: 'הרשאת כניסה לאפליקציה',
-    ok: 'הוסף הרשאה',
-    fields: [
-      { k: 'email', label: 'אימייל', type: 'email', width: 220, ltr: true, value: email || '', row: 'who' },
-      ...(ME.isSuper ? [{ k: 'name', label: 'שם (לא חובה)', width: 140, row: 'who' }] : []),
-      { k: 'role', label: 'תפקיד', type: 'select', options: g.map((r) => ({ v: r, t: ROLE[r] })), row: 'access' },
-      { k: 'apt', label: 'דירה', type: 'number', width: 80, show: (v) => v.role !== 'committee', row: 'access' },
-      // (the optional name sits next to the email, above)
-      { k: 'note', type: 'note', text: () => (g.includes('committee') ? 'אתם יכולים לתת את כל שלושת התפקידים.' : 'אתם יכולים להוסיף דיירים ובעלי דירות. הוספת חברי ועד נעשית על ידי מנהל הבניינים.') },
-    ],
-    onSubmit: (v) => api('POST', '/api/member', { email: v.email, role: v.role, apt: v.role === 'committee' ? '' : v.apt, name: v.name || '' }),
-  });
-}
 $('#pNew').onclick = async () => { if (await personDialog(null)) { toast('נוסף'); loadPeople(); } };
-$('#pGrant').onclick = async () => { if (await grantDialog('')) { toast('נוסף'); loadPeople(); } };
 
 /* One table of people: each person once, with every tie they have (apartments owned, apartments rented, app access) */
 let PEOPLE = null;
@@ -671,8 +653,8 @@ function renderPeople() {
   // logins that have no users row yet (a manager added by email, the super user): shown read-only
   for (const x of PEOPLE.managers) if (!byEmail[x.email]) { const u = { id: null, email: x.email, first: '', last: '', phone: '', account: '' }; byEmail[x.email] = u; people.push({ u, rs: chipsFor(u) }); }
   if (ME.isSuper && !byEmail[ME.email]) people.push({ u: { id: null, email: ME.email, first: '', last: '', phone: '', account: '' }, rs: [{ b: null, t: 'מנהל על · כל הבניינים', k: 'super' }] });
-  const q = $('#pQ').value.trim().toLowerCase(); const fb = String(BLD.id); const multi = $('#pMulti').checked;
-  const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (!multi || rs.length > 1) && (rs.length || !fb))
+  const q = $('#pQ').value.trim().toLowerCase(); const fb = String(BLD.id);
+  const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (rs.length || !fb))
     .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (a.u.last + ' ' + a.u.first).localeCompare(c.u.last + ' ' + c.u.first, 'he') || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
   const cell = (u, k, ltr) => `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`;
@@ -690,10 +672,10 @@ function renderPeople() {
   const detail = (u, rs) => {
     const acc = rs.filter((r) => r.k === 'access'); const old = rs.filter((r) => r.k === 'old');
     return '<tr class="xr"><td></td><td colspan="5" class="l"><div class="xd">' +
-      field('אימייל', cell(u, 'email', true)) + field('חשבונות בנק', cell(u, 'account', true)) +
+      field('אימייל', cell(u, 'email', true)) + (ME.isSuper ? field('חשבונות בנק', cell(u, 'account', true)) : '') +
       field('כניסה לאפליקציה', acc.length ? acc.map((r) => chip(r, u)).join(' ') : '<span class="mute">אין הרשאת כניסה</span>') +
       (old.length ? field('דיירים לשעבר', old.map((r) => chip(r, u)).join(' ')) : '') +
-      '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + (u.email ? `<button class="g" data-pg="${esc(u.email)}">+ הרשאת כניסה</button>` : '') + '</div></div></td></tr>';
+      '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + (u.email && BLD.grantable.includes('committee') && !acc.some((r) => r.role === 'committee') ? `<button class="g" data-pc="${esc(u.email)}">+ הוסף לוועד</button>` : '') + '</div></div></td></tr>';
   };
   $('#pTable').innerHTML = '<tr><th></th><th class="l">שם</th><th class="l">טלפון</th><th class="l">דייר</th><th class="l">בעלים</th><th class="l">מנהל</th></tr>' + (list.map(({ u, rs }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
@@ -701,12 +683,16 @@ function renderPeople() {
     return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '▸'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(aptsOf(rs, 'tenant'))}</td><td class="l">${nums(aptsOf(rs, 'owner'))}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
-['#pQ', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
+$('#pQ').oninput = () => PEOPLE && renderPeople();
 $('#pTable').onclick = async (e) => {
   const pe = e.target.closest('[data-pe]');
   if (pe) { if (await personDialog(PEOPLE.users.find((x) => String(x.id) === pe.dataset.pe))) { toast('נשמר'); loadPeople(); } return; }
-  const pg = e.target.closest('[data-pg]');
-  if (pg) { if (await grantDialog(pg.dataset.pg)) { toast('נוסף'); loadPeople(); } return; }
+  const pc = e.target.closest('[data-pc]');
+  if (pc) {
+    if (!(await Vaad.ask({ ok: 'הוסף לוועד', text: `להוסיף את ${pc.dataset.pc} לוועד הבית? חברי ועד מנהלים את כל הבניין.` }))) return;
+    try { await api('POST', '/api/member', { email: pc.dataset.pc, role: 'committee', apt: '' }); toast('נוסף לוועד'); loadPeople(); } catch (err) { toast(err.message); }
+    return;
+  }
   const rm = e.target.closest('a[data-rm]');
   if (rm) { e.preventDefault(); if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את הרשאת הכניסה?' }))) return; try { await api('DELETE', '/api/member/' + rm.dataset.rm); loadPeople(); } catch (err) { toast(err.message); } return; }
   const px = e.target.closest('tr[data-x]');
@@ -791,7 +777,7 @@ async function loadApts() {
   const d = APTS = await api('GET', '/api/apartments');
   PERSONS = {};
   const btn = (cls, attr, label, text) => `<button class="${cls}" ${attr} aria-label="${label}">${text}</button>`;
-  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">בעלים</th><th class="l">דיירים (פעילים)</th><th>חשבון בנק</th><th></th></tr>';
+  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">בעלים</th><th class="l">דיירים (פעילים)</th>' + (ME.isSuper ? '<th>חשבון בנק</th>' : '') + '<th></th></tr>';
   d.apartments.forEach((a) => {
     const rs = d.residents.map((r, i) => ({ r, i })).filter((x) => x.r.apt === a.apt && x.r.status !== 'עזב');
     const ph = (p) => (p.phone ? ` <span class="mute" dir="ltr">${esc(p.phone)}</span>` : '');
@@ -805,7 +791,7 @@ async function loadApts() {
     }));
     h += `<tr><td><b>${a.apt}</b></td><td>${esc(a.floor)}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td>` +
       `<td class="l">${owners.join('<br>')}</td><td class="l">${people.join('<br>')}</td>` +
-      `<td dir="ltr">${rs.map((x) => esc(x.r.account) || '<span class="mute">—</span>').join('<br>')}</td>` +
+      (ME.isSuper ? `<td dir="ltr">${rs.map((x) => esc(x.r.account) || '<span class="mute">—</span>').join('<br>')}</td>` : '') +
       `<td>${btn('b', `data-add="${a.apt}"`, 'הוסף אדם', '+ אדם')} ${btn('g', `data-ea="${a.apt}"`, 'עריכת פרטי הדירה', 'עריכה')} ${rs.map((x) => btn('g', `data-end="${esc(x.r.key)}"`, 'עזב', 'עזב')).join(' ')}</td></tr>`;
   });
   $('#aptTable').innerHTML = h;

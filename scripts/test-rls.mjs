@@ -218,11 +218,11 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
   await rows('aptOwner8', 'ao8@x.com', 'users visible (own row only)', 'select * from users', 1);
   await rows('stranger', 'nobody@x.com', 'users visible', 'select * from users', 0);
   await blocked('anon', null, 'users visible', 'select * from users');
-  await value('committee1', 'c1@x.com', 'a tenant has two bank accounts, both readable by staff', "select string_agg(account, ',' order by account) from bank_accounts where user_id = t_pid('050-8')", '111,112');
+  await value('super', 'super@x.com', 'a tenant has two bank accounts, both readable by the super user', "select string_agg(account, ',' order by account) from bank_accounts where user_id = t_pid('050-8')", '111,112');
 
-  // bank accounts: a separate table linked to the user; read where the user is readable, written only by the super user
-  for (const [who, email, n] of [['super', 'super@x.com', 4], ['manager12', 'm12@x.com', 4], ['manager3', 'm3@x.com', 0], ['committee1', 'c1@x.com', 4], ['committee2', 'c2@x.com', 0],
-    ['tenant8', 't8@x.com', 1], ['aptOwner8', 'ao8@x.com', 0], ['multi', 'multi@x.com', 4], ['stranger', 'nobody@x.com', 0]]) {
+  // bank accounts: a separate table linked to the user; read only by the super user (and each person their own), written only by the super user
+  for (const [who, email, n] of [['super', 'super@x.com', 4], ['manager12', 'm12@x.com', 0], ['manager3', 'm3@x.com', 0], ['committee1', 'c1@x.com', 0], ['committee2', 'c2@x.com', 0],
+    ['tenant8', 't8@x.com', 1], ['aptOwner8', 'ao8@x.com', 0], ['multi', 'multi@x.com', 0], ['stranger', 'nobody@x.com', 0]]) {
     await rows(who, email, 'bank accounts visible', 'select * from bank_accounts', n);
   }
   await blocked('anon', null, 'bank accounts visible', 'select * from bank_accounts');
