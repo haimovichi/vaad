@@ -674,7 +674,7 @@ window.Vaad = (function () {
         if (r === head || r.cells.length !== n) continue;
         [...r.cells].forEach((c) => {
           if (!c.classList.contains('l')) return;
-          const l = isLeft(c); c.style.textAlign = l ? 'left' : '';
+          const l = isLeft(c); c.style.textAlign = l ? 'left' : ''; c.style.paddingLeft = l ? '28px' : '';
         });
       }
     }
