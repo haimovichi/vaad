@@ -689,16 +689,16 @@ function renderPeople() {
   const field = (label, html) => `<div><span class="mute">${label}:</span> ${html}</div>`;
   const detail = (u, rs) => {
     const acc = rs.filter((r) => r.k === 'access'); const old = rs.filter((r) => r.k === 'old');
-    return '<tr class="xr"><td></td><td colspan="4" class="l"><div class="xd">' +
-      field('אימייל', cell(u, 'email', true)) + field('טלפון', cell(u, 'phone', true)) + field('חשבונות בנק', cell(u, 'account', true)) +
+    return '<tr class="xr"><td></td><td colspan="5" class="l"><div class="xd">' +
+      field('אימייל', cell(u, 'email', true)) + field('חשבונות בנק', cell(u, 'account', true)) +
       field('כניסה לאפליקציה', acc.length ? acc.map((r) => chip(r, u)).join(' ') : '<span class="mute">אין הרשאת כניסה</span>') +
       (old.length ? field('דיירים לשעבר', old.map((r) => chip(r, u)).join(' ')) : '') +
       '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + (u.email ? `<button class="g" data-pg="${esc(u.email)}">+ הרשאת כניסה</button>` : '') + '</div></div></td></tr>';
   };
-  $('#pTable').innerHTML = '<tr><th></th><th class="l">שם</th><th class="l">דייר</th><th class="l">בעלים</th><th class="l">מנהל</th></tr>' + (list.map(({ u, rs }) => {
+  $('#pTable').innerHTML = '<tr><th></th><th class="l">שם</th><th class="l">טלפון</th><th class="l">דייר</th><th class="l">בעלים</th><th class="l">מנהל</th></tr>' + (list.map(({ u, rs }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
     const name = (u.first + ' ' + u.last).trim();
-    return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '▸'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${nums(aptsOf(rs, 'tenant'))}</td><td class="l">${nums(aptsOf(rs, 'owner'))}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
+    return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '▸'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(aptsOf(rs, 'tenant'))}</td><td class="l">${nums(aptsOf(rs, 'owner'))}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 ['#pQ', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
