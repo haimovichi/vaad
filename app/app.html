@@ -39,7 +39,7 @@
   <section id="sec-summary" class="hide">
     <div class="box pad">
       <h3>גבייה מול הוצאות</h3>
-      <div class="mute">לכל שנה: כמה נגבה מהדיירים, כמה הוצא, וההפרש. תשלומים שממתינים לאישור עוד לא נספרים.</div>
+      <div class="mute">גבייה, הוצאות והפרש לכל שנה. תשלומים ממתינים לא נספרים.</div>
       <div id="sumBal" style="margin:8px 0"></div>
       <div id="sumNote" class="mute"></div>
     </div>
@@ -53,10 +53,10 @@
       <div class="row">
         <label class="b">העלאת קובץ עובר ושב (xlsx)<input type="file" id="bankFile" accept=".xlsx,.xls" hidden></label>
       </div>
-      <div class="mute" id="impInfo">כל שורות הקובץ נשמרות כאן ברגע שמעלים אותו, כפי שהבנק כתב אותן. תשלומים נרשמים רק אחרי שמאשרים אותם. שורות שכבר נרשמו באקסל (לפי אסמכתה) מדולגות אוטומטית.</div>
+      <div class="mute" id="impInfo">תשלומים נרשמים רק אחרי אישור. שורות שכבר נרשמו מדולגות.</div>
     </div>
-    <div class="box hide" id="impCard"><div class="pad"><b>הפקדות חדשות מהקובץ</b> <span class="mute">(סמנו מה לשמור ואשרו בכפתור למטה)</span></div><table class="t" id="impTable"></table></div>
-    <div class="box hide" id="expCard"><div class="pad"><b>חיובים בבנק שיירשמו כהוצאות</b> <span class="mute">(כל הפרטים נשארים כפי שבדוח הבנק; אפשר להוסיף הערה אחר כך במסך ההוצאות)</span></div><table class="t" id="expTable"></table></div>
+    <div class="box hide" id="impCard"><div class="pad"><b>הפקדות חדשות מהקובץ</b> </div><table class="t" id="impTable"></table></div>
+    <div class="box hide" id="expCard"><div class="pad"><b>חיובים בבנק שיירשמו כהוצאות</b></div><table class="t" id="expTable"></table></div>
     <div class="row hide" id="impActions"><button class="b" id="commit">שמור את הנבחרות</button></div>
     <div class="box pad" id="bankFilters">
       <div class="row"><select id="bYear" aria-label="שנה"></select><select id="bMonth" aria-label="חודש"></select><select id="bKind" aria-label="מה קרה"></select><select id="bDir" aria-label="הכנסות והוצאות"><option value="">הכנסות והוצאות</option><option value="in">הכנסות</option><option value="out">הוצאות</option></select><input id="bQ" type="search" placeholder="חפש בתיאור או באסמכתא" style="width:200px;margin:0"></div>
@@ -70,7 +70,7 @@
   <section id="sec-expenses" class="hide">
     <div class="box pad">
       <h3>הוצאות הבניין</h3>
-      <div class="mute">ההוצאות מגיעות מהאקסל ומדוח הבנק, ואי אפשר להוסיף אותן או למחוק אותן כאן.</div>
+      <div class="mute">ההוצאות נטענות מהבנק ומהאקסל; אי אפשר להוסיף או למחוק כאן.</div>
       <div class="row"><select id="xYear" aria-label="שנה"></select><select id="xCat" aria-label="קטגוריה"></select><span class="mute" id="xTotal"></span></div>
     </div>
     <div class="box"><table class="t" id="xTable"></table></div>
@@ -80,7 +80,7 @@
   <section id="sec-tariffs" class="hide">
     <div class="box pad">
       <h3>תעריפים</h3>
-      <div class="mute">התשלום החודשי של דירה = התעריף הבסיסי של השנה, או התעריף המיוחד של הדירה אם הוגדר, ועוד תוספות חד-פעמיות של אותו חודש. הגדרה חוזרת של תעריף קיים משנה את הסכום שלו.</div>
+      <div class="mute">תשלום חודשי = תעריף בסיס של השנה (או תעריף מיוחד לדירה) + תוספות חד-פעמיות של אותו חודש.</div>
       <div class="row"><button class="b" id="tNew">+ תעריף</button></div>
     </div>
     <div class="box"><table class="t" id="tTable"></table></div>
@@ -91,15 +91,14 @@
     <div id="p-everyone" class="hide">
       <div class="box pad">
         <h3>אנשים</h3>
-        <div class="mute">טבלה אחת לכל האנשים: כל אדם מופיע פעם אחת, עם הדירות שהוא דייר בהן, הדירות שהוא בעלים שלהן, ותפקידו בניהול הבניין. לחיצה על שורה פותחת את שאר הפרטים: אימייל, טלפון, חשבונות בנק והרשאות כניסה. לא חייבים אימייל; מי שאין לו לא יכול להיכנס.<span id="peopleNote"></span></div>
         <div class="row"><input id="pQ" type="search" placeholder="חפש שם, אימייל או טלפון" style="width:220px;margin:0"><span class="mute" id="pCount"></span><button class="b hide" id="pNew">+ הוסף אדם</button></div>
-        <div class="mute" style="margin-top:10px"><b>כניסה לאפליקציה:</b> מי שיש לו אימייל נכנס עם קישור שנשלח אליו, לדירות שהוא דייר או בעלים שלהן. <b>דייר</b> — מצב כל הדירות ופרטי הדירה שלו · <b>בעל דירה</b> — רק הדירות שלו, התשלומים של הדייר הנוכחי, ושם וטלפון של הדייר. חבר ועד מוסיפים בפרטי האדם (לחיצה על שורתו). שמות וטלפונים נערכים בכפתור ״עריכה״ בפרטי האדם על ידי מנהל העל.</div>
+        <div class="mute" style="margin-top:10px">אימייל נותן כניסה לאפליקציה: דייר רואה את כל הדירות ואת פרטי דירתו, בעל דירה רק את דירותיו. חבר ועד מוסיפים בפרטי האדם (לחיצה על שורה).<span id="peopleNote"></span></div>
       </div>
       <div class="box"><table class="t" id="pTable"></table></div>
     </div>
     <div id="p-apts" class="hide">
       <div class="box pad"><h3>דירות ואנשים</h3>
-        <div class="mute">אדם יכול להיות דייר, בעל דירה, או שניהם, וכמה אנשים יכולים להיות באותה דירה (זוג, משפחה, שותפים). אדם שנוסף לדירה שיש בה דיירים מצטרף לדיירות הקיימת, עם אותו חודש כניסה. בשורה של כל דירה: ״הוסף אדם״, ״עריכה״ לפרטי הדירה, ו״✎״ ליד כל אדם לעריכת הפרטים שלו.</div>
+        <div class="mute">בדירה יכולים להיות כמה אנשים, דיירים ו/או בעלים. הוספה לדירה עם דיירים מצרפת לדיירות הקיימת.</div>
         <div class="row"><button class="b" id="hOpen">+ הוסף אדם</button></div></div>
       <div class="box"><table class="t" id="aptTable"></table></div></div>
   </section>
@@ -112,14 +111,14 @@
         <div class="row"><label>כותרת: <input id="sTitle"></label></div>
         <div class="row"><label><input type="checkbox" id="sNames"> הצג שם משפחה ליד מספר הדירה</label></div>
         <div class="row"><label><input type="checkbox" id="sDebt" checked> הצג סכום חוב לכל דירה</label></div>
-        <div class="mute">דיירים רואים מספר דירה, סטטוס חודשי ואופציונלית שם משפחה וסכום חוב. טלפונים, מספרי חשבון ותנועות בנק לעולם לא מגיעים אליהם (בעל דירה רואה את הדייר שלו בלבד). המסך שלהם מתעדכן אוטומטית אחרי כל תשלום שנשמר.</div>
+        <div class="mute">דיירים רואים מספר דירה וסטטוס חודשי, ואם תבחרו גם שם משפחה וסכום חוב. טלפונים, חשבונות ותנועות בנק לא מגיעים אליהם. המסך מתעדכן אחרי כל תשלום.</div>
         <div class="row"><button class="b" id="saveShare">שמור</button><span id="pubOut" class="mute"></span></div>
       </div>
     </div>
     <div id="m-backup" class="hide">
       <div class="box pad">
         <h3>גיבוי הנתונים</h3>
-        <div class="mute">מוריד קובץ אחד עם כל נתוני הבניין: דירות, דיירים, בעלים, תעריפים, תשלומים, הוצאות, הגדרות ומשתמשים. הקובץ כולל טלפונים ומספרי חשבון, לכן שמרו אותו במקום פרטי (לא ב-GitHub ולא בתיקייה משותפת). מומלץ לגבות פעם בחודש, אחרי עדכון הבנק.</div>
+        <div class="mute">קובץ אחד עם כל נתוני הבניין, כולל טלפונים ומספרי חשבון: שמרו אותו במקום פרטי. מומלץ פעם בחודש.</div>
         <div class="row"><button class="b" id="dlBackup">הורד גיבוי</button><span class="mute" id="lastBackup"></span></div>
         <div id="backupOut" class="mute"></div>
         <div class="mute" style="margin-top:10px">שחזור: הריצו <code dir="ltr">node scripts/restore-backup.js הקובץ.json</code> (או עם <code dir="ltr">--replace</code>), והדביקו את supabase/restore.sql ב-SQL Editor של Supabase.</div>

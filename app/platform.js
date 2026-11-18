@@ -30,13 +30,13 @@ function newBuildingDialog() {
     width: 640,
     ok: 'צור בניין',
     fields: [
-      { k: 'intro', type: 'note', text: () => 'כתובת הבניין (שם הבניין): בחרו עיר ורחוב מהרשימה והקלידו מספר בית. מספר הדירות נקבע בעת יצירת הבניין (דירות 1 עד המספר שהוזן); אחר כך מוסיפים אנשים לדירות, לא דירות.' },
+      { k: 'intro', type: 'note', text: () => 'כתובת הבניין היא שמו: בחרו עיר ורחוב והקלידו מספר בית. דירות 1 עד המספר שתזינו נוצרות עכשיו.' },
       addressField('addr'),
       { k: 'apts', label: 'מספר דירות', width: 70, digits: 3, row: 'address' },
       { k: 'bank', label: 'בנק', type: 'select', options: [{ v: '', t: '—' }, ...BANKS.map(([v, t]) => ({ v, t: `${t} (${v})` }))], width: 150, row: 'bank' },
       { k: 'branch', label: 'סניף', width: 70, ltr: true, digits: 3, row: 'bank' },
       { k: 'acct', label: 'חשבון', width: 130, ltr: true, digits: 9, row: 'bank' },
-      { k: 'bankNote', type: 'note', text: () => 'חשבון הבנק של הבניין, לא חובה עכשיו. קובץ בנק ייטען רק אם החשבון שבכותרת שלו הוא החשבון הזה. אפשר גם להשאיר ריק ולאשר בטעינת הקובץ הראשון.' },
+      { k: 'bankNote', type: 'note', text: () => 'חשבון הבנק של הבניין (לא חובה): קובץ בנק ייטען רק אם החשבון שבכותרתו תואם. אפשר להשאיר ריק.' },
     ],
     onSubmit: async (v) => {
       if (!v.addr) throw new Error(needAddress);
@@ -50,7 +50,7 @@ function editAddressDialog(m) {
   return Vaad.form({
     title: 'שינוי כתובת: ' + m.name,
     ok: 'שמור כתובת',
-    fields: [{ k: 'intro', type: 'note', text: () => 'בחרו את הכתובת החדשה מהרשימה.' }, addressField('addr')],
+    fields: [addressField('addr')],
     onSubmit: async (v) => {
       if (!v.addr) throw new Error(needAddress);
       await api('PUT', '/api/building', { id: m.id, name: v.addr });
@@ -98,7 +98,7 @@ function managerDialog(x) {
     ok: x ? 'שמור' : 'הוסף מנהל',
     fields: [
       ...(x ? [] : [{ k: 'email', label: 'אימייל', type: 'email', width: 240, ltr: true }]),
-      { k: 'intro', type: 'note', text: () => 'מנהל בניינים מנהל את הבניינים שמסומנים כאן, ואינו יוצר בניינים חדשים.' },
+      { k: 'intro', type: 'note', text: () => 'מנהל בניינים מנהל את הבניינים המסומנים ואינו יוצר חדשים.' },
       ...ME.memberships.map((m) => ({ k: 'b' + m.id, label: m.name, type: 'check', value: has(m.id), row: 'buildings' })),
     ],
     onSubmit: async (v) => {

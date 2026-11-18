@@ -92,7 +92,7 @@ function openViewAs() {
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px';
   box.innerHTML = `<div class="box pad" style="max-width:340px;width:100%"><h3>צפייה כתפקיד אחר</h3>
-    <div class="mute">תראו את האפליקציה כפי שהתפקיד הזה רואה אותה, בבניין הזה. הנתונים נשארים אמיתיים והפעולות נשמרות באמת.</div>
+    <div class="mute">תראו את האפליקציה כפי שהתפקיד רואה אותה. הפעולות נשמרות באמת.</div>
     <div class="row"><select id="vaRole">${Object.entries(Vaad.VIEW_LABEL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
     <select id="vaApt" class="hide">${apts.map((a) => `<option>${a}</option>`).join('')}</select></div>
     <div class="row"><button class="b" id="vaGo">צפו</button><button class="g" id="vaCancel">ביטול</button></div></div>`;
@@ -179,11 +179,11 @@ function payTable(list, title) {
   return `<div class="pays"><h3>${title}</h3><table class="p"><tr><th>תאריך</th><th>עבור חודש</th><th>סכום</th><th>אמצעי</th></tr>` +
     list.map((p) => `<tr><td>${fdate(p.date)}</td><td>${MF[p.m - 1]}</td><td class="n">${fmt(p.amount)} ₪</td><td>${esc(p.method || '')}</td></tr>`).join('') +
     `<tr class="tot"><td colspan="2">סה״כ שולם</td><td class="n">${fmt(total)} ₪</td><td></td></tr></table>` +
-    (list.some((p) => !p.date) ? '<div class="foot">תשלומים שנרשמו לפני המעבר לאפליקציה מוצגים בלי תאריך.</div>' : '') + '</div>';
+    (list.some((p) => !p.date) ? '<div class="foot">תשלומים ישנים מוצגים בלי תאריך.</div>' : '') + '</div>';
 }
 // full detail for whoever manages the building: exact amounts per month, balance, payments with dates, add and delete
 function detailPanel(r) {
-  if (r.vacant) return '<div class="pays"><div class="foot">עוד לא נרשם דייר בדירה. הוסיפו דייר כדי לרשום תשלומים.</div></div>';
+  if (r.vacant) return '<div class="pays"><div class="foot">אין דייר בדירה. הוסיפו דייר כדי לרשום תשלומים.</div></div>';
   const list = staffPayments(r, year);
   const cells = r.cells.filter((c) => c.status !== 'na');
   const total = list.reduce((s, p) => s + p.amount, 0);
@@ -199,7 +199,7 @@ function detailPanel(r) {
       ? '<table class="p"><tr><th>תאריך</th><th>עבור</th><th>סכום</th><th>אמצעי</th><th></th></tr>' +
         list.map((p) => `<tr><td>${fdate(p.date)}</td><td>${MN[p.m - 1]}</td><td class="n">${fmt(p.amount)} ₪</td><td title="${esc(p.note || '')}">${esc(p.method || '')}${p.src === 'bank' ? ' 🏦' : ''}</td><td><button class="g" data-delpay="${p.id}" aria-label="מחק">✕</button></td></tr>`).join('') +
         `<tr class="tot"><td colspan="2">סה״כ שולם</td><td class="n">${fmt(total)} ₪</td><td colspan="2"></td></tr></table>` +
-        (list.some((p) => !p.date) ? '<div class="foot">תשלומים שנרשמו לפני המעבר לאפליקציה מוצגים בלי תאריך.</div>' : '')
+        (list.some((p) => !p.date) ? '<div class="foot">תשלומים ישנים מוצגים בלי תאריך.</div>' : '')
       : `<div class="foot">אין תשלומים רשומים בשנת ${year}.</div>`) +
     `<div class="row"><button class="b" data-addpay="${esc(r.key)}">+ הוסף תשלום</button></div></div>`;
 }
@@ -251,7 +251,7 @@ function renderChecklist() {
   ] : [];
   box.classList.toggle('hide', !steps.length || steps.every((x) => x[1]));
   box.classList.add('checklist');
-  box.innerHTML = '<h3>להתחיל להפעיל את הבניין</h3><div class="mute">שלושה צעדים ראשונים, אחד אחרי השני:</div><ul style="padding-inline-start:20px;margin:8px 0 0">' +
+  box.innerHTML = '<h3>להתחיל להפעיל את הבניין</h3><div class="mute">שלושה צעדים ראשונים:</div><ul style="padding-inline-start:20px;margin:8px 0 0">' +
     steps.map((x) => `<li class="${x[1] ? 'done' : ''}">${x[1] ? '✅' : '⬜'} <a href="${x[2]}">${x[0]}</a></li>`).join('') + '</ul>';
 }
 async function renderHome() {
@@ -261,7 +261,7 @@ async function renderHome() {
   const all = rowsFor(year); const listed = all.filter((r) => !r.left); const current = listed.filter((r) => !r.vacant); const idx = now.m - 1;
   if (!STAFF && !all.length) {   // a building nobody has set up yet
     $('#sum').innerHTML = ''; $('#q').hidden = true; $('#mlabels').style.display = 'none'; $('#oldBox').style.display = 'none';
-    $('#list').innerHTML = '<div class="empty">הבניין עוד לא הוגדר במערכת.<br>כשהוועד ישלים את ההגדרה תוכלו לראות כאן את התשלומים.</div>';
+    $('#list').innerHTML = '<div class="empty">הבניין עוד לא הוגדר. כשהוועד ישלים, התשלומים יופיעו כאן.</div>';
     return;
   }
   const paidNow = current.filter((r) => ['paid', 'prepaid'].includes(r.months[idx])).length;
@@ -446,7 +446,7 @@ function renderBank() {
   const sum = (f) => rows.filter(f).reduce((s, r) => s + r.amount, 0);
   $('#bTotal').textContent = bList.length ? `${rows.length} מתוך ${bList.length} שורות · הכנסות ${fmt2(sum((r) => r.amount > 0))} ₪ · הוצאות ${fmt2(-sum((r) => r.amount < 0))} ₪` : '';
   const orphan = DB.pending.filter((p) => !bList.some((r) => r.key === p.txKey)).length;
-  if (orphan) $('#bTotal').textContent += ` · ${orphan} ${orphan === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} שהשורה שלהם עוד לא נשמרה כאן: העלו שוב את קובץ הבנק שמהם הגיעו כדי לאשר אותם.`;
+  if (orphan) $('#bTotal').textContent += ` · ${orphan} ${orphan === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} שהשורה שלהם לא נשמרה: העלו שוב את קובץ הבנק.`;
   const what = (s) => {
     if (s.kind === 'payment') return `${B_KIND.payment}: דירה ${s.apts.join(', ')} <span class="mute">(${s.months.join(', ')})</span>`;
     if (s.kind === 'pending') return `<b class="bad">${B_KIND.pending}</b>`;
@@ -458,7 +458,7 @@ function renderBank() {
   const dm = (d) => (d ? d.split('-').reverse().join('/') : '');
   $('#bankTable').innerHTML = '<tr><th>תאריך</th><th>יום ערך</th><th class="l">תיאור</th><th>זכות/חובה</th><th>יתרה</th><th>אסמכתא</th><th>עמלה</th><th>ערוץ</th><th class="l">מה קרה</th></tr>' +
     (rows.length ? rows.map((r) => `<tr data-k="${esc(r.key)}" title="הועלה ${esc((r.uploadedAt || '').slice(0, 10))} ${esc(r.uploadedBy || '')}"><td>${dm(r.date)}</td><td>${dm(r.valueDate)}</td><td class="l">${esc(r.desc)}</td><td class="n"><b class="${r.amount < 0 ? 'bad' : 'good'}">${r.amount < 0 ? '−' : ''}${fmt2(Math.abs(r.amount))}</b></td><td class="n">${r.balance === null || r.balance === undefined ? '' : fmt2(r.balance)}</td><td>${esc(r.ref)}</td><td>${esc(r.fee)}</td><td>${esc(r.channel)}</td><td class="l">${what(r.status)}</td></tr>${bankAct(r) ? `<tr data-k="${esc(r.key)}"><td colspan="9" class="l actrow">${bankAct(r)}</td></tr>` : ''}`).join('')
-      : `<tr><td colspan="9" class="empty">${bList.length ? 'אין שורות שמתאימות לסינון.' : 'עוד לא הועלה קובץ בנק. שורות נשמרות כאן ברגע שמעלים קובץ בכפתור למעלה.'}</td></tr>`);
+      : `<tr><td colspan="9" class="empty">${bList.length ? 'אין שורות שמתאימות לסינון.' : 'עוד לא הועלה קובץ בנק.'}</td></tr>`);
 }
 
 // what can be done to a row: a waiting credit is approved or ignored; an unlinked credit is linked to an apartment (months split like in the upload review);
@@ -567,7 +567,7 @@ function tariffDialog(t) {
       { k: 'aptX', label: 'דירה', type: 'select', options: aptOpts('כל הדירות'), show: (v) => v.kind === 'extra', row: 'what' },
       { k: 'amount', label: 'סכום ₪', type: 'number', width: 100, row: 'value' },
       { k: 'note', label: 'הערה (לא חובה)', width: 200, row: 'value' },
-      { k: 'hint', type: 'note', text: () => 'הגדרה חוזרת של תעריף קיים משנה את הסכום שלו.' },
+      { k: 'hint', type: 'note', text: () => 'הגדרה חוזרת משנה את הסכום הקיים.' },
     ],
     onSubmit: (v) => {
       if (v.kind === 'apt' && !v.aptA) throw new Error('בחרו דירה');
@@ -610,7 +610,7 @@ function personDialog(u) {
       { k: 'last', label: 'שם משפחה', width: 120, value: val('last'), row: 'name' },
       { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: val('phone'), row: 'contact' },
       { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email'), row: 'contact' },
-      { k: 'emailNote', type: 'note', text: () => 'אימייל נותן כניסה לאפליקציה: לכל דירה שהאדם הוא בעליה או גר בה כעת.' },
+      { k: 'emailNote', type: 'note', text: () => 'אימייל נותן כניסה לדירות של האדם.' },
       { k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account') },
     ],
     onSubmit: async (v) => {
@@ -726,7 +726,7 @@ function addPersonDialog(preApt) {
       { k: 'email', label: 'אימייל לכניסה לאפליקציה (לא חובה)', type: 'email', width: 240, ltr: true, row: 'contact' },
       { k: 'tenant', label: 'דייר', type: 'check', value: true, row: 'kind' },
       { k: 'owner', label: 'בעל דירה', type: 'check', value: false, row: 'kind' },
-      { k: 'info', type: 'note', text: (v) => { const cur = curOf(v); return !v.apt ? '' : cur ? `גרים כאן עכשיו: ${household(cur).map(pname).join(', ')} (${cur.role}). אדם חדש יצטרף אליהם.` : 'אין דיירים פעילים בדירה.'; } },
+      { k: 'info', type: 'note', text: (v) => { const cur = curOf(v); return !v.apt ? '' : cur ? `גרים כאן: ${household(cur).map(pname).join(', ')} (${cur.role}). אדם חדש יצטרף אליהם.` : 'אין דיירים בדירה.'; } },
       { k: 'em', label: 'חודש כניסה', type: 'select', options: monthOptions, value: String(now.m), show: (v) => v.apt && v.tenant && !curOf(v), row: 'entry' },
       { k: 'ey', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => v.apt && v.tenant && !curOf(v), row: 'entry' },
     ],
@@ -752,8 +752,8 @@ function editPersonDialog(p) {
       { k: 'first', label: 'שם פרטי', width: 110, value: p.first, row: 'name' },
       { k: 'last', label: 'שם משפחה', width: 120, value: p.last, row: 'name' },
       { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: p.phone },
-      ...(ME.isSuper && p.resIndex !== undefined ? [{ k: 'account', label: 'חשבון בנק של הדיירות', width: 140, ltr: true, value: p.account, hint: 'משמש לזיהוי אוטומטי של תשלומים' }] : []),
-      { k: 'note', type: 'note', text: () => 'אימייל והרשאות כניסה נקבעים במסך ״אנשים״.' },
+      ...(ME.isSuper && p.resIndex !== undefined ? [{ k: 'account', label: 'חשבון בנק של הדיירות', width: 140, ltr: true, value: p.account, hint: 'לזיהוי תשלומים' }] : []),
+      { k: 'note', type: 'note', text: () => 'אימייל וכניסה: במסך ״אנשים״.' },
     ],
     onSubmit: async (v) => {
       await api('PUT', '/api/person', { userId: p.userId, first: v.first, last: v.last, phone: v.phone });
@@ -806,19 +806,19 @@ $('#aptTable').onclick = async (e) => {
   if (ea) { if (await editAptDialog(APTS.apartments.find((a) => String(a.apt) === ea.dataset.ea))) { toast('נשמר'); loadApts(); } return; }
   const ro = e.target.closest('[data-rmown]');
   if (ro) {
-    if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את בעל הדירה? גם הרשאת הכניסה שלו לדירה הזו תוסר.' }))) return;
+    if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את בעל הדירה? גם הכניסה שלו לדירה תוסר.' }))) return;
     try { await api('DELETE', '/api/owner/' + ro.dataset.rmown); toast('בעל הדירה הוסר'); loadApts(); } catch (err) { toast(err.message); }
     return;
   }
   const hr = e.target.closest('[data-hrm]');
   if (hr) {
-    if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את האדם מהדירה? שאר האנשים בדירה נשארים.' }))) return;
+    if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את האדם מהדירה?' }))) return;
     const [key, userId] = hr.dataset.hrm.split('|');
     try { await api('POST', '/api/household/remove', { key, userId }); toast('האדם הוסר מהדירה'); loadApts(); } catch (err) { toast(err.message); }
     return;
   }
   const b = e.target.closest('[data-end]'); if (!b) return;
-  const v = await Vaad.ask({ ok: 'סיים דיירות', input: 'חודש/שנה, למשל 8/2026', text: 'באיזה חודש הדיירים עזבו? כל האנשים בדירה נחשבים כעוזבים.' }); if (!v) return;
+  const v = await Vaad.ask({ ok: 'סיים דיירות', input: 'חודש/שנה, למשל 8/2026', text: 'באיזה חודש הדיירים עזבו? (כל הדיירים בדירה)' }); if (!v) return;
   const m = /^\s*(\d{1,2})\s*[\/.-]\s*(\d{4})\s*$/.exec(v);
   if (!m) return toast('פורמט: חודש/שנה, למשל 8/2026');
   try { await api('POST', '/api/tenancy/end', { key: b.dataset.end, exitMonth: m[1], exitYear: m[2] }); toast('הדיירות הסתיימה'); loadApts(); } catch (err) { toast(err.message); }

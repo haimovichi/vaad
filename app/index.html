@@ -26,17 +26,17 @@ button.g{background:none;color:var(--mute);border:1px solid var(--line)}
   <div id="loading" class="msg">טוען…</div>
 
   <form id="login" class="hide">
-    <p>הכניסו את כתובת האימייל שלכם. נשלח אליכם קישור כניסה, בלי סיסמה.</p>
+    <p>הכניסו אימייל ונשלח לכם קישור כניסה, בלי סיסמה.</p>
     <input id="email" type="email" required autocomplete="email" placeholder="name@example.com">
     <button>שלחו לי קישור כניסה</button>
   </form>
-  <form id="sent" class="hide"><p>שלחנו אימייל לכתובת <b id="sentTo" dir="ltr"></b>. פתחו את הקישור שבו במכשיר הזה, או הקלידו כאן את הקוד שבאימייל:</p>
+  <form id="sent" class="hide"><p>שלחנו אימייל ל-<b id="sentTo" dir="ltr"></b>. פתחו את הקישור במכשיר הזה, או הקלידו את הקוד:</p>
     <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="קוד מהאימייל" required>
     <button>כניסה עם קוד</button><button type="button" class="g" id="again">שלחו שוב</button></form>
 
   <div id="pick" class="hide"><p>לאיזה בניין להיכנס?</p><div id="pickList"></div></div>
 
-  <div id="noaccess" class="hide"><p>הכתובת <b id="naEmail" dir="ltr"></b> עדיין לא רשומה במערכת. בקשו מהוועד להוסיף אתכם, ואז רעננו את הדף.</p><button class="g" id="out">התנתקות</button></div>
+  <div id="noaccess" class="hide"><p>הכתובת <b id="naEmail" dir="ltr"></b> לא רשומה. בקשו מהוועד להוסיף אתכם ורעננו.</p><button class="g" id="out">התנתקות</button></div>
   <div id="error" class="msg err"></div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
