@@ -24,7 +24,7 @@ table.t th{color:var(--mute);font-weight:600}
 #bankBox{max-height:calc(100vh - 230px);border-top-left-radius:0;border-top-right-radius:0;border-top:0}
 #bankTable th{position:sticky;top:0;z-index:2;background:var(--card)}
 table.t td.actrow{background:rgba(127,127,127,.1);white-space:nowrap;text-align:start}
-table.t td.l,table.t th.l{text-align:right}
+table.t td.l{text-align:right}
 tr.warn{background:rgba(224,161,0,.15)}
 .chip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:1px;font-size:12px;color:var(--ink);text-decoration:none}
 a.chip{color:var(--acc)}
