@@ -658,3 +658,28 @@ window.Vaad = (function () {
   const store = (building, me) => (demo ? demoStore(building, me) : supabaseStore(building));
   return { demo, keep, client, whoami, addressPicker, buildMe, ask, form, choose, setViewAs, VIEW_LABEL, verifyCode, signIn, signOut, go, store, perms, ROLE_LABEL };
 })();
+
+// Text columns (td.l / th.l) align by their language: Hebrew to the right, English (emails, phone numbers, bank accounts) to the left.
+// A cell decides by its own text; the header follows what most of its column's cells do.
+(() => {
+  const HEB = /[֐-׿]/; let queued = false;
+  const isLeft = (c) => { const t = c.textContent; return !HEB.test(t) && (/[A-Za-z]/.test(t) || (!!c.querySelector('[dir="ltr"]') && /[0-9]/.test(t))); };
+  const fix = () => {
+    queued = false;
+    for (const table of document.querySelectorAll('table.t')) {
+      const rows = [...table.rows]; const head = rows.find((r) => r.querySelector('th'));
+      if (!head) continue;
+      const n = head.cells.length; const left = new Array(n).fill(0); const seen = new Array(n).fill(0);
+      for (const r of rows) {
+        if (r === head || r.cells.length !== n) continue;
+        [...r.cells].forEach((c, i) => {
+          if (!c.classList.contains('l')) return;
+          const l = isLeft(c); c.style.textAlign = l ? 'left' : '';
+          if (c.textContent.trim().replace(/—/g, '')) { seen[i]++; if (l) left[i]++; }
+        });
+      }
+      [...head.cells].forEach((h, i) => { if (h.classList.contains('l')) h.style.textAlign = seen[i] && left[i] * 2 > seen[i] ? 'left' : ''; });
+    }
+  };
+  new MutationObserver(() => { if (!queued) { queued = true; requestAnimationFrame(fix); } }).observe(document.documentElement, { childList: true, subtree: true });
+})();
