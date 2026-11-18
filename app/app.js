@@ -650,14 +650,15 @@ async function loadPeople() {
   $('#peopleNote').textContent = '';
   renderPeople();
 }
+const PEXP = new Set();   // people rows opened to show their details (a user id, or the email of a login without a user row)
 function renderPeople() {
   const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name]));
   const here = {};                      // user id -> ties in THIS building from the records (owners, tenancies)
   const tie = (id, t) => { if (id) (here[id] = here[id] || []).push(t); };
-  DB.owners.forEach((o) => tie(o.userId, { b: BLD.id, t: `בעל דירה ${o.apt}`, k: 'owner' }));
-  DB.residents.forEach((r) => { const gone = r.status === 'עזב'; tie(r.userId, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant' }); tie(r.user2Id, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant' }); });
+  DB.owners.forEach((o) => tie(o.userId, { b: BLD.id, t: `בעל דירה ${o.apt}`, k: 'owner', apt: o.apt }));
+  DB.residents.forEach((r) => { const gone = r.status === 'עזב'; tie(r.userId, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant', apt: r.apt }); tie(r.user2Id, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant', apt: r.apt }); });
   const access = {};                    // user id -> app-access roles (any building)
-  for (const m of PEOPLE.members.filter((x) => x.building_id === BLD.id)) (access[m.user_id] = access[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` ${m.apt}` : '') + (m.role === 'committee' ? '' : ' (כניסה)'), k: 'access', id: m.id, role: m.role });
+  for (const m of PEOPLE.members.filter((x) => x.building_id === BLD.id)) (access[m.user_id] = access[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` ${m.apt}` : ''), k: 'access', id: m.id, role: m.role });
   const chipsFor = (u) => {
     const rs = [...(here[u.id] || []), ...(access[u.id] || [])];
     const mg = u.email ? PEOPLE.managers.find((x) => x.email === u.email) : null;
@@ -682,9 +683,23 @@ function renderPeople() {
     }
     return `<span class="chip${r.k === 'old' ? ' mute' : ''}">${esc(r.t)}</span>`;
   };
-  $('#pTable').innerHTML = '<tr><th class="l">שם פרטי</th><th class="l">שם משפחה</th><th class="l">אימייל</th><th class="l">טלפון</th><th class="l">חשבונות בנק</th><th class="l">קשרים</th><th></th></tr>' + (list.map(({ u, rs }) =>
-    `<tr><td class="l">${cell(u, 'first')}</td><td class="l">${cell(u, 'last')}</td><td class="l">${cell(u, 'email', true)}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${cell(u, 'account', true)}</td><td class="l">` +
-    (rs.length ? rs.map((r) => chip(r, u)).join(' ') : '<span class="mute">בלי קשרים</span>') + '</td><td>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + (u.email ? `<button class="g" data-pg="${esc(u.email)}">+ הרשאה</button>` : '') + '</td></tr>').join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
+  const aptsOf = (rs, k) => [...new Set(rs.filter((r) => r.k === k).map((r) => r.apt))].sort((x, y) => x - y);
+  const nums = (arr) => (arr.length ? arr.join(', ') : '<span class="mute">—</span>');
+  const roles = (rs) => rs.filter((r) => r.k === 'super' || r.k === 'manager' || (r.k === 'access' && r.role === 'committee')).map((r) => (r.k === 'super' ? 'מנהל על' : r.k === 'manager' ? 'מנהל בניינים' : 'ועד')).join(' · ') || '<span class="mute">—</span>';
+  const field = (label, html) => `<div><span class="mute">${label}:</span> ${html}</div>`;
+  const detail = (u, rs) => {
+    const acc = rs.filter((r) => r.k === 'access'); const old = rs.filter((r) => r.k === 'old');
+    return '<tr class="xr"><td></td><td colspan="4" class="l"><div class="xd">' +
+      field('אימייל', cell(u, 'email', true)) + field('טלפון', cell(u, 'phone', true)) + field('חשבונות בנק', cell(u, 'account', true)) +
+      field('כניסה לאפליקציה', acc.length ? acc.map((r) => chip(r, u)).join(' ') : '<span class="mute">אין הרשאת כניסה</span>') +
+      (old.length ? field('דיירים לשעבר', old.map((r) => chip(r, u)).join(' ')) : '') +
+      '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + (u.email ? `<button class="g" data-pg="${esc(u.email)}">+ הרשאת כניסה</button>` : '') + '</div></div></td></tr>';
+  };
+  $('#pTable').innerHTML = '<tr><th></th><th class="l">שם</th><th class="l">דייר</th><th class="l">בעלים</th><th class="l">מנהל</th></tr>' + (list.map(({ u, rs }) => {
+    const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
+    const name = (u.first + ' ' + u.last).trim();
+    return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '▸'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${nums(aptsOf(rs, 'tenant'))}</td><td class="l">${nums(aptsOf(rs, 'owner'))}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
+  }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 ['#pQ', '#pMulti'].forEach((i) => { $(i).oninput = () => PEOPLE && renderPeople(); $(i).onchange = () => PEOPLE && renderPeople(); });
 $('#pTable').onclick = async (e) => {
@@ -694,6 +709,8 @@ $('#pTable').onclick = async (e) => {
   if (pg) { if (await grantDialog(pg.dataset.pg)) { toast('נוסף'); loadPeople(); } return; }
   const rm = e.target.closest('a[data-rm]');
   if (rm) { e.preventDefault(); if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את הרשאת הכניסה?' }))) return; try { await api('DELETE', '/api/member/' + rm.dataset.rm); loadPeople(); } catch (err) { toast(err.message); } return; }
+  const px = e.target.closest('tr[data-x]');
+  if (px) { const k = px.dataset.x; if (PEXP.has(k)) PEXP.delete(k); else PEXP.add(k); renderPeople(); }
 };
 
 /* ---------- apartments and the people in them: owners, tenants, or both; any number per apartment ---------- */
