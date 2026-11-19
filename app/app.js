@@ -39,8 +39,6 @@ $('#banner').innerHTML = '📍 ' + esc(BLD.name);
 $('#banner').href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(BLD.name);
 document.title = BLD.name;
 $('#updated').textContent = STAFF ? '' : 'עודכן ' + SNAP.updated.split('-').reverse().join('/');
-$('#who').textContent = ME.email + ' · ' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ');
-$('#logout').onclick = (e) => { e.preventDefault(); Vaad.signOut(); };
 
 /* ---------- menu and routing: one flat list of screens, ← בית on every screen but home ---------- */
 const SCREENS = [
@@ -65,7 +63,7 @@ for (const x of screens) {
   menuHtml += `<a href="#${x[0]}" data-k="${x[0]}"><b>${x[2]}</b> ${x[1]}</a>`;
 }
 // inside a building there is no switching; only the super user leaves it, for the platform page
-menuHtml += '<h4>חשבון</h4>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> כל הבניינים</a><a href="#" id="mview"><b>👁️</b> צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend"><b>↩</b> חזרה למנהל על</a>' : '') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
+menuHtml += '<h4>חשבון</h4><div class="who"><span dir="ltr">' + esc(ME.email) + '</span><br><span class="mute">' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ') + '</span></div>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> כל הבניינים</a><a href="#" id="mview"><b>👁️</b> צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend"><b>↩</b> חזרה למנהל על</a>' : '') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
 $('#menu').innerHTML = menuHtml;
 const setMenu = (on) => document.body.classList.toggle('mopen', on);
 $('#mbtn').onclick = () => setMenu(true);
