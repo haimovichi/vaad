@@ -602,6 +602,8 @@ function updatePend() {
 // A person of the users table (the super user adds and edits them): name, phone, email and bank accounts.
 function personDialog(u) {
   const edit = !!u; const val = (k) => (edit ? u[k] || '' : '');
+  const canCommittee = BLD.grantable.includes('committee');   // whoever may give the committee role
+  const cm = edit && u.id ? PEOPLE.members.find((m) => m.building_id === BLD.id && m.user_id === u.id && m.role === 'committee') : null;
   return Vaad.form({
     title: edit ? `עריכת ${(val('first') + ' ' + val('last')).trim() || val('email') || 'אדם'}` : 'הוספת אדם',
     ok: edit ? 'שמור' : 'הוסף',
@@ -612,12 +614,18 @@ function personDialog(u) {
       { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email'), row: 'contact' },
       { k: 'emailNote', type: 'note', text: () => 'אימייל נותן כניסה לדירות של האדם.' },
       { k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account') },
+      ...(canCommittee ? [{ k: 'committee', label: 'חבר ועד (דורש אימייל)', type: 'check', value: !!cm, show: (v) => !!(v.email || '').trim() || !!cm }] : []),
     ],
     onSubmit: async (v) => {
-      if (!edit) { await api('POST', '/api/user', v); return; }
-      const patch = {};   // only what changed, so an untouched old-format phone is not rewritten
-      for (const k of ['first', 'last', 'phone', 'email', 'account']) if ((v[k] || '').trim() !== val(k)) patch[k] = v[k];
-      if (Object.keys(patch).length) await api('PUT', '/api/user', { id: u.id, patch });
+      if (!edit) await api('POST', '/api/user', v);
+      else {
+        const patch = {};   // only what changed, so an untouched old-format phone is not rewritten
+        for (const k of ['first', 'last', 'phone', 'email', 'account']) if ((v[k] || '').trim() !== val(k)) patch[k] = v[k];
+        if (Object.keys(patch).length) await api('PUT', '/api/user', { id: u.id, patch });
+      }
+      const em = (v.email || '').trim();
+      if (canCommittee && v.committee && em && !cm) await api('POST', '/api/member', { email: em, role: 'committee', apt: '' });
+      else if (canCommittee && !v.committee && cm) await api('DELETE', '/api/member/' + cm.id);
     },
   });
 }
@@ -673,26 +681,20 @@ function renderPeople() {
     const acc = rs.filter((r) => r.k === 'access'); const old = rs.filter((r) => r.k === 'old');
     return '<tr class="xr"><td></td><td colspan="5" class="l"><div class="xd">' +
       field('אימייל', cell(u, 'email', true)) + (ME.isSuper ? field('חשבונות בנק', cell(u, 'account', true)) : '') +
-      field('כניסה לאפליקציה', acc.length ? acc.map((r) => chip(r, u)).join(' ') : '<span class="mute">אין הרשאת כניסה</span>') +
+      (acc.length ? field('כניסה לאפליקציה', acc.map((r) => chip(r, u)).join(' ')) : u.email ? field('כניסה לאפליקציה', '<span class="mute">אין (לאימייל אין דירה או תפקיד)</span>') : '') +
       (old.length ? field('דיירים לשעבר', old.map((r) => chip(r, u)).join(' ')) : '') +
-      '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + (u.email && BLD.grantable.includes('committee') && !acc.some((r) => r.role === 'committee') ? `<button class="g" data-pc="${esc(u.email)}">+ הוסף לוועד</button>` : '') + '</div></div></td></tr>';
+      '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + '</div></div></td></tr>';
   };
   $('#pTable').innerHTML = '<tr><th></th><th class="l">שם</th><th class="l">טלפון</th><th class="l">דייר</th><th class="l">בעלים</th><th class="l">מנהל</th></tr>' + (list.map(({ u, rs }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
     const name = (u.first + ' ' + u.last).trim();
-    return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '▸'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(aptsOf(rs, 'tenant'))}</td><td class="l">${nums(aptsOf(rs, 'owner'))}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
+    return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '◂'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(aptsOf(rs, 'tenant'))}</td><td class="l">${nums(aptsOf(rs, 'owner'))}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
 $('#pTable').onclick = async (e) => {
   const pe = e.target.closest('[data-pe]');
   if (pe) { if (await personDialog(PEOPLE.users.find((x) => String(x.id) === pe.dataset.pe))) { toast('נשמר'); loadPeople(); } return; }
-  const pc = e.target.closest('[data-pc]');
-  if (pc) {
-    if (!(await Vaad.ask({ ok: 'הוסף לוועד', text: `להוסיף את ${pc.dataset.pc} לוועד הבית? חברי ועד מנהלים את כל הבניין.` }))) return;
-    try { await api('POST', '/api/member', { email: pc.dataset.pc, role: 'committee', apt: '' }); toast('נוסף לוועד'); loadPeople(); } catch (err) { toast(err.message); }
-    return;
-  }
   const rm = e.target.closest('a[data-rm]');
   if (rm) { e.preventDefault(); if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את הרשאת הכניסה?' }))) return; try { await api('DELETE', '/api/member/' + rm.dataset.rm); loadPeople(); } catch (err) { toast(err.message); } return; }
   const px = e.target.closest('tr[data-x]');
