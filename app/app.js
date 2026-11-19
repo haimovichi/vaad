@@ -43,14 +43,14 @@ $('#updated').textContent = STAFF ? '' : 'עודכן ' + SNAP.updated.split('-')
 /* ---------- menu and routing: one flat list of screens, ← בית on every screen but home ---------- */
 const SCREENS = [
   ['home', 'בית', '🏠', '', 'home'],
-  ['bank', 'תנועות בנק', '🏦', 'כספים', 'bank', () => STAFF],
   ['summary', 'גבייה מול הוצאות', '📊', 'כספים', 'summary', () => STAFF],
+  ['bank', 'תנועות בנק', '🏦', 'כספים', 'bank', () => STAFF],
   ['expenses', 'הוצאות', '🧾', 'כספים', 'expenses', () => STAFF],
   ['tariffs', 'תעריפים', '💰', 'כספים', 'tariffs', () => STAFF],
-  ['backup', 'גיבוי נתונים', '💾', 'כספים', 'more', () => STAFF],
-  ['everyone', 'אנשים', '👥', 'אנשים', 'people', () => STAFF],
-  ['apts', 'דירות ודיירים', '🏘️', 'אנשים', 'people', () => STAFF],
-  ['share', 'מה הדיירים רואים', '📢', 'הגדרות', 'more', () => STAFF],
+  ['apts', 'דירות', '🏘️', 'ניהול', 'people', () => STAFF],
+  ['everyone', 'אנשים', '👥', 'ניהול', 'people', () => STAFF],
+  ['share', 'מה הדיירים רואים', '📢', 'ניהול', 'more', () => STAFF],
+  ['backup', 'גיבוי נתונים', '💾', 'ניהול', 'more', () => STAFF],
 ];
 const PANE = { apts: 'p-apts', everyone: 'p-everyone', share: 'm-share', backup: 'm-backup' };
 const LEGACY = { people: 'everyone', more: 'share' };   // old #people/users style addresses
@@ -63,7 +63,7 @@ for (const x of screens) {
   menuHtml += `<a href="#${x[0]}" data-k="${x[0]}"><b>${x[2]}</b> ${x[1]}</a>`;
 }
 // inside a building there is no switching; only the super user leaves it, for the platform page
-menuHtml += '<h4>חשבון</h4><div class="who"><span dir="ltr">' + esc(ME.email) + '</span><br><span class="mute">' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ') + '</span></div>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> כל הבניינים</a><a href="#" id="mview"><b>👁️</b> צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend"><b>↩</b> חזרה למנהל על</a>' : '') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
+menuHtml += '<h4>חשבון</h4><div class="who"><span dir="ltr">' + esc(ME.email) + '</span><br><span class="mute">' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ') + '</span></div>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> בניינים</a><a href="#" id="mview"><b>👁️</b> צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend"><b>↩</b> חזרה למנהל על</a>' : '') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
 $('#menu').innerHTML = menuHtml;
 const setMenu = (on) => document.body.classList.toggle('mopen', on);
 $('#mbtn').onclick = () => setMenu(true);
