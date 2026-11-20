@@ -150,3 +150,5 @@ table.t tr.xr td{background:rgba(127,127,127,.07);text-align:start}
 /* long tables scroll inside their box and keep their header row in view */
 .box:has(> table.t){max-height:calc(100vh - 90px)}
 table.t th{position:sticky;top:0;z-index:2;background:var(--card);box-shadow:0 1px 0 var(--line)}
+table.t th.sortable{cursor:pointer;user-select:none}
+table.t th.sortable:hover{color:var(--ink)}

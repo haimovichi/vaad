@@ -638,6 +638,7 @@ async function loadPeople() {
   $('#peopleNote').textContent = '';
   renderPeople();
 }
+const PSORT = { k: 'last', dir: 1 };   // the people table's order: last name, first name, or the lowest apartment rented / owned
 const PEXP = new Set();   // people rows opened to show their details (a user id, or the email of a login without a user row)
 function renderPeople() {
   const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name]));
@@ -662,13 +663,13 @@ function renderPeople() {
   const q = $('#pQ').value.trim().toLowerCase(); const fb = String(BLD.id); const who = $('#pWho').value;
   const he = (x, y) => String(x || '').localeCompare(String(y || ''), 'he');
   const byName = (a, c) => he(a.u.last + ' ' + a.u.first, c.u.last + ' ' + c.u.first);
-  const firstTenant = (p) => Math.min(...p.rs.filter((r) => r.k === 'tenant').map((r) => r.apt), Infinity);   // lowest apartment rented; none sorts last
-  const sortBy = $('#pSort').value;
+  const lowApt = (p, k) => Math.min(...p.rs.filter((r) => r.k === k).map((r) => r.apt), Infinity);   // lowest apartment of that kind; none sorts last
+  const sortBy = PSORT.k; const dir = PSORT.dir;
   const unnamed = (p) => (p.u.first || p.u.last ? 0 : 1);   // people with no name go last
-  const cmp = (a, c) => (sortBy === 'first' ? he(a.u.first + ' ' + a.u.last, c.u.first + ' ' + c.u.last) : sortBy === 'apt' ? (firstTenant(a) === firstTenant(c) ? 0 : firstTenant(a) < firstTenant(c) ? -1 : 1) : 0);
+  const cmp = (a, c) => (sortBy === 'first' ? he(a.u.first + ' ' + a.u.last, c.u.first + ' ' + c.u.last) : sortBy === 'tenant' || sortBy === 'owner' ? ((x, y) => (x === y ? 0 : x === Infinity ? 1 : y === Infinity ? -1 : (x - y) * dir))(lowApt(a, sortBy), lowApt(c, sortBy)) : 0);
   const isPast = (rs) => rs.length > 0 && rs.every((r) => r.k === 'old');
   const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (rs.length || !fb) && (who === 'all' || (who === 'past') === isPast(rs)))
-    .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (sortBy === 'apt' ? 0 : unnamed(a) - unnamed(c)) || cmp(a, c) || byName(a, c) || (a.u.email || '').localeCompare(c.u.email || ''));
+    .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (sortBy === 'tenant' || sortBy === 'owner' ? 0 : unnamed(a) - unnamed(c)) || cmp(a, c) || byName(a, c) || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
   const cell = (u, k, ltr) => `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`;
   const chip = (r, u) => {
@@ -678,6 +679,7 @@ function renderPeople() {
     }
     return `<span class="chip${r.k === 'old' ? ' mute' : ''}">${esc(r.t)}</span>`;
   };
+  const arrow = (k) => (PSORT.k === k ? ` <span class="mute">${PSORT.dir > 0 ? '▲' : '▼'}</span>` : '');
   const aptsOf = (rs, k) => [...new Set(rs.filter((r) => r.k === k).map((r) => r.apt))].sort((x, y) => x - y);
   const nums = (arr) => (arr.length ? arr.join(', ') : '<span class="mute">—</span>');
   const roles = (rs) => rs.filter((r) => r.k === 'super' || r.k === 'manager' || (r.k === 'access' && r.role === 'committee')).map((r) => (r.k === 'super' ? 'מנהל על' : r.k === 'manager' ? 'מנהל בניינים' : 'ועד')).join(' · ') || '<span class="mute">—</span>';
@@ -690,7 +692,7 @@ function renderPeople() {
       (old.length ? field('דיירים לשעבר', old.map((r) => chip(r, u)).join(' ')) : '') +
       '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + '</div></div></td></tr>';
   };
-  $('#pTable').innerHTML = '<tr><th></th><th class="l">שם</th><th class="l">טלפון</th><th class="l">דייר</th><th class="l">בעלים</th><th class="l">מנהל</th></tr>' + (list.map(({ u, rs }) => {
+  $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">▲ ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l">מנהל</th></tr>` + (list.map(({ u, rs }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
     const name = (u.first + ' ' + u.last).trim();
     return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '◂'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(aptsOf(rs, 'tenant'))}</td><td class="l">${nums(aptsOf(rs, 'owner'))}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
@@ -698,8 +700,14 @@ function renderPeople() {
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
 $('#pWho').onchange = () => PEOPLE && renderPeople();
-$('#pSort').onchange = () => PEOPLE && renderPeople();
 $('#pTable').onclick = async (e) => {
+  const th = e.target.closest('th[data-s]');
+  if (th) {
+    const s = th.dataset.s;
+    if (s === 'name') { PSORT.k = PSORT.k === 'last' ? 'first' : 'last'; PSORT.dir = 1; }   // the name column: last name, then first name
+    else if (PSORT.k === s) PSORT.dir = -PSORT.dir; else { PSORT.k = s; PSORT.dir = 1; }
+    return renderPeople();
+  }
   const pe = e.target.closest('[data-pe]');
   if (pe) { if (await personDialog(PEOPLE.users.find((x) => String(x.id) === pe.dataset.pe))) { toast('נשמר'); loadPeople(); } return; }
   const rm = e.target.closest('a[data-rm]');
