@@ -659,8 +659,9 @@ function renderPeople() {
   // logins that have no users row yet (a manager added by email, the super user): shown read-only
   for (const x of PEOPLE.managers) if (!byEmail[x.email]) { const u = { id: null, email: x.email, first: '', last: '', phone: '', account: '' }; byEmail[x.email] = u; people.push({ u, rs: chipsFor(u) }); }
   if (ME.isSuper && !byEmail[ME.email]) people.push({ u: { id: null, email: ME.email, first: '', last: '', phone: '', account: '' }, rs: [{ b: null, t: 'מנהל על · כל הבניינים', k: 'super' }] });
-  const q = $('#pQ').value.trim().toLowerCase(); const fb = String(BLD.id);
-  const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (rs.length || !fb))
+  const q = $('#pQ').value.trim().toLowerCase(); const fb = String(BLD.id); const who = $('#pWho').value;
+  const isPast = (rs) => rs.length > 0 && rs.every((r) => r.k === 'old');
+  const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (rs.length || !fb) && (who === 'all' || (who === 'past') === isPast(rs)))
     .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (a.u.last + ' ' + a.u.first).localeCompare(c.u.last + ' ' + c.u.first, 'he') || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
   const cell = (u, k, ltr) => `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`;
@@ -690,6 +691,7 @@ function renderPeople() {
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
+$('#pWho').onchange = () => PEOPLE && renderPeople();
 $('#pTable').onclick = async (e) => {
   const pe = e.target.closest('[data-pe]');
   if (pe) { if (await personDialog(PEOPLE.users.find((x) => String(x.id) === pe.dataset.pe))) { toast('נשמר'); loadPeople(); } return; }
