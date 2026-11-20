@@ -660,9 +660,15 @@ function renderPeople() {
   for (const x of PEOPLE.managers) if (!byEmail[x.email]) { const u = { id: null, email: x.email, first: '', last: '', phone: '', account: '' }; byEmail[x.email] = u; people.push({ u, rs: chipsFor(u) }); }
   if (ME.isSuper && !byEmail[ME.email]) people.push({ u: { id: null, email: ME.email, first: '', last: '', phone: '', account: '' }, rs: [{ b: null, t: 'מנהל על · כל הבניינים', k: 'super' }] });
   const q = $('#pQ').value.trim().toLowerCase(); const fb = String(BLD.id); const who = $('#pWho').value;
+  const he = (x, y) => String(x || '').localeCompare(String(y || ''), 'he');
+  const byName = (a, c) => he(a.u.last + ' ' + a.u.first, c.u.last + ' ' + c.u.first);
+  const firstTenant = (p) => Math.min(...p.rs.filter((r) => r.k === 'tenant').map((r) => r.apt), Infinity);   // lowest apartment rented; none sorts last
+  const sortBy = $('#pSort').value;
+  const unnamed = (p) => (p.u.first || p.u.last ? 0 : 1);   // people with no name go last
+  const cmp = (a, c) => (sortBy === 'first' ? he(a.u.first + ' ' + a.u.last, c.u.first + ' ' + c.u.last) : sortBy === 'apt' ? (firstTenant(a) === firstTenant(c) ? 0 : firstTenant(a) < firstTenant(c) ? -1 : 1) : 0);
   const isPast = (rs) => rs.length > 0 && rs.every((r) => r.k === 'old');
   const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (rs.length || !fb) && (who === 'all' || (who === 'past') === isPast(rs)))
-    .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (a.u.last + ' ' + a.u.first).localeCompare(c.u.last + ' ' + c.u.first, 'he') || (a.u.email || '').localeCompare(c.u.email || ''));
+    .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (sortBy === 'apt' ? 0 : unnamed(a) - unnamed(c)) || cmp(a, c) || byName(a, c) || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
   const cell = (u, k, ltr) => `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`;
   const chip = (r, u) => {
@@ -692,6 +698,7 @@ function renderPeople() {
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
 $('#pWho').onchange = () => PEOPLE && renderPeople();
+$('#pSort').onchange = () => PEOPLE && renderPeople();
 $('#pTable').onclick = async (e) => {
   const pe = e.target.closest('[data-pe]');
   if (pe) { if (await personDialog(PEOPLE.users.find((x) => String(x.id) === pe.dataset.pe))) { toast('נשמר'); loadPeople(); } return; }
