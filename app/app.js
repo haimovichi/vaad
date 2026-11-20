@@ -638,7 +638,7 @@ async function loadPeople() {
   $('#peopleNote').textContent = '';
   renderPeople();
 }
-const PSORT = { k: 'last', dir: 1 };   // the people table's order: last name, first name, or the lowest apartment rented / owned
+const PSORT = { k: 'first', dir: 1 };   // the people table's order: last name, first name, or the lowest apartment rented / owned
 const PEXP = new Set();   // people rows opened to show their details (a user id, or the email of a login without a user row)
 function renderPeople() {
   const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name]));
