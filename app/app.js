@@ -782,63 +782,57 @@ function editAptDialog(a) {
   return Vaad.form({
     title: `פרטי דירה ${a.apt}`,
     fields: [
-      { k: 'floor', label: 'קומה', width: 70, value: a.floor, row: 'details' },
+      { k: 'floor', label: 'קומה', width: 70, value: floorOf(a.floor), row: 'details' },
       { k: 'rooms', label: 'חדרים', type: 'number', width: 70, value: a.rooms, row: 'details' },
       { k: 'sqm', label: 'מ״ר', type: 'number', width: 80, value: a.sqm, row: 'details' },
     ],
     onSubmit: (v) => api('PUT', '/api/apartment', { apt: a.apt, floor: v.floor, rooms: v.rooms, sqm: v.sqm }),
   });
 }
-let PERSONS = {};   // what the edit buttons of the table point at
-async function loadApts() {
-  const d = APTS = await api('GET', '/api/apartments');
-  PERSONS = {};
-  const btn = (cls, attr, label, text) => `<button class="${cls}" ${attr} aria-label="${label}">${text}</button>`;
-  let h = '<tr><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">בעלים</th><th class="l">דיירים (פעילים)</th>' + (ME.isSuper ? '<th>חשבון בנק</th>' : '') + '<th></th></tr>';
-  d.apartments.forEach((a) => {
-    const rs = d.residents.map((r, i) => ({ r, i })).filter((x) => x.r.apt === a.apt && x.r.status !== 'עזב');
-    const ph = (p) => (p.phone ? ` <span class="mute" dir="ltr">${esc(p.phone)}</span>` : '');
-    const owners = d.owners.filter((o) => o.apt === a.apt).map((o) => {
-      const id = 'o' + o.id; PERSONS[id] = { userId: o.userId, first: o.first, last: o.last, phone: o.phone };
-      return `${esc(o.first)} ${esc(o.last)}${ph(o)} ${o.userId ? btn('g', `data-ep="${id}"`, 'עריכה', '✎') : ''} ${btn('g', `data-rmown="${o.id}"`, 'הסר', '✕')}`;
-    });
-    const people = rs.flatMap((x) => household(x.r).map((p, j, all) => {
-      const id = `t${x.i}_${j}`; PERSONS[id] = { ...p, resIndex: x.i, account: x.r.account };
-      return `${esc(pname(p))} <span class="mute">(${esc(x.r.role)})</span>${ph(p)}${p.userId ? ` ${btn('g', `data-ep="${id}"`, 'עריכה', '✎')}` : ''}${all.length > 1 && p.userId ? ` ${btn('g', `data-hrm="${esc(x.r.key)}|${p.userId}"`, 'הסר מהדירה', '✕')}` : ''}`;
-    }));
-    h += `<tr><td><b>${a.apt}</b></td><td>${esc(a.floor)}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td>` +
-      `<td class="l">${owners.join('<br>')}</td><td class="l">${people.join('<br>')}</td>` +
-      (ME.isSuper ? `<td dir="ltr">${rs.map((x) => esc(x.r.account) || '<span class="mute">—</span>').join('<br>')}</td>` : '') +
-      `<td>${btn('b', `data-add="${a.apt}"`, 'הוסף אדם', '+ אדם')} ${btn('g', `data-ea="${a.apt}"`, 'עריכת פרטי הדירה', 'עריכה')} ${rs.map((x) => btn('g', `data-end="${esc(x.r.key)}"`, 'עזב', 'עזב')).join(' ')}</td></tr>`;
-  });
+const AEXP = new Set();   // apartment rows opened to show their people
+const floorOf = (f) => (String(f || '').trim() === 'קק' ? '0' : f);   // the ground floor is shown as 0
+// first names of people who share a last name are joined: "גיל ולינה מיארה"
+function joinNames(people) {
+  const groups = new Map();
+  for (const p of people) { const k = (p.last || '').trim(); if (!groups.has(k)) groups.set(k, []); groups.get(k).push((p.first || '').trim()); }
+  const vav = (n) => (/^[A-Za-z]/.test(n) ? 'ו-' : 'ו') + n;
+  return [...groups].map(([last, firsts]) => {
+    const f = firsts.filter(Boolean);
+    const first = f.length > 1 ? f.slice(0, -1).join(', ') + ' ' + vav(f[f.length - 1]) : f[0] || '';
+    return (first + ' ' + last).trim();
+  }).filter(Boolean);
+}
+async function loadApts() { APTS = await api('GET', '/api/apartments'); renderApts(); }
+function renderApts() {
+  const d = APTS; const who = $('#aWho').value;
+  const uniq = (arr) => { const seen = new Set(); return arr.filter((p) => { const k = p.userId ? 'u' + p.userId : 'n' + pname(p); if (seen.has(k)) return false; seen.add(k); return true; }); };
+  const same = (p, q) => (p.userId && q.userId ? p.userId === q.userId : pname(p) === pname(q));
+  const ph = (p) => (p.phone ? ` <span class="mute" dir="ltr">${esc(p.phone)}</span>` : '');
+  const line = (p, extra) => `<div>${esc(pname(p)) || '—'}${ph(p)}${extra ? ` <span class="mute">(${esc(extra)})</span>` : ''}</div>`;
+  const group = (label, lines) => `<div><span class="mute">${label}:</span><div style="padding-inline-start:12px">${lines || '<span class="mute">—</span>'}</div></div>`;
+  let h = '<tr><th></th><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">דיירים</th><th class="l">בעלים</th><th></th></tr>';
+  for (const a of d.apartments) {
+    const mine = d.residents.filter((r) => r.apt === a.apt);
+    const of = (rs) => uniq(rs.flatMap((r) => household(r).map((p) => ({ ...p, role: r.role }))));
+    const curP = of(mine.filter((r) => r.status !== 'עזב'));
+    const pastP = of(mine.filter((r) => r.status === 'עזב')).filter((p) => !curP.some((c) => same(c, p))).map((p) => ({ ...p, past: true }));
+    const shown = [...(who !== 'past' ? curP : []), ...(who !== 'cur' ? pastP : [])];
+    const owners = uniq(d.owners.filter((o) => o.apt === a.apt));
+    const ownersOnly = owners.filter((o) => !shown.some((t) => same(t, o)));   // an owner who is also the tenant is not named twice
+    const tenantCell = [...joinNames(shown.filter((p) => !p.past)).map(esc), ...joinNames(shown.filter((p) => p.past)).map((n) => `<span class="mute">${esc(n)}</span>`)].join('<br>');
+    const ownerCell = ownersOnly.length ? joinNames(ownersOnly).map(esc).join('<br>') : owners.length ? '<span class="mute">כמו הדייר</span>' : '';
+    const open = AEXP.has(a.apt);
+    h += `<tr class="pr" data-x="${a.apt}"><td>${open ? '▾' : '◂'}</td><td><b>${a.apt}</b></td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
+      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', shown.map((p) => line(p, p.past ? 'עזב' : p.role)).join(''))}${group('בעלים', owners.map((o) => line(o)).join(''))}</div></td></tr>` : '');
+  }
   $('#aptTable').innerHTML = h;
 }
-$('#hOpen').onclick = async () => { if (!APTS) await loadApts(); if (await addPersonDialog('')) { toast('נוסף'); loadApts(); } };
+$('#aWho').onchange = () => APTS && renderApts();
 $('#aptTable').onclick = async (e) => {
-  const ad = e.target.closest('[data-add]');
-  if (ad) { if (await addPersonDialog(ad.dataset.add)) { toast('נוסף'); loadApts(); } return; }
-  const ep = e.target.closest('[data-ep]');
-  if (ep) { if (await editPersonDialog(PERSONS[ep.dataset.ep])) { toast('נשמר'); loadApts(); } return; }
   const ea = e.target.closest('[data-ea]');
   if (ea) { if (await editAptDialog(APTS.apartments.find((a) => String(a.apt) === ea.dataset.ea))) { toast('נשמר'); loadApts(); } return; }
-  const ro = e.target.closest('[data-rmown]');
-  if (ro) {
-    if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את בעל הדירה? גם הכניסה שלו לדירה תוסר.' }))) return;
-    try { await api('DELETE', '/api/owner/' + ro.dataset.rmown); toast('בעל הדירה הוסר'); loadApts(); } catch (err) { toast(err.message); }
-    return;
-  }
-  const hr = e.target.closest('[data-hrm]');
-  if (hr) {
-    if (!(await Vaad.ask({ ok: 'הסר', text: 'להסיר את האדם מהדירה?' }))) return;
-    const [key, userId] = hr.dataset.hrm.split('|');
-    try { await api('POST', '/api/household/remove', { key, userId }); toast('האדם הוסר מהדירה'); loadApts(); } catch (err) { toast(err.message); }
-    return;
-  }
-  const b = e.target.closest('[data-end]'); if (!b) return;
-  const v = await Vaad.ask({ ok: 'סיים דיירות', input: 'חודש/שנה, למשל 8/2026', text: 'באיזה חודש הדיירים עזבו? (כל הדיירים בדירה)' }); if (!v) return;
-  const m = /^\s*(\d{1,2})\s*[\/.-]\s*(\d{4})\s*$/.exec(v);
-  if (!m) return toast('פורמט: חודש/שנה, למשל 8/2026');
-  try { await api('POST', '/api/tenancy/end', { key: b.dataset.end, exitMonth: m[1], exitYear: m[2] }); toast('הדיירות הסתיימה'); loadApts(); } catch (err) { toast(err.message); }
+  const px = e.target.closest('tr[data-x]');
+  if (px) { const k = +px.dataset.x; if (AEXP.has(k)) AEXP.delete(k); else AEXP.add(k); renderApts(); }
 };
 
 /* ================= MORE: what tenants see, backup ================= */
