@@ -1032,6 +1032,41 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
       const d = await as(email, (q) => q('select public.remove_owner(1, 1)'));
       report(a === 'ERR' && d === 'ERR', who, 'add_owner and remove_owner are refused', 'ERR x2', `${a === 'ERR' ? 'ERR' : 'ok'} ${d === 'ERR' ? 'ERR' : 'ok'}`);
     }
+
+    // ownership periods: a start month when added, an end month when sold (the record stays; the access goes)
+    const addD = (q, apt, first, last, phone, email, y, m) => q('select public.add_owner(1, $1, $2, $3, $4, $5, $6, $7) as id', [apt, first, last, phone, email, y, m]).then((r) => r.rows[0].id);
+    const dated = await as('c1@x.com', async (q) => { const id = await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2026, 3); return (await q('select entry_year, entry_month, exit_year from owners where id = $1', [id])).rows[0]; });
+    report(dated !== 'ERR' && dated.entry_year === 2026 && dated.entry_month === 3 && dated.exit_year === null, 'committee1', 'add_owner records the month the ownership started', '3/2026, no end', dated === 'ERR' ? dated : JSON.stringify(dated));
+    for (const [what, y, m] of [['a start with no month', 2026, null], ['a year out of range', 1999, 1], ['a month out of range', 2026, 13]]) {
+      const r = await as('c1@x.com', (q) => addD(q, 40, 'רן', 'בעלים', '050-40', null, y, m));
+      report(r === 'ERR', 'committee1', `add_owner refuses ${what}`, 'ERR', r === 'ERR' ? r : 'ok');
+    }
+    const sold = await as('c1@x.com', async (q) => {
+      const id = await addD(q, 41, 'שי', 'עם-מייל', '050-41', 'owner41@x.com', 2020, 5);
+      await q('select public.end_owner(1, $1, 2026, 8)', [id]);
+      const row = (await q('select exit_year, exit_month from owners where id = $1', [id])).rows[0];
+      const access = (await q("select count(*)::int n from members where apt = 41 and role = 'apt_owner'")).rows[0].n;
+      return { row, access };
+    });
+    report(sold !== 'ERR' && sold.row.exit_year === 2026 && sold.row.exit_month === 8 && sold.access === 0, 'committee1', 'end_owner sets the end month, keeps the record and removes the owner access', '8/2026, access 0', sold === 'ERR' ? sold : JSON.stringify(sold));
+    const twiceEnd = await as('c1@x.com', async (q) => { const id = await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2020, 1); await q('select public.end_owner(1, $1, 2026, 1)', [id]); await q('select public.end_owner(1, $1, 2026, 2)', [id]); });
+    report(twiceEnd === 'ERR', 'committee1', 'an ended ownership cannot be ended again', 'ERR', twiceEnd === 'ERR' ? twiceEnd : 'ok');
+    const early = await as('c1@x.com', async (q) => { const id = await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2026, 6); await q('select public.end_owner(1, $1, 2026, 5)', [id]); });
+    report(early === 'ERR', 'committee1', 'an ownership cannot end before it started', 'ERR', early === 'ERR' ? early : 'ok');
+    const sameMonth = await as('c1@x.com', async (q) => { const id = await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2026, 6); await q('select public.end_owner(1, $1, 2026, 6)', [id]); return 'ok'; });
+    report(sameMonth === 'ok', 'committee1', 'an ownership may end in the month it started', 'ok', sameMonth);
+    const again = await as('c1@x.com', async (q) => {
+      const id = await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2015, 1); await q('select public.end_owner(1, $1, 2020, 12)', [id]);
+      await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2024, 1);   // bought it back
+      return (await q('select count(*)::int n, count(*) filter (where exit_year is null)::int cur from owners where apt = 40 and building_id = 1')).rows[0];
+    });
+    report(again !== 'ERR' && again.n === 2 && again.cur === 1, 'committee1', 'a person who sold and bought again has an ended record and a current one', '2 records, 1 current', again === 'ERR' ? again : JSON.stringify(again));
+    const dup = await as('c1@x.com', async (q) => { await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2020, 1); await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2024, 1); });
+    report(dup === 'ERR', 'committee1', 'a current owner cannot be added again', 'ERR', dup === 'ERR' ? dup : 'ok');
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const e = await as(email, (q) => q('select public.end_owner(1, 1, 2026, 1)'));
+      report(e === 'ERR', who, 'end_owner is refused', 'ERR', e === 'ERR' ? e : 'ok');
+    }
   }
 
   // expenses: read by whoever manages the building, never written from the app

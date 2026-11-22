@@ -116,7 +116,20 @@ create table if not exists public.owners (
   foreign key (building_id, apt) references public.apartments(building_id, apt)
 );
 
-create unique index if not exists owners_unique on public.owners (building_id, apt, user_id) where user_id is not null;
+-- When the ownership started and ended (month and year, like a tenancy). Empty = not recorded / still the owner.
+alter table public.owners add column if not exists entry_month int;
+alter table public.owners add column if not exists entry_year  int;
+alter table public.owners add column if not exists exit_month  int;
+alter table public.owners add column if not exists exit_year   int;
+-- Owners with no start take the start of the apartment's first tenant (only empty starts are filled, so this is safe to re-run).
+update public.owners o set entry_year = f.y, entry_month = f.m
+from (select distinct on (r.building_id, r.apt) r.building_id, r.apt, r.entry_year y, coalesce(nullif(r.entry_month, 0), 1) m
+      from public.residents r where coalesce(r.entry_year, 0) <> 0
+      order by r.building_id, r.apt, r.entry_year * 12 + coalesce(nullif(r.entry_month, 0), 1)) f
+where o.building_id = f.building_id and o.apt = f.apt and o.entry_year is null and o.exit_year is null;
+-- one CURRENT record per person and apartment; a person who sold and bought again has an ended record and a new one
+drop index if exists public.owners_unique;
+create unique index if not exists owners_unique on public.owners (building_id, apt, user_id) where user_id is not null and exit_year is null;
 
 -- The people of a tenancy beyond the first two (residents.user_id and user2_id): a household of any size.
 -- The first two stay where they were; add_household_member / remove_household_member keep the three places consistent.
@@ -941,8 +954,10 @@ end $$;
 -- ---------- owners of apartments ----------
 -- Record who owns apartment a. The person is created or reused like in add_tenancy. With an email, the person also gets
 -- the apartment-owner role for that apartment (they log in and see only their apartments); an existing login is reused
--- as it is. Returns the owner record's id. The committee (and managers) of the building only.
-create or replace function public.add_owner(b bigint, a int, p_first text, p_last text, p_phone text, p_email text default null) returns bigint
+-- as it is. entry_y / entry_m: the month the ownership started. Returns the owner record's id. The committee (and managers) of the building only.
+drop function if exists public.add_owner(bigint, int, text, text, text, text);
+create or replace function public.add_owner(b bigint, a int, p_first text, p_last text, p_phone text, p_email text default null,
+                                            entry_y int default null, entry_m int default null) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare
   fn text := nullif(btrim(p_first), ''); ln text := nullif(btrim(p_last), ''); ph text := nullif(btrim(p_phone), '');
@@ -951,6 +966,8 @@ begin
   if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
   if not exists (select 1 from public.apartments x where x.building_id = b and x.apt = a) then raise exception 'no such apartment'; end if;
   if em is not null and em !~ '^\S+@\S+\.\S+$' then raise exception 'invalid email'; end if;
+  if (entry_y is null) <> (entry_m is null) then raise exception 'start needs a year and a month'; end if;
+  if entry_y is not null and (entry_y not between 2000 and 2100 or entry_m not between 1 and 12) then raise exception 'bad start month'; end if;
   if em is not null then
     select u.id into uid from public.users u where u.email = em;
     if uid is null then
@@ -961,8 +978,8 @@ begin
     if ln is null then raise exception 'last name required'; end if;
     uid := public.person_for(b, fn, ln, ph);
   end if;
-  if exists (select 1 from public.owners o where o.building_id = b and o.apt = a and o.user_id = uid) then raise exception 'already an owner of this apartment'; end if;
-  insert into public.owners (building_id, apt, user_id) values (b, a, uid) returning id into oid;
+  if exists (select 1 from public.owners o where o.building_id = b and o.apt = a and o.user_id = uid and o.exit_year is null) then raise exception 'already an owner of this apartment'; end if;
+  insert into public.owners (building_id, apt, user_id, entry_year, entry_month) values (b, a, uid, entry_y, entry_m) returning id into oid;
   if em is not null then
     insert into public.members (building_id, user_id, role, apt) values (b, uid, 'apt_owner', a) on conflict do nothing;
   end if;
@@ -981,13 +998,29 @@ begin
   delete from public.members m where m.building_id = b and m.user_id = o.user_id and m.role = 'apt_owner' and m.apt = o.apt;
 end $$;
 
+-- The ownership ended (the apartment was sold): set its exit month. The person's apartment-owner access to that apartment goes
+-- with it; the record stays as history. The committee (and managers) of the building only.
+create or replace function public.end_owner(b bigint, owner_id bigint, exit_y int, exit_m int) returns void
+language plpgsql security definer set search_path = public as $$
+declare o record;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  select * into o from public.owners x where x.id = owner_id and x.building_id = b;
+  if not found then raise exception 'no such owner'; end if;
+  if o.exit_year is not null then raise exception 'the ownership has already ended'; end if;
+  if exit_y is null or exit_y not between 2000 and 2100 or exit_m is null or exit_m not between 1 and 12 then raise exception 'bad exit month'; end if;
+  if o.entry_year is not null and exit_y * 12 + exit_m < o.entry_year * 12 + coalesce(nullif(o.entry_month, 0), 1) then raise exception 'exit before start'; end if;
+  update public.owners set exit_year = exit_y, exit_month = exit_m where id = o.id;
+  delete from public.members m where m.building_id = b and m.user_id = o.user_id and m.role = 'apt_owner' and m.apt = o.apt;
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','add_household_member','remove_household_member','end_tenancy','edit_person','sync_person_login','add_owner','remove_owner')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','add_household_member','remove_household_member','end_tenancy','edit_person','sync_person_login','add_owner','remove_owner','end_owner')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);

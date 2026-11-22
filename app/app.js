@@ -602,6 +602,29 @@ function personDialog(u) {
   const edit = !!u; const val = (k) => (edit ? u[k] || '' : '');
   const canCommittee = BLD.grantable.includes('committee');   // whoever may give the committee role
   const cm = edit && u.id ? PEOPLE.members.find((m) => m.building_id === BLD.id && m.user_id === u.id && m.role === 'committee') : null;
+  // A new person can be tied to an apartment right away: as a tenant, an owner or both, each with its own start month (this month
+  // unless changed). Tenants of an apartment that already has some either join them, or replace them (they then moved out the month
+  // before); owners may be added next to the current ones (co-owners) or after they sold (their ownership then ends the month before).
+  const curTen = (v) => (v.apt ? DB.residents.find((r) => r.apt === +v.apt && r.status !== 'עזב') : null);
+  const curOwn = (v) => (v.apt ? DB.owners.filter((o) => o.apt === +v.apt && !o.exitYear) : []);
+  const before = (y, m) => { const x = calc.fromMi(calc.mi(+y, +m) - 1); return x.m + '/' + x.y; };   // the month before a start
+  const names = (list) => list.map((p) => pname(p) || '—').join(', ');
+  const replacing = (v) => v.tenant && curTen(v) && v.tmode === 'replace';
+  const monthOpts = MF.map((m, i) => ({ v: String(i + 1), t: m }));
+  const aptOpts = [{ v: '', t: ME.isSuper ? 'ללא דירה' : 'בחרו דירה' }, ...DB.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) }))];
+  const tie = edit ? [] : [
+    { k: 'apt', label: ME.isSuper ? 'דירה (לא חובה)' : 'דירה', type: 'select', options: aptOpts, value: '' },
+    { k: 'tenant', label: 'דייר', type: 'check', value: true, show: (v) => !!v.apt, row: 'kind' },
+    { k: 'owner', label: 'בעל דירה', type: 'check', value: false, show: (v) => !!v.apt, row: 'kind' },
+    { k: 'tmode', label: 'הדייר החדש', type: 'select', options: [{ v: 'join', t: 'מצטרף לדיירים הנוכחיים' }, { v: 'replace', t: 'במקום הדיירים הנוכחיים' }], value: 'join', show: (v) => !!(v.tenant && curTen(v)) },
+    { k: 'tm', label: 'חודש כניסה', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.tenant && (!curTen(v) || v.tmode === 'replace')), row: 'tstart' },
+    { k: 'ty', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.tenant && (!curTen(v) || v.tmode === 'replace')), row: 'tstart' },
+    { k: 'tnote', type: 'note', text: (v) => { const c = v.tenant && curTen(v); if (!c) return ''; return replacing(v) ? `הדיירים הנוכחיים (${names(household(c))}) יסומנו כעזבו ב-${before(v.ty, v.tm)}.` : `גרים כאן: ${names(household(c))}. האדם יצטרף אליהם, בלי תאריך נפרד.`; } },
+    { k: 'om', label: 'תחילת בעלות: חודש', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.owner), row: 'ostart' },
+    { k: 'oy', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.owner), row: 'ostart' },
+    { k: 'endOwn', label: 'הבעלים הנוכחיים מכרו', type: 'check', value: false, show: (v) => !!(v.owner && curOwn(v).length) },
+    { k: 'onote', type: 'note', text: (v) => { const c = v.owner ? curOwn(v) : []; return c.length ? `בעלים נוכחיים: ${names(c)}. סימון יסיים את הבעלות שלהם ב-${before(v.oy, v.om)}. בלי סימון הם נשארים בעלים ביחד עם האדם החדש.` : ''; } },
+  ];
   return Vaad.form({
     title: edit ? `עריכת ${(val('first') + ' ' + val('last')).trim() || val('email') || 'אדם'}` : 'הוספת אדם',
     ok: edit ? 'שמור' : 'הוסף',
@@ -611,11 +634,31 @@ function personDialog(u) {
       { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: val('phone'), row: 'contact' },
       { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email'), row: 'contact' },
       { k: 'emailNote', type: 'note', text: () => 'אימייל נותן כניסה לדירות של האדם.' },
-      { k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account') },
+      ...tie,
+      ...(ME.isSuper ? [{ k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account'), show: (v) => edit || !v.apt }] : []),
       ...(canCommittee ? [{ k: 'committee', label: 'חבר ועד (דורש אימייל)', type: 'check', value: !!cm, show: (v) => !!(v.email || '').trim() || !!cm }] : []),
     ],
     onSubmit: async (v) => {
-      if (!edit) await api('POST', '/api/user', v);
+      if (!edit && v.apt) {
+        if (!v.tenant && !v.owner) throw new Error('בחרו אם האדם דייר, בעל דירה או שניהם');
+        const apt = +v.apt; const joins = !!curTen(v) && v.tmode !== 'replace';
+        // check the tenancy before anything is saved, so a refused date does not leave the person half added
+        if (v.tenant && !joins) {
+          const from = calc.mi(+v.ty, +v.tm); const prev = curTen(v);
+          if (!(+v.ty >= 2000 && +v.ty <= 2100)) throw new Error('שנת כניסה לא תקינה');
+          if (prev && from - 1 < calc.mi(prev.entryYear || calc.fromMi(calc.START).y, prev.entryMonth || calc.fromMi(calc.START).m)) throw new Error('חודש הכניסה חייב להיות אחרי חודש הכניסה של הדיירים הנוכחיים');
+          if (calc.tenancies(DB).some((t) => t.apt === apt && t.resident !== prev && from <= t.to && t.from <= Infinity)) throw new Error('התאריכים חופפים לדיירות אחרת בדירה. סיימו קודם את הדיירות הקודמת.');
+        }
+        if (v.owner && !(+v.oy >= 2000 && +v.oy <= 2100)) throw new Error('שנת תחילת בעלות לא תקינה');
+        const who = { apt: v.apt, first: v.first, last: v.last, phone: v.phone };
+        // the owner goes first, so a login created here is the same person the tenancy then finds
+        if (v.owner) await api('POST', '/api/owner', { ...who, email: v.email, entryYear: v.oy, entryMonth: v.om, endPrevious: !!v.endOwn && curOwn(v).length > 0 });
+        const login = v.owner ? {} : { email: v.email };
+        if (v.tenant) {
+          if (joins) await api('POST', '/api/household', { ...who, ...login });
+          else await api('POST', '/api/tenancy', { ...who, ...login, role: v.owner ? 'בעלים' : 'שוכר', entryMonth: v.tm, entryYear: v.ty, exitMonth: '', exitYear: '', endPrevious: !!curTen(v) });
+        }
+      } else if (!edit) { if (!ME.isSuper) throw new Error('בחרו דירה'); await api('POST', '/api/user', v); }
       else {
         const patch = {};   // only what changed, so an untouched old-format phone is not rewritten
         for (const k of ['first', 'last', 'phone', 'email', 'account']) if ((v[k] || '').trim() !== val(k)) patch[k] = v[k];
@@ -632,8 +675,7 @@ $('#pNew').onclick = async () => { if (await personDialog(null)) { toast('נוס
 /* One table of people: each person once, with every tie they have (apartments owned, apartments rented, app access) */
 let PEOPLE = null;
 async function loadPeople() {
-  const g = BLD.grantable;
-  $('#pNew').classList.toggle('hide', !ME.isSuper);
+  $('#pNew').classList.remove('hide');   // whoever manages the building adds people
   PEOPLE = await api('GET', '/api/people');
   $('#peopleNote').textContent = '';
   renderPeople();
@@ -790,6 +832,8 @@ function editAptDialog(a) {
   });
 }
 const AEXP = new Set();   // apartment rows opened to show their people
+// "מ-3/2021 עד 8/2026": a tenancy or an ownership; months are optional, an open end shows nothing
+const periodOf = (y1, m1, y2, m2) => { const f = (y, m) => (y ? (m ? m + '/' : '') + y : ''); const a = f(y1, m1); const b = f(y2, m2); return a || b ? (a ? 'מ-' + a : '') + (a && b ? ' ' : '') + (b ? 'עד ' + b : '') : ''; };
 const floorOf = (f) => (String(f || '').trim() === 'קק' ? '0' : f);   // the ground floor is shown as 0
 // first names of people who share a last name are joined: "גיל ולינה מיארה"
 function joinNames(people) {
@@ -813,17 +857,19 @@ function renderApts() {
   let h = '<tr><th></th><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">דיירים</th><th class="l">בעלים</th><th></th></tr>';
   for (const a of d.apartments) {
     const mine = d.residents.filter((r) => r.apt === a.apt);
-    const of = (rs) => uniq(rs.flatMap((r) => household(r).map((p) => ({ ...p, role: r.role }))));
+    const period = (r) => periodOf(r.entryYear, r.entryMonth, r.status === 'עזב' ? r.exitYear : 0, r.exitMonth);
+    const of = (rs) => uniq(rs.flatMap((r) => household(r).map((p) => ({ ...p, role: r.role, period: period(r) }))));
     const curP = of(mine.filter((r) => r.status !== 'עזב'));
     const pastP = of(mine.filter((r) => r.status === 'עזב')).filter((p) => !curP.some((c) => same(c, p))).map((p) => ({ ...p, past: true }));
     const shown = [...(who !== 'past' ? curP : []), ...(who !== 'cur' ? pastP : [])];
-    const owners = uniq(d.owners.filter((o) => o.apt === a.apt));
+    const ownRecs = d.owners.filter((o) => o.apt === a.apt && (who === 'all' || (who === 'past') === !!o.exitYear)).map((o) => ({ ...o, past: !!o.exitYear, period: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth) }));
+    const owners = uniq(ownRecs);
     const ownersOnly = owners.filter((o) => !shown.some((t) => same(t, o)));   // an owner who is also the tenant is not named twice
     const tenantCell = [...joinNames(shown.filter((p) => !p.past)).map(esc), ...joinNames(shown.filter((p) => p.past)).map((n) => `<span class="mute">${esc(n)}</span>`)].join('<br>');
-    const ownerCell = ownersOnly.length ? joinNames(ownersOnly).map(esc).join('<br>') : owners.length ? '<span class="mute">כמו הדייר</span>' : '';
+    const ownerCell = ownersOnly.length ? [...joinNames(ownersOnly.filter((o) => !o.past)).map(esc), ...joinNames(ownersOnly.filter((o) => o.past)).map((n) => `<span class="mute">${esc(n)}</span>`)].join('<br>') : owners.length ? '<span class="mute">כמו הדייר</span>' : '';
     const open = AEXP.has(a.apt);
     h += `<tr class="pr" data-x="${a.apt}"><td>${open ? '▾' : '◂'}</td><td><b>${a.apt}</b></td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
-      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', shown.map((p) => line(p, p.past ? 'עזב' : p.role)).join(''))}${group('בעלים', owners.map((o) => line(o)).join(''))}</div></td></tr>` : '');
+      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', shown.map((p) => line(p, [p.past ? 'עזב' : p.role, p.period].filter(Boolean).join(', '))).join(''))}${group('בעלים', ownRecs.map((o) => line(o, o.period)).join(''))}</div></td></tr>` : '');
   }
   $('#aptTable').innerHTML = h;
 }
