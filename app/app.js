@@ -609,6 +609,10 @@ function personDialog(u) {
   const curOwn = (v) => (v.apt ? DB.owners.filter((o) => o.apt === +v.apt && !o.exitYear) : []);
   const before = (y, m) => { const x = calc.fromMi(calc.mi(+y, +m) - 1); return x.m + '/' + x.y; };   // the month before a start
   const names = (list) => list.map((p) => pname(p) || '—').join(', ');
+  // joining the current tenants / co-owning: the date is theirs (shown, not editable); the new person starts when they did
+  const tLock = (v) => !!(curTen(v) && v.tmode !== 'replace');
+  const oLock = (v) => !!(curOwn(v).length && v.omode !== 'replace');
+  const oStart = (v) => curOwn(v).filter((o) => o.entryYear).map((o) => ({ y: o.entryYear, m: o.entryMonth || 1 })).sort((a, b) => calc.mi(a.y, a.m) - calc.mi(b.y, b.m))[0];
   const replacing = (v) => v.tenant && curTen(v) && v.tmode === 'replace';
   const monthOpts = MF.map((m, i) => ({ v: String(i + 1), t: m }));
   const aptOpts = [{ v: '', t: ME.isSuper ? 'ללא דירה' : 'בחרו דירה' }, ...DB.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) }))];
@@ -616,14 +620,14 @@ function personDialog(u) {
     { k: 'apt', label: ME.isSuper ? 'דירה (לא חובה)' : 'דירה', type: 'select', options: aptOpts, value: '' },
     { k: 'tenant', label: 'דייר', type: 'check', value: true, show: (v) => !!v.apt, row: 'ten' },
     { k: 'tmode', type: 'select', options: [{ v: 'join', t: 'בנוסף' }, { v: 'replace', t: 'במקום' }], value: 'join', show: (v) => !!(v.tenant && curTen(v)), row: 'ten' },
-    { k: 'tm', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.tenant && (!curTen(v) || v.tmode === 'replace')), row: 'ten' },
-    { k: 'ty', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.tenant && (!curTen(v) || v.tmode === 'replace')), row: 'ten' },
+    { k: 'tm', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.tenant), lock: tLock, fill: (v) => { const c = curTen(v); return c && c.entryMonth ? String(c.entryMonth) : ''; }, row: 'ten' },
+    { k: 'ty', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.tenant), lock: tLock, fill: (v) => { const c = curTen(v); return c && c.entryYear ? String(c.entryYear) : ''; }, row: 'ten' },
     { k: 'tnote', type: 'note', text: (v) => { const c = v.tenant && curTen(v); if (!c) return ''; return replacing(v) ? `הדיירים הנוכחיים (${names(household(c))}) יסומנו כעזבו ב-${before(v.ty, v.tm)}.` : `גרים כאן: ${names(household(c))}. האדם יצטרף אליהם, בלי תאריך נפרד.`; } },
     { k: 'owner', label: 'בעלים', type: 'check', value: false, show: (v) => !!v.apt, row: 'own' },
     { k: 'omode', type: 'select', options: [{ v: 'add', t: 'בנוסף' }, { v: 'replace', t: 'במקום' }], value: 'add', show: (v) => !!(v.owner && curOwn(v).length), row: 'own' },
-    { k: 'om', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.owner), row: 'own' },
-    { k: 'oy', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.owner), row: 'own' },
-    { k: 'onote', type: 'note', text: (v) => { const c = v.owner ? curOwn(v) : []; return c.length ? `בעלים נוכחיים: ${names(c)}. "במקום" יסיים את הבעלות שלהם ב-${before(v.oy, v.om)}; "בנוסף" משאיר אותם בעלים ביחד עם האדם החדש.` : ''; } },
+    { k: 'om', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.owner), lock: oLock, fill: (v) => { const s = oStart(v); return s ? String(s.m) : ''; }, row: 'own' },
+    { k: 'oy', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.owner), lock: oLock, fill: (v) => { const s = oStart(v); return s ? String(s.y) : ''; }, row: 'own' },
+    { k: 'onote', type: 'note', text: (v) => { const c = v.owner ? curOwn(v) : []; return c.length ? `בעלים נוכחיים: ${names(c)}. "במקום" יסיים את הבעלות שלהם ב-${before(v.oy, v.om)}; "בנוסף" משאיר אותם בעלים ביחד עם האדם החדש, והוא מתחיל באותו תאריך.` : ''; } },
   ];
   return Vaad.form({
     title: edit ? `עריכת ${(val('first') + ' ' + val('last')).trim() || val('email') || 'אדם'}` : 'הוספת אדם',
@@ -649,7 +653,7 @@ function personDialog(u) {
           if (prev && from - 1 < calc.mi(prev.entryYear || calc.fromMi(calc.START).y, prev.entryMonth || calc.fromMi(calc.START).m)) throw new Error('חודש הכניסה חייב להיות אחרי חודש הכניסה של הדיירים הנוכחיים');
           if (calc.tenancies(DB).some((t) => t.apt === apt && t.resident !== prev && from <= t.to && t.from <= Infinity)) throw new Error('התאריכים חופפים לדיירות אחרת בדירה. סיימו קודם את הדיירות הקודמת.');
         }
-        if (v.owner && !(+v.oy >= 2000 && +v.oy <= 2100)) throw new Error('שנת תחילת בעלות לא תקינה');
+        if (v.owner && !(oLock(v) && !v.oy) && !(+v.oy >= 2000 && +v.oy <= 2100)) throw new Error('שנת תחילת בעלות לא תקינה');
         const who = { apt: v.apt, first: v.first, last: v.last, phone: v.phone };
         // the owner goes first, so a login created here is the same person the tenancy then finds
         if (v.owner) await api('POST', '/api/owner', { ...who, email: v.email, entryYear: v.oy, entryMonth: v.om, endPrevious: v.omode === 'replace' && curOwn(v).length > 0 });

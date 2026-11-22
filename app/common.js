@@ -110,7 +110,7 @@ window.Vaad = (function () {
     });
   }
   // In-page form dialog for adding or editing one record. Vaad.form({ title, fields, ok, onSubmit }) -> true after a save, null when cancelled.
-  // fields: { k, label, type: text | tel | email | number | select | check | note | custom, digits: n (digits only, at most n), build(box, notify) -> getter (custom), value, options: [{ v, t }], width, ltr, show(vals), text(vals) (a note), hint }
+  // fields: { k, label, type: text | tel | email | number | select | check | note | custom, digits: n (digits only, at most n), build(box, notify) -> getter (custom), value, options: [{ v, t }], width, ltr, show(vals), lock(vals) + fill(vals) (disabled, showing fill), text(vals) (a note), hint }
   // onSubmit(vals) may throw: the message appears inside the dialog and the dialog stays open, so nothing typed is lost.
   function form(o) {
     return new Promise((res) => {
@@ -146,7 +146,13 @@ window.Vaad = (function () {
         if (f.digits && input) { input.inputMode = 'numeric'; input.addEventListener('input', () => { input.value = input.value.replace(/\D/g, '').slice(0, f.digits); }); }
       }
       const vals = () => { const v = {}; for (const f of o.fields) { const e = els[f.k]; if (e.input) v[f.k] = f.type === 'check' ? e.input.checked : e.input.value; else if (e.get) v[f.k] = e.get(); } return v; };
-      const sync = () => { const v = vals(); for (const f of o.fields) { const e = els[f.k]; if (f.type !== 'custom') e.box.style.display = f.show && !f.show(v) ? 'none' : ''; if (f.type === 'note') e.box.textContent = f.text ? f.text(v) : ''; } for (const r of rowEls) r.style.display = [...r.children].every((c) => c.style.display === 'none') ? 'none' : ''; };
+      const sync = () => { const v = vals(); for (const f of o.fields) { const e = els[f.k]; if (f.type !== 'custom') e.box.style.display = f.show && !f.show(v) ? 'none' : '';
+        if (f.lock && e.input) {   // lock(vals): shown but disabled, with fill(vals) as its value; the typed value comes back when it unlocks
+          const on = !!f.lock(v);
+          if (on && !e.locked) e.saved = e.input.value;
+          if (on) e.input.value = f.fill ? f.fill(v) : e.saved; else if (e.locked) e.input.value = e.saved;
+          e.locked = on; e.input.disabled = on;
+        } if (f.type === 'note') e.box.textContent = f.text ? f.text(v) : ''; } for (const r of rowEls) r.style.display = [...r.children].every((c) => c.style.display === 'none') ? 'none' : ''; };
       const err = document.createElement('div'); err.className = 'fm-err'; err.setAttribute('role', 'alert'); d.appendChild(err);
       const acts = document.createElement('div'); acts.className = 'acts';
       const okB = document.createElement('button'); okB.className = 'b'; okB.textContent = o.ok || 'שמור';
