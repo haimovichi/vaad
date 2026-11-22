@@ -614,16 +614,16 @@ function personDialog(u) {
   const aptOpts = [{ v: '', t: ME.isSuper ? 'ללא דירה' : 'בחרו דירה' }, ...DB.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) }))];
   const tie = edit ? [] : [
     { k: 'apt', label: ME.isSuper ? 'דירה (לא חובה)' : 'דירה', type: 'select', options: aptOpts, value: '' },
-    { k: 'tenant', label: 'דייר', type: 'check', value: true, show: (v) => !!v.apt, row: 'kind' },
-    { k: 'owner', label: 'בעל דירה', type: 'check', value: false, show: (v) => !!v.apt, row: 'kind' },
-    { k: 'tmode', label: 'הדייר החדש', type: 'select', options: [{ v: 'join', t: 'מצטרף לדיירים הנוכחיים' }, { v: 'replace', t: 'במקום הדיירים הנוכחיים' }], value: 'join', show: (v) => !!(v.tenant && curTen(v)) },
-    { k: 'tm', label: 'חודש כניסה', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.tenant && (!curTen(v) || v.tmode === 'replace')), row: 'tstart' },
-    { k: 'ty', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.tenant && (!curTen(v) || v.tmode === 'replace')), row: 'tstart' },
+    { k: 'tenant', label: 'דייר', type: 'check', value: true, show: (v) => !!v.apt, row: 'ten' },
+    { k: 'tmode', type: 'select', options: [{ v: 'join', t: 'בנוסף' }, { v: 'replace', t: 'במקום' }], value: 'join', show: (v) => !!(v.tenant && curTen(v)), row: 'ten' },
+    { k: 'tm', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.tenant && (!curTen(v) || v.tmode === 'replace')), row: 'ten' },
+    { k: 'ty', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.tenant && (!curTen(v) || v.tmode === 'replace')), row: 'ten' },
     { k: 'tnote', type: 'note', text: (v) => { const c = v.tenant && curTen(v); if (!c) return ''; return replacing(v) ? `הדיירים הנוכחיים (${names(household(c))}) יסומנו כעזבו ב-${before(v.ty, v.tm)}.` : `גרים כאן: ${names(household(c))}. האדם יצטרף אליהם, בלי תאריך נפרד.`; } },
-    { k: 'om', label: 'תחילת בעלות: חודש', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.owner), row: 'ostart' },
-    { k: 'oy', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.owner), row: 'ostart' },
-    { k: 'endOwn', label: 'הבעלים הנוכחיים מכרו', type: 'check', value: false, show: (v) => !!(v.owner && curOwn(v).length) },
-    { k: 'onote', type: 'note', text: (v) => { const c = v.owner ? curOwn(v) : []; return c.length ? `בעלים נוכחיים: ${names(c)}. סימון יסיים את הבעלות שלהם ב-${before(v.oy, v.om)}. בלי סימון הם נשארים בעלים ביחד עם האדם החדש.` : ''; } },
+    { k: 'owner', label: 'בעלים', type: 'check', value: false, show: (v) => !!v.apt, row: 'own' },
+    { k: 'omode', type: 'select', options: [{ v: 'add', t: 'בנוסף' }, { v: 'replace', t: 'במקום' }], value: 'add', show: (v) => !!(v.owner && curOwn(v).length), row: 'own' },
+    { k: 'om', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.owner), row: 'own' },
+    { k: 'oy', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.owner), row: 'own' },
+    { k: 'onote', type: 'note', text: (v) => { const c = v.owner ? curOwn(v) : []; return c.length ? `בעלים נוכחיים: ${names(c)}. "במקום" יסיים את הבעלות שלהם ב-${before(v.oy, v.om)}; "בנוסף" משאיר אותם בעלים ביחד עם האדם החדש.` : ''; } },
   ];
   return Vaad.form({
     title: edit ? `עריכת ${(val('first') + ' ' + val('last')).trim() || val('email') || 'אדם'}` : 'הוספת אדם',
@@ -652,7 +652,7 @@ function personDialog(u) {
         if (v.owner && !(+v.oy >= 2000 && +v.oy <= 2100)) throw new Error('שנת תחילת בעלות לא תקינה');
         const who = { apt: v.apt, first: v.first, last: v.last, phone: v.phone };
         // the owner goes first, so a login created here is the same person the tenancy then finds
-        if (v.owner) await api('POST', '/api/owner', { ...who, email: v.email, entryYear: v.oy, entryMonth: v.om, endPrevious: !!v.endOwn && curOwn(v).length > 0 });
+        if (v.owner) await api('POST', '/api/owner', { ...who, email: v.email, entryYear: v.oy, entryMonth: v.om, endPrevious: v.omode === 'replace' && curOwn(v).length > 0 });
         const login = v.owner ? {} : { email: v.email };
         if (v.tenant) {
           if (joins) await api('POST', '/api/household', { ...who, ...login });
