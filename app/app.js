@@ -619,15 +619,15 @@ function personDialog(u) {
   const tie = edit ? [] : [
     { k: 'apt', label: ME.isSuper ? 'דירה (לא חובה)' : 'דירה', type: 'select', options: aptOpts, value: '' },
     { k: 'tenant', label: 'דייר', type: 'check', value: true, show: (v) => !!v.apt, row: 'ten' },
-    { k: 'tmode', type: 'select', options: [{ v: 'join', t: 'בנוסף' }, { v: 'replace', t: 'במקום' }], value: 'join', show: (v) => !!(v.tenant && curTen(v)), row: 'ten' },
+    { k: 'tmode', type: 'select', options: [{ v: 'join', t: 'מצטרף לדיירים הנוכחיים' }, { v: 'replace', t: 'מחליף את הדיירים הנוכחיים' }], value: 'join', show: (v) => !!(v.tenant && curTen(v)), row: 'ten' },
     { k: 'tm', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.tenant), lock: tLock, fill: (v) => { const c = curTen(v); return c && c.entryMonth ? String(c.entryMonth) : ''; }, row: 'ten' },
     { k: 'ty', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.tenant), lock: tLock, fill: (v) => { const c = curTen(v); return c && c.entryYear ? String(c.entryYear) : ''; }, row: 'ten' },
     { k: 'tnote', type: 'note', text: (v) => { const c = v.tenant && curTen(v); if (!c) return ''; return replacing(v) ? `הדיירים הנוכחיים (${names(household(c))}) יסומנו כעזבו ב-${before(v.ty, v.tm)}.` : `גרים כאן: ${names(household(c))}. האדם יצטרף אליהם, בלי תאריך נפרד.`; } },
     { k: 'owner', label: 'בעלים', type: 'check', value: false, show: (v) => !!v.apt, row: 'own' },
-    { k: 'omode', type: 'select', options: [{ v: 'add', t: 'בנוסף' }, { v: 'replace', t: 'במקום' }], value: 'add', show: (v) => !!(v.owner && curOwn(v).length), row: 'own' },
+    { k: 'omode', type: 'select', options: [{ v: 'add', t: 'שותף לבעלים הנוכחיים' }, { v: 'replace', t: 'מחליף את הבעלים הנוכחיים' }], value: 'add', show: (v) => !!(v.owner && curOwn(v).length), row: 'own' },
     { k: 'om', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.owner), lock: oLock, fill: (v) => { const s = oStart(v); return s ? String(s.m) : ''; }, row: 'own' },
     { k: 'oy', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.owner), lock: oLock, fill: (v) => { const s = oStart(v); return s ? String(s.y) : ''; }, row: 'own' },
-    { k: 'onote', type: 'note', text: (v) => { const c = v.owner ? curOwn(v) : []; return c.length ? `בעלים נוכחיים: ${names(c)}. "במקום" יסיים את הבעלות שלהם ב-${before(v.oy, v.om)}; "בנוסף" משאיר אותם בעלים ביחד עם האדם החדש, והוא מתחיל באותו תאריך.` : ''; } },
+    { k: 'onote', type: 'note', text: (v) => { const c = v.owner ? curOwn(v) : []; return c.length ? `בעלים נוכחיים: ${names(c)}. "מחליף" יסיים את הבעלות שלהם ב-${before(v.oy, v.om)}; "שותף" משאיר אותם בעלים ביחד עם האדם החדש, והוא מתחיל באותו תאריך.` : ''; } },
   ];
   return Vaad.form({
     title: edit ? `עריכת ${(val('first') + ' ' + val('last')).trim() || val('email') || 'אדם'}` : 'הוספת אדם',
