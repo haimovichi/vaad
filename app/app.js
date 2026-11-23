@@ -846,7 +846,7 @@ function editAptDialog(a) {
     onSubmit: (v) => api('PUT', '/api/apartment', { apt: a.apt, floor: v.floor, rooms: v.rooms, sqm: v.sqm }),
   });
 }
-const AEXP = new Set();   // apartment rows opened to show their people
+const AEXP = new Set();   // records opened to show their people: an apartment number, or "apt:n" for one of its previous records
 // "מ-3/2021 עד 8/2026": a tenancy or an ownership; months are optional, an open end shows nothing
 const periodOf = (y1, m1, y2, m2) => { const f = (y, m) => (y ? (m ? m + '/' : '') + y : ''); const a = f(y1, m1); const b = f(y2, m2); return a || b ? (a ? 'מ-' + a : '') + (a && b ? ' ' : '') + (b ? 'עד ' + b : '') : ''; };
 const floorOf = (f) => (String(f || '').trim() === 'קק' ? '0' : f);   // the ground floor is shown as 0
@@ -875,8 +875,6 @@ function renderApts() {
     const period = (r) => periodOf(r.entryYear, r.entryMonth, r.status === 'עזב' ? r.exitYear : 0, r.exitMonth);
     const of = (rs) => uniq(rs.flatMap((r) => household(r).map((p) => ({ ...p, role: r.role, period: period(r) }))));
     const curP = who !== 'past' ? of(mine.filter((r) => r.status !== 'עזב')) : [];
-    const pastP = of(mine.filter((r) => r.status === 'עזב')).filter((p) => !curP.some((c) => same(c, p))).map((p) => ({ ...p, past: true }));
-    const shown = [...curP, ...(who !== 'cur' ? pastP : [])];   // the expanded row lists everyone the combo allows
     const ownRecs = d.owners.filter((o) => o.apt === a.apt && (who === 'all' || (who === 'past') === !!o.exitYear)).map((o) => ({ ...o, past: !!o.exitYear, period: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth) }));
     const curO = uniq(ownRecs.filter((o) => !o.past));   // the row of the apartment itself shows only the people of now
     const ownersOnly = curO.filter((o) => !curP.some((t) => same(t, o)));   // an owner who is also the tenant is not named twice
@@ -885,14 +883,14 @@ function renderApts() {
     // every previous tenancy and ownership is a record of its own under the apartment, grey, with the apartment number and the period
     const endMi = (y, m) => (y ? y * 12 + (m || 1) : 0);
     const gone = who === 'cur' ? [] : [
-      ...mine.filter((r) => r.status === 'עזב').map((r) => ({ t: joinNames(household(r)).join(', ') || '—', own: false, when: period(r), e: endMi(r.exitYear, r.exitMonth) })),
-      ...d.owners.filter((o) => o.apt === a.apt && o.exitYear).map((o) => ({ t: pname(o) || '—', own: true, when: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth), e: endMi(o.exitYear, o.exitMonth) })),
+      ...mine.filter((r) => r.status === 'עזב').map((r) => ({ t: joinNames(household(r)).join(', ') || '—', own: false, when: period(r), e: endMi(r.exitYear, r.exitMonth), ppl: household(r).map((p) => ({ ...p, role: r.role })) })),
+      ...d.owners.filter((o) => o.apt === a.apt && o.exitYear).map((o) => ({ t: pname(o) || '—', own: true, when: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth), e: endMi(o.exitYear, o.exitMonth), ppl: [o] })),
     ].sort((x, y) => y.e - x.e);
-    const goneRows = gone.map((g) => `<tr class="past"><td></td><td>${a.apt}</td><td></td><td></td><td></td><td class="l">${g.own ? '' : esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : '')}</td><td class="l">${g.own ? esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : '') : ''}</td><td></td></tr>`).join('');
+    const goneRows = gone.map((g, n) => { const k = a.apt + ':' + n; const op = AEXP.has(k); const who = esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : ''); return `<tr class="past" data-x="${k}"><td>${op ? '▾' : '◂'}</td><td>${a.apt}</td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${g.own ? '' : who}</td><td class="l">${g.own ? who : ''}</td><td></td></tr>` + (op ? `<tr class="xr past"><td></td><td colspan="7" class="l"><div class="xd">${group(g.own ? 'בעלים' : 'דיירים', g.ppl.map((p) => line(p, g.own ? g.when : [p.role, g.when].filter(Boolean).join(', '))).join(''))}</div></td></tr>` : ''); }).join('');
     if (who === 'past' && !gone.length) continue;   // only the apartments that have previous people
-    const open = AEXP.has(a.apt);
-    h += `<tr class="pr" data-x="${a.apt}"><td>${open ? '▾' : '◂'}</td><td><b>${a.apt}</b></td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
-      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', shown.map((p) => line(p, [p.past ? 'עזב' : p.role, p.period].filter(Boolean).join(', '))).join(''))}${group('בעלים', ownRecs.map((o) => line(o, o.period)).join(''))}</div></td></tr>` : '') + goneRows;
+    const open = AEXP.has(String(a.apt));
+    h += `<tr class="pr" data-x="${String(a.apt)}"><td>${open ? '▾' : '◂'}</td><td><b>${a.apt}</b></td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
+      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', curP.map((p) => line(p, [p.role, p.period].filter(Boolean).join(', '))).join(''))}${group('בעלים', curO.map((o) => line(o, o.period)).join(''))}</div></td></tr>` : '') + goneRows;
   }
   $('#aptTable').innerHTML = h;
 }
@@ -901,7 +899,7 @@ $('#aptTable').onclick = async (e) => {
   const ea = e.target.closest('[data-ea]');
   if (ea) { if (await editAptDialog(APTS.apartments.find((a) => String(a.apt) === ea.dataset.ea))) { toast('נשמר'); loadApts(); } return; }
   const px = e.target.closest('tr[data-x]');
-  if (px) { const k = +px.dataset.x; if (AEXP.has(k)) AEXP.delete(k); else AEXP.add(k); renderApts(); }
+  if (px) { const k = px.dataset.x; if (AEXP.has(k)) AEXP.delete(k); else AEXP.add(k); renderApts(); }
 };
 
 /* ================= MORE: what tenants see, backup ================= */
