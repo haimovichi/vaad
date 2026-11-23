@@ -690,8 +690,12 @@ function renderPeople() {
   const names = Object.fromEntries(ME.memberships.map((m) => [m.id, m.name]));
   const here = {};                      // user id -> ties in THIS building from the records (owners, tenancies)
   const tie = (id, t) => { if (id) (here[id] = here[id] || []).push(t); };
-  DB.owners.forEach((o) => tie(o.userId, { b: BLD.id, t: `בעל דירה ${o.apt}`, k: 'owner', apt: o.apt }));
-  DB.residents.forEach((r) => { const gone = r.status === 'עזב'; tie(r.userId, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant', apt: r.apt }); tie(r.user2Id, { b: BLD.id, t: `דייר ${r.apt}${gone ? ' (עזב)' : ''}`, k: gone ? 'old' : 'tenant', apt: r.apt }); });
+  DB.owners.forEach((o) => tie(o.userId, { b: BLD.id, t: `בעל דירה ${o.apt}`, k: 'owner', apt: o.apt, past: !!o.exitYear, period: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth) }));
+  DB.residents.forEach((r) => {
+    const gone = r.status === 'עזב'; const period = periodOf(r.entryYear, r.entryMonth, gone ? r.exitYear : 0, r.exitMonth);
+    const t = { b: BLD.id, t: `דייר ${r.apt}${gone ? ` (עזב${period ? ', ' + period : ''})` : ''}`, k: gone ? 'old' : 'tenant', apt: r.apt, period };
+    tie(r.userId, t); tie(r.user2Id, t);
+  });
   const access = {};                    // user id -> app-access roles (any building)
   for (const m of PEOPLE.members.filter((x) => x.building_id === BLD.id)) (access[m.user_id] = access[m.user_id] || []).push({ b: m.building_id, t: ROLE[m.role] + (m.apt ? ` ${m.apt}` : ''), k: 'access', id: m.id, role: m.role });
   const chipsFor = (u) => {
@@ -709,11 +713,13 @@ function renderPeople() {
   const q = $('#pQ').value.trim().toLowerCase(); const fb = String(BLD.id); const who = $('#pWho').value;
   const he = (x, y) => String(x || '').localeCompare(String(y || ''), 'he');
   const byName = (a, c) => he(a.u.last + ' ' + a.u.first, c.u.last + ' ' + c.u.first);
-  const lowApt = (p, k) => Math.min(...p.rs.filter((r) => r.k === k).map((r) => r.apt), Infinity);   // lowest apartment of that kind; none sorts last
+  const curOf = (rs, k) => rs.filter((r) => r.k === k && !r.past);   // current ties of a kind ('tenant' or 'owner')
+  const pastOf = (rs, k) => (k === 'owner' ? rs.filter((r) => r.k === 'owner' && r.past) : rs.filter((r) => r.k === 'old'));
+  const lowApt = (p, k) => { const c = Math.min(...curOf(p.rs, k).map((r) => r.apt), Infinity); return c < Infinity ? c : Math.min(...pastOf(p.rs, k).map((r) => r.apt), Infinity) + 1e6; };   // lowest current apartment of that kind, then the previous ones; none sorts last
   const sortBy = PSORT.k; const dir = PSORT.dir;
   const unnamed = (p) => (p.u.first || p.u.last ? 0 : 1);   // people with no name go last
   const cmp = (a, c) => (sortBy === 'first' ? he(a.u.first + ' ' + a.u.last, c.u.first + ' ' + c.u.last) : sortBy === 'tenant' || sortBy === 'owner' ? ((x, y) => (x === y ? 0 : x === Infinity ? 1 : y === Infinity ? -1 : (x - y) * dir))(lowApt(a, sortBy), lowApt(c, sortBy)) : 0);
-  const isPast = (rs) => rs.length > 0 && rs.every((r) => r.k === 'old');
+  const isPast = (rs) => rs.length > 0 && rs.every((r) => r.k === 'old' || (r.k === 'owner' && r.past));
   const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (rs.length || !fb) && (who === 'all' || (who === 'past') === isPast(rs)))
     .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (sortBy === 'tenant' || sortBy === 'owner' ? 0 : unnamed(a) - unnamed(c)) || cmp(a, c) || byName(a, c) || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
@@ -726,8 +732,13 @@ function renderPeople() {
     return `<span class="chip${r.k === 'old' ? ' mute' : ''}">${esc(r.t)}</span>`;
   };
   const arrow = (k) => (PSORT.k === k ? ` <span class="mute">${PSORT.dir > 0 ? '▲' : '▼'}</span>` : '');
-  const aptsOf = (rs, k) => [...new Set(rs.filter((r) => r.k === k).map((r) => r.apt))].sort((x, y) => x - y);
-  const nums = (arr) => (arr.length ? arr.join(', ') : '<span class="mute">—</span>');
+  const aptsOf = (list) => [...new Set(list.map((r) => r.apt))].sort((x, y) => x - y);
+  // apartment numbers of one kind: the current ones, then the previous ones in grey (hover: when)
+  const nums = (rs, k) => {
+    const cur = aptsOf(curOf(rs, k)); const pr = pastOf(rs, k);
+    const parts = [...cur.map(String), ...aptsOf(pr).filter((a) => !cur.includes(a)).map((a) => { const when = pr.filter((r) => r.apt === a).map((r) => r.period).filter(Boolean).join(' · '); return `<span class="mute"${when ? ` title="${esc(when)}"` : ''}>${a}</span>`; })];
+    return parts.length ? parts.join(', ') : '<span class="mute">—</span>';
+  };
   const roles = (rs) => rs.filter((r) => r.k === 'super' || r.k === 'manager' || (r.k === 'access' && r.role === 'committee')).map((r) => (r.k === 'super' ? 'מנהל על' : r.k === 'manager' ? 'מנהל בניינים' : 'ועד')).join(' · ') || '<span class="mute">—</span>';
   const field = (label, html) => `<div><span class="mute">${label}:</span> ${html}</div>`;
   const detail = (u, rs) => {
@@ -741,7 +752,7 @@ function renderPeople() {
   $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">▲ ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l">מנהל</th></tr>` + (list.map(({ u, rs }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
     const name = (u.first + ' ' + u.last).trim();
-    return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '◂'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(aptsOf(rs, 'tenant'))}</td><td class="l">${nums(aptsOf(rs, 'owner'))}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
+    return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '◂'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
