@@ -144,6 +144,7 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 
 table.t tr.pr{cursor:pointer}
 table.t tr.pr:hover{background:rgba(127,127,127,.07)}
+table.t tr.past td{color:var(--mute)}   /* a record of a previous tenant or owner (or a person with only previous apartments): the whole row grey */
 table.t tr.xr td{background:rgba(127,127,127,.07);text-align:start}
 .xd{display:flex;flex-direction:column;gap:4px;padding:2px 0}
 

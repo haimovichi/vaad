@@ -752,7 +752,7 @@ function renderPeople() {
   $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">▲ ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l">מנהל</th></tr>` + (list.map(({ u, rs }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
     const name = (u.first + ' ' + u.last).trim();
-    return `<tr class="pr" data-x="${key}"><td>${open ? '▾' : '◂'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
+    return `<tr class="pr${isPast(rs) ? ' past' : ''}" data-x="${key}"><td>${open ? '▾' : '◂'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
@@ -874,17 +874,25 @@ function renderApts() {
     const mine = d.residents.filter((r) => r.apt === a.apt);
     const period = (r) => periodOf(r.entryYear, r.entryMonth, r.status === 'עזב' ? r.exitYear : 0, r.exitMonth);
     const of = (rs) => uniq(rs.flatMap((r) => household(r).map((p) => ({ ...p, role: r.role, period: period(r) }))));
-    const curP = of(mine.filter((r) => r.status !== 'עזב'));
+    const curP = who !== 'past' ? of(mine.filter((r) => r.status !== 'עזב')) : [];
     const pastP = of(mine.filter((r) => r.status === 'עזב')).filter((p) => !curP.some((c) => same(c, p))).map((p) => ({ ...p, past: true }));
-    const shown = [...(who !== 'past' ? curP : []), ...(who !== 'cur' ? pastP : [])];
+    const shown = [...curP, ...(who !== 'cur' ? pastP : [])];   // the expanded row lists everyone the combo allows
     const ownRecs = d.owners.filter((o) => o.apt === a.apt && (who === 'all' || (who === 'past') === !!o.exitYear)).map((o) => ({ ...o, past: !!o.exitYear, period: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth) }));
-    const owners = uniq(ownRecs);
-    const ownersOnly = owners.filter((o) => !shown.some((t) => same(t, o)));   // an owner who is also the tenant is not named twice
-    const tenantCell = [...joinNames(shown.filter((p) => !p.past)).map(esc), ...joinNames(shown.filter((p) => p.past)).map((n) => `<span class="mute">${esc(n)}</span>`)].join('<br>');
-    const ownerCell = ownersOnly.length ? [...joinNames(ownersOnly.filter((o) => !o.past)).map(esc), ...joinNames(ownersOnly.filter((o) => o.past)).map((n) => `<span class="mute">${esc(n)}</span>`)].join('<br>') : owners.length ? '<span class="mute">כמו הדייר</span>' : '';
+    const curO = uniq(ownRecs.filter((o) => !o.past));   // the row of the apartment itself shows only the people of now
+    const ownersOnly = curO.filter((o) => !curP.some((t) => same(t, o)));   // an owner who is also the tenant is not named twice
+    const tenantCell = joinNames(curP).map(esc).join('<br>');
+    const ownerCell = ownersOnly.length ? joinNames(ownersOnly).map(esc).join('<br>') : curO.length ? '<span class="mute">כמו הדייר</span>' : '';
+    // every previous tenancy and ownership is a record of its own under the apartment, grey, with the apartment number and the period
+    const endMi = (y, m) => (y ? y * 12 + (m || 1) : 0);
+    const gone = who === 'cur' ? [] : [
+      ...mine.filter((r) => r.status === 'עזב').map((r) => ({ t: joinNames(household(r)).join(', ') || '—', own: false, when: period(r), e: endMi(r.exitYear, r.exitMonth) })),
+      ...d.owners.filter((o) => o.apt === a.apt && o.exitYear).map((o) => ({ t: pname(o) || '—', own: true, when: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth), e: endMi(o.exitYear, o.exitMonth) })),
+    ].sort((x, y) => y.e - x.e);
+    const goneRows = gone.map((g) => `<tr class="past"><td></td><td>${a.apt}</td><td></td><td></td><td></td><td class="l">${g.own ? '' : esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : '')}</td><td class="l">${g.own ? esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : '') : ''}</td><td></td></tr>`).join('');
+    if (who === 'past' && !gone.length) continue;   // only the apartments that have previous people
     const open = AEXP.has(a.apt);
     h += `<tr class="pr" data-x="${a.apt}"><td>${open ? '▾' : '◂'}</td><td><b>${a.apt}</b></td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
-      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', shown.map((p) => line(p, [p.past ? 'עזב' : p.role, p.period].filter(Boolean).join(', '))).join(''))}${group('בעלים', ownRecs.map((o) => line(o, o.period)).join(''))}</div></td></tr>` : '');
+      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', shown.map((p) => line(p, [p.past ? 'עזב' : p.role, p.period].filter(Boolean).join(', '))).join(''))}${group('בעלים', ownRecs.map((o) => line(o, o.period)).join(''))}</div></td></tr>` : '') + goneRows;
   }
   $('#aptTable').innerHTML = h;
 }
