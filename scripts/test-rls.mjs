@@ -857,6 +857,42 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     const endBefore = await as('c1@x.com', (q) => q("select public.end_tenancy(1, '30-כהן', 2025, 12)"));
     report(endBefore === 'ERR', 'committee1', 'an exit before the entry is refused', 'ERR', endBefore === 'ERR' ? endBefore : 'ok');
 
+    // edit_tenancy / remove_tenancy: a correction in place
+    const et = (q, key, apt, role, ey, em, xy = null, xm = null) => q('select public.edit_tenancy(1, $1, $2, $3, $4, $5, $6, $7)', [key, apt, role, ey, em, xy, xm]);
+    const corr = await as('c1@x.com', async (q) => { await et(q, '30-כהן', 30, 'שוכר', 2025, 6); return (await q("select role, status, entry_year, entry_month from residents where key = '30-כהן'")).rows[0]; });
+    report(corr !== 'ERR' && corr.role === 'שוכר' && corr.status === 'פעיל' && corr.entry_year === 2025 && corr.entry_month === 6, 'committee1', 'edit_tenancy corrects the kind and the entry month in place', 'שוכר, 6/2025, active', corr === 'ERR' ? corr : JSON.stringify(corr));
+    const closed = await as('c1@x.com', async (q) => { await et(q, '30-כהן', 30, 'בעלים', 2026, 1, 2026, 7); const r1 = (await q("select status, exit_year, exit_month from residents where key = '30-כהן'")).rows[0]; await et(q, '30-כהן', 30, 'בעלים', 2026, 1); return [r1, (await q("select status, exit_year from residents where key = '30-כהן'")).rows[0]]; });
+    report(closed !== 'ERR' && closed[0].status === 'עזב' && closed[0].exit_month === 7 && closed[1].status === 'פעיל' && closed[1].exit_year === null, 'committee1', 'an exit month makes the tenancy previous; clearing it makes it current again', 'עזב then פעיל', closed === 'ERR' ? closed : JSON.stringify(closed));
+    const moved = await as('c1@x.com', async (q) => { await et(q, '30-כהן', 31, 'בעלים', 2026, 1); return (await q("select key, apt from residents where user_id = (select id from users where phone = '050-30') and building_id = 1")).rows[0]; });
+    report(moved !== 'ERR' && moved.apt === 31 && moved.key === '31-כהן', 'committee1', 'edit_tenancy moves a tenancy to another apartment and its key follows', '31-כהן', moved === 'ERR' ? moved : JSON.stringify(moved));
+    const movedOvl = await as('c1@x.com', async (q) => { await add(q, 31, 'רונית', 'שמש', '052-31', 'שוכר', 2026, 3); await et(q, '30-כהן', 31, 'בעלים', 2026, 1); });
+    report(movedOvl === 'ERR', 'committee1', 'edit_tenancy refuses dates that overlap another tenancy of the apartment', 'ERR', movedOvl === 'ERR' ? movedOvl : 'ok');
+    const selfOk = await as('c1@x.com', async (q) => { await et(q, '30-כהן', 30, 'בעלים', 2026, 2); return 'ok'; });
+    report(selfOk === 'ok', 'committee1', 'a tenancy does not overlap itself when its own dates are edited', 'ok', selfOk);
+    for (const [what, args] of [['an exit before the entry', ['30-כהן', 30, 'שוכר', 2026, 5, 2026, 4]], ['a bad role', ['30-כהן', 30, 'דייר', 2026, 1]], ['an apartment that does not exist', ['30-כהן', 99, 'שוכר', 2026, 1]], ['month 13', ['30-כהן', 30, 'שוכר', 2026, 13]], ['an exit year without a month', ['30-כהן', 30, 'שוכר', 2026, 1, 2026, null]], ['a tenancy of another building', ['30-לוי', 30, 'שוכר', 2026, 1]]]) {
+      const r = await as('c1@x.com', (q) => et(q, ...args));
+      report(r === 'ERR', 'committee1', `edit_tenancy refuses ${what}`, 'ERR', r === 'ERR' ? r : 'ok');
+    }
+    const payMove = await as('c1@x.com', async (q) => {
+      await db.exec('reset role'); await db.exec("insert into payments(building_id, key, apt, y, m, amount) values (1, '30-כהן', 30, 2026, 2, 100)"); await db.exec('set local role authenticated');
+      const same = await et(q, '30-כהן', 30, 'בעלים', 2026, 1).then(() => 'ok', () => 'ERR');
+      const move = await et(q, '30-כהן', 31, 'בעלים', 2026, 1).then(() => 'ok', () => 'ERR');
+      return same + ' ' + move;
+    });
+    report(payMove === 'ok ERR', 'committee1', 'a tenancy with payments can change its dates but not its apartment', 'ok ERR', payMove);
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const e = await as(email, (q) => et(q, '30-כהן', 30, 'שוכר', 2026, 1));
+      report(e === 'ERR', who, 'edit_tenancy is refused', 'ERR', e === 'ERR' ? e : 'ok');
+    }
+    const rmT = await as('super@x.com', async (q) => { await q("select public.remove_tenancy(1, '30-כהן')"); return (await q("select count(*)::int n from residents where key = '30-כהן'")).rows[0].n; });
+    report(rmT === 0, 'super', 'remove_tenancy removes a tenancy recorded by mistake', 0, rmT);
+    for (const [who, email] of [['committee1', 'c1@x.com'], ['manager12', 'm12@x.com'], ['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['anon', null]]) {
+      const r = await as(email, (q) => q("select public.remove_tenancy(1, '30-כהן')"));
+      report(r === 'ERR', who, 'remove_tenancy is for the super user only', 'ERR', r === 'ERR' ? r : 'ok');
+    }
+    const rmPaid = await as('super@x.com', async (q) => { await db.exec('reset role'); await db.exec("insert into payments(building_id, key, apt, y, m, amount) values (1, '30-כהן', 30, 2026, 2, 100)"); await db.exec('set local role authenticated'); return q("select public.remove_tenancy(1, '30-כהן')"); });
+    report(rmPaid === 'ERR', 'super', 'a tenancy with payments cannot be removed', 'ERR', rmPaid === 'ERR' ? rmPaid : 'ok');
+
     const edit = await as('c1@x.com', async (q) => {
       const uid = (await q("select user_id from residents where key = '30-כהן'")).rows[0].user_id;
       await q("select public.edit_person(1, $1, 'דוד', 'כהן-לוי', '050-77')", [uid]);
@@ -1066,6 +1102,32 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
       const e = await as(email, (q) => q('select public.end_owner(1, 1, 2026, 1)'));
       report(e === 'ERR', who, 'end_owner is refused', 'ERR', e === 'ERR' ? e : 'ok');
+    }
+
+    // edit_owner: a correction in place (apartment, start, end); the owner's access follows
+    const eo = (q, id, apt, ey = null, em = null, xy = null, xm = null) => q('select public.edit_owner(1, $1, $2, $3, $4, $5, $6)', [id, apt, ey, em, xy, xm]);
+    const oEdit = await as('c1@x.com', async (q) => {
+      const id = await addD(q, 41, 'שי', 'עם-מייל', '050-41', 'owner41@x.com', 2020, 5);
+      await eo(q, id, 41, 2021, 2, 2024, 9);
+      const ended = { row: (await q('select entry_year, entry_month, exit_year, exit_month from owners where id = $1', [id])).rows[0], access: (await q("select count(*)::int n from members where apt = 41 and role = 'apt_owner'")).rows[0].n };
+      await eo(q, id, 40, 2021, 2);
+      const moved = { apt: (await q('select apt, exit_year from owners where id = $1', [id])).rows[0], on40: (await q("select count(*)::int n from members where apt = 40 and role = 'apt_owner'")).rows[0].n, on41: (await q("select count(*)::int n from members where apt = 41 and role = 'apt_owner'")).rows[0].n };
+      return { ended, moved };
+    });
+    report(oEdit !== 'ERR' && oEdit.ended.row.entry_year === 2021 && oEdit.ended.row.exit_month === 9 && oEdit.ended.access === 0 && oEdit.moved.apt.apt === 40 && oEdit.moved.apt.exit_year === null && oEdit.moved.on40 === 1 && oEdit.moved.on41 === 0, 'committee1', 'edit_owner changes dates, an end removes the access, a reopened ownership moved to another apartment gives it there', 'dated, access 0, then 40 only', oEdit === 'ERR' ? oEdit : JSON.stringify(oEdit));
+    for (const [what, args] of [['an end before the start', [2026, 6, 2026, 5]], ['a start with no month', [2026, null]], ['an end with no month', [2026, 1, 2026, null]], ['a month out of range', [2026, 13]]]) {
+      const r = await as('c1@x.com', async (q) => { const id = await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2020, 1); await eo(q, id, 40, ...args); });
+      report(r === 'ERR', 'committee1', `edit_owner refuses ${what}`, 'ERR', r === 'ERR' ? r : 'ok');
+    }
+    const oNone = await as('c1@x.com', async (q) => { const id = await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2020, 1); await eo(q, id, 40); return (await q('select entry_year, exit_year from owners where id = $1', [id])).rows[0]; });
+    report(oNone !== 'ERR' && oNone.entry_year === null && oNone.exit_year === null, 'committee1', 'edit_owner may clear the start (not recorded)', 'empty', oNone === 'ERR' ? oNone : JSON.stringify(oNone));
+    const oDup = await as('c1@x.com', async (q) => { await addD(q, 40, 'רן', 'בעלים', '050-40', null, 2020, 1); const id = await addD(q, 41, 'רן', 'בעלים', '050-40', null, 2020, 1); await eo(q, id, 40, 2020, 1); });
+    report(oDup === 'ERR', 'committee1', 'an owner cannot be moved to an apartment where they are already a current owner', 'ERR', oDup === 'ERR' ? oDup : 'ok');
+    const oOther = await as('c1@x.com', (q) => eo(q, 1, 99, 2020, 1));
+    report(oOther === 'ERR', 'committee1', 'edit_owner refuses an apartment that does not exist', 'ERR', oOther === 'ERR' ? oOther : 'ok');
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['aptOwner8', 'ao8@x.com'], ['stranger', 'nobody@x.com'], ['anon', null]]) {
+      const e = await as(email, (q) => eo(q, 1, 40, 2020, 1));
+      report(e === 'ERR', who, 'edit_owner is refused', 'ERR', e === 'ERR' ? e : 'ok');
     }
   }
 

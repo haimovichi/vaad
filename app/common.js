@@ -358,6 +358,18 @@ window.Vaad = (function () {
         if (error) throw new Error(/last person/.test(error.message) ? 'זה האדם האחרון בדירה. כדי להסיר אותו סיימו את הדיירות.' : error.code === '42501' ? 'אין לך הרשאה' : error.message);
       },
       async endTenancy(key, y, m) { ok(await c.rpc('end_tenancy', { b: B, tenancy_key: key, exit_y: y, exit_m: m })); },
+      async editTenancy(key, t) {
+        const { error } = await c.rpc('edit_tenancy', { b: B, tenancy_key: key, a: t.apt, p_role: t.role, entry_y: t.entryYear, entry_m: t.entryMonth, exit_y: t.exitYear, exit_m: t.exitMonth });
+        if (error) throw new Error(/overlap/.test(error.message) ? 'התאריכים חופפים לדיירות אחרת בדירה' : /has payments/.test(error.message) ? 'לדיירות הזו יש תשלומים, אי אפשר להעביר אותה לדירה אחרת' : error.code === '42501' ? 'אין לך הרשאה' : error.message);
+      },
+      async removeTenancy(key) {
+        const { error } = await c.rpc('remove_tenancy', { b: B, tenancy_key: key });
+        if (error) throw new Error(/has payments/.test(error.message) ? 'לדיירות הזו יש תשלומים, אי אפשר להסיר אותה' : error.code === '42501' ? 'רק מנהל על יכול להסיר רשומה' : error.message);
+      },
+      async editOwner(id, o) {
+        const { error } = await c.rpc('edit_owner', { b: B, owner_id: Number(id), a: o.apt, entry_y: o.entryYear, entry_m: o.entryMonth, exit_y: o.exitYear, exit_m: o.exitMonth });
+        if (error) throw new Error(/already an owner/.test(error.message) ? 'האדם הזה כבר רשום כבעל הדירה' : error.code === '42501' ? 'אין לך הרשאה' : error.message);
+      },
       async syncLogin(uid) { ok(await c.rpc('sync_person_login', { b: B, uid })); },
       async editPerson(uid, first, last, phone) {
         if (!uid) throw new Error('אין אדם רשום בדיירות הזו');
@@ -565,6 +577,12 @@ window.Vaad = (function () {
       },
       async removeHouseholdMember(key, userId) { throw new Error('בתצוגת הדגמה אי אפשר להסיר אנשים'); },
       async endTenancy(key, y, m) { const r = (await this.load()).residents.find((x) => x.key === key); r.status = 'עזב'; r.exitYear = y; r.exitMonth = m; },
+      async editTenancy(key, t) {
+        const r = (await this.load()).residents.find((x) => x.key === key);
+        Object.assign(r, { apt: t.apt, role: t.role, entryYear: t.entryYear, entryMonth: t.entryMonth, exitYear: t.exitYear, exitMonth: t.exitMonth, status: t.exitYear ? 'עזב' : 'פעיל' });
+      },
+      async removeTenancy(key) { const d = await this.load(); d.residents = d.residents.filter((x) => x.key !== key); },
+      async editOwner(id, o) { const x = (await this.load()).owners.find((y) => String(y.id) === String(id)); Object.assign(x, { apt: o.apt, entryYear: o.entryYear, entryMonth: o.entryMonth, exitYear: o.exitYear, exitMonth: o.exitMonth }); },
       async editPerson() {},
       async syncLogin() {},
       async addTariff(t) { return { ...t, id: nextId++ }; }, async updateTariff() {}, async deleteTariff() {},

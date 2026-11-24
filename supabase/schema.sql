@@ -1014,13 +1014,96 @@ begin
   delete from public.members m where m.building_id = b and m.user_id = o.user_id and m.role = 'apt_owner' and m.apt = o.apt;
 end $$;
 
+-- ---------- correcting a tenancy or an ownership ----------
+-- Change a tenancy in place (a correction): the apartment, tenant or owner, entry month and exit month (empty exit = the person still lives
+-- there). The same date rules as add_tenancy: the tenancies of an apartment must not overlap. A tenancy with payments stays in its apartment.
+-- The committee (and managers) of the building only.
+create or replace function public.edit_tenancy(b bigint, tenancy_key text, a int, p_role text, entry_y int, entry_m int,
+                                               exit_y int default null, exit_m int default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare r record; f int; t int; k text; n int := 1; rest text;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  select * into r from public.residents x where x.building_id = b and x.key = tenancy_key;
+  if not found then raise exception 'no such tenancy'; end if;
+  if not exists (select 1 from public.apartments x where x.building_id = b and x.apt = a) then raise exception 'no such apartment'; end if;
+  if p_role is null or p_role not in ('בעלים', 'שוכר') then raise exception 'role must be owner or tenant'; end if;
+  if entry_y is null or entry_y not between 2000 and 2100 or entry_m is null or entry_m not between 1 and 12 then raise exception 'bad entry month'; end if;
+  if (exit_y is null) <> (exit_m is null) then raise exception 'exit needs a year and a month'; end if;
+  f := entry_y * 12 + entry_m - 1;
+  if exit_y is not null then
+    if exit_y not between 2000 and 2100 or exit_m not between 1 and 12 then raise exception 'bad exit month'; end if;
+    t := exit_y * 12 + exit_m - 1;
+    if t < f then raise exception 'exit before entry'; end if;
+  else t := 2147483647; end if;
+  if exists (
+    select 1 from public.residents o where o.building_id = b and o.apt = a and o.id <> r.id
+      and f <= (case when o.status = 'עזב' and coalesce(o.exit_year, 0) <> 0 then o.exit_year * 12 + coalesce(nullif(o.exit_month, 0), 12) - 1 else 2147483647 end)
+      and (case when coalesce(o.entry_year, 0) <> 0 then o.entry_year * 12 + coalesce(nullif(o.entry_month, 0), 1) - 1 else 2022 * 12 + 5 end) <= t)
+  then raise exception 'the dates overlap another tenancy of this apartment'; end if;
+  k := r.key;
+  if a <> r.apt then
+    if exists (select 1 from public.payments p where p.building_id = b and p.key = r.key) then raise exception 'the tenancy has payments: it cannot move to another apartment'; end if;
+    rest := substr(r.key, length(r.apt::text || '-') + 1);
+    k := a || '-' || rest;
+    while exists (select 1 from public.residents o where o.building_id = b and o.key = k and o.id <> r.id) loop n := n + 1; k := a || '-' || rest || '-' || n; end loop;
+    update public.members m set apt = a
+     where m.building_id = b and m.role = 'tenant' and m.apt = r.apt
+       and (m.user_id in (coalesce(r.user_id, 0), coalesce(r.user2_id, 0))
+            or exists (select 1 from public.resident_people rp where rp.resident_id = r.id and rp.user_id = m.user_id));
+  end if;
+  update public.residents set key = k, apt = a, role = p_role, status = case when exit_y is null then 'פעיל' else 'עזב' end,
+         entry_year = entry_y, entry_month = entry_m, exit_year = exit_y, exit_month = exit_m where id = r.id;
+end $$;
+
+-- Remove a tenancy that was recorded by mistake, with its household. Only the super user, and never a tenancy that has payments.
+create or replace function public.remove_tenancy(b bigint, tenancy_key text) returns void
+language plpgsql security definer set search_path = public as $$
+declare r record;
+begin
+  if not public.is_super() then raise exception 'not allowed' using errcode = '42501'; end if;
+  select * into r from public.residents x where x.building_id = b and x.key = tenancy_key;
+  if not found then raise exception 'no such tenancy'; end if;
+  if exists (select 1 from public.payments p where p.building_id = b and p.key = r.key) then raise exception 'the tenancy has payments'; end if;
+  delete from public.members m
+   where m.building_id = b and m.role = 'tenant' and m.apt = r.apt
+     and (m.user_id in (coalesce(r.user_id, 0), coalesce(r.user2_id, 0))
+          or exists (select 1 from public.resident_people rp where rp.resident_id = r.id and rp.user_id = m.user_id));
+  delete from public.residents where id = r.id;
+end $$;
+
+-- Change an ownership in place (a correction): the apartment, start month and end month (empty end = still the owner). The owner's access
+-- to the apartment follows: it moves with the apartment and goes when the ownership has an end. The committee (and managers) only.
+create or replace function public.edit_owner(b bigint, owner_id bigint, a int, entry_y int default null, entry_m int default null,
+                                             exit_y int default null, exit_m int default null) returns void
+language plpgsql security definer set search_path = public as $$
+declare o record;
+begin
+  if not public.can_manage(b) then raise exception 'not allowed' using errcode = '42501'; end if;
+  select * into o from public.owners x where x.id = owner_id and x.building_id = b;
+  if not found then raise exception 'no such owner'; end if;
+  if not exists (select 1 from public.apartments x where x.building_id = b and x.apt = a) then raise exception 'no such apartment'; end if;
+  if (entry_y is null) <> (entry_m is null) then raise exception 'start needs a year and a month'; end if;
+  if entry_y is not null and (entry_y not between 2000 and 2100 or entry_m not between 1 and 12) then raise exception 'bad start month'; end if;
+  if (exit_y is null) <> (exit_m is null) then raise exception 'end needs a year and a month'; end if;
+  if exit_y is not null and (exit_y not between 2000 and 2100 or exit_m not between 1 and 12) then raise exception 'bad end month'; end if;
+  if entry_y is not null and exit_y is not null and exit_y * 12 + exit_m < entry_y * 12 + entry_m then raise exception 'exit before start'; end if;
+  if exit_y is null and exists (select 1 from public.owners x where x.building_id = b and x.apt = a and x.user_id = o.user_id and x.exit_year is null and x.id <> o.id) then raise exception 'already an owner of this apartment'; end if;
+  update public.owners set apt = a, entry_year = entry_y, entry_month = entry_m, exit_year = exit_y, exit_month = exit_m where id = o.id;
+  delete from public.members m where m.building_id = b and m.user_id = o.user_id and m.role = 'apt_owner' and m.apt = o.apt;
+  if exit_y is null then
+    insert into public.members (building_id, user_id, role, apt)
+      select b, o.user_id, 'apt_owner', a where exists (select 1 from public.users u where u.id = o.user_id and u.email is not null) on conflict do nothing;
+  end if;
+end $$;
+
 -- every function is callable only by logged-in users
 do $$
 declare f record;
 begin
   for f in select p.oid::regprocedure as sig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
            where n.nspname = 'public' and p.proname in
-             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','add_household_member','remove_household_member','end_tenancy','edit_person','sync_person_login','add_owner','remove_owner','end_owner')
+             ('me','my_uid','user_for_email','is_super','is_manager_of','has_role','can_manage','can_see_board','is_member_any','apt_payments','my_snapshot','apt_tenants','create_building','payer_key','match_payer','split_payment','save_pending_credits','approve_pending','ignore_pending','propose_credits','save_import','record_bank_rows','set_bank_account','building_counts','delete_building','add_tenancy','add_household_member','remove_household_member','end_tenancy','edit_person','sync_person_login','add_owner','remove_owner','end_owner','edit_tenancy','remove_tenancy','edit_owner')
   loop
     execute format('revoke all on function %s from public, anon', f.sig);
     execute format('grant execute on function %s to authenticated', f.sig);
