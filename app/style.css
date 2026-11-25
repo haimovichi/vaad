@@ -48,13 +48,13 @@ body.staff.mopen #menu{display:block}
 #menu a.on{background:var(--accbg);color:var(--acc);font-weight:600}
 @media(min-width:760px){
   #bar .mb{display:none}
-  body.staff #menu{display:block;position:fixed;inset:0 0 0 auto;width:190px;z-index:10;background:var(--card);border-inline-start:1px solid var(--line);padding:14px 8px}
+  body.staff #menu{display:block;position:fixed;inset:0 0 0 auto;width:220px;z-index:10;background:var(--card);border-inline-start:1px solid var(--line);padding:14px 8px}
   #menu .mh{display:none}
   #menu a{font-size:14px;padding:8px 10px}
-  body.staff #banner,body.staff #bar,body.staff .wrap{margin-inline-end:190px}
+  body.staff #banner,body.staff #bar,body.staff .wrap{margin-inline-end:220px}
   body.staff .wrap{max-width:860px;margin-inline-start:auto}
-  body.staff.wide .wrap{max-width:none;margin-left:0;margin-right:190px}
-  body.staff #banner,body.staff #bar{margin-left:0;margin-right:190px}
+  body.staff.wide .wrap{max-width:none;margin-left:0;margin-right:220px}
+  body.staff #banner,body.staff #bar{margin-left:0;margin-right:220px}
 }
 
 /* ---- sub tabs ---- */
@@ -166,3 +166,32 @@ table.t th.sortable:hover{color:var(--ink)}
 table.t td .ic,table.t th .ic{width:1em;height:1em}
 button.g{display:inline-flex;align-items:center;gap:5px}
 .checklist li .ic{margin-inline-end:4px}.checklist .done .ic{color:var(--paid)}
+
+/* ---- refinements: one corner radius, one control height, calmer type, even spacing, a visible keyboard focus ---- */
+:root{--r:8px;--r-card:12px;--ctl:36px;--sp1:4px;--sp2:8px;--sp3:12px;--sp4:16px;--sp5:24px;--acc-ring:rgba(37,99,235,.35)}
+body{font-size:15px;line-height:1.5}
+h1,h2,h3{font-weight:600}
+#banner{font-size:18px;font-weight:600}
+input,select{border-radius:var(--r);min-height:var(--ctl)}
+button.g,button.b,label.b{border-radius:var(--r);min-height:var(--ctl);padding-block:6px;padding-inline:14px;font-weight:500}
+button.g{border-color:var(--line)}
+button.g:hover{background:rgba(127,127,127,.08)}
+button.b:hover,label.b:hover{filter:brightness(1.08)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+input:focus,select:focus{outline:2px solid var(--acc-ring);outline-offset:0;border-color:var(--acc)}
+#bar .mb,#bar a.home{border-radius:var(--r)}
+.box,.sum div,.card,.pays{border-radius:var(--r-card)}
+.pad{padding:var(--sp4)}
+.card{padding:var(--sp3) var(--sp4);margin-top:var(--sp2)}
+.num{border-radius:var(--r)}
+.badge{border-radius:6px;font-weight:500}
+table.t th,table.t td{padding:10px var(--sp2)}
+table.t th{font-size:12px;font-weight:500;letter-spacing:.02em}
+table.t td{font-variant-numeric:tabular-nums}
+table.t tr:last-child td{border-bottom:0}
+.pendbadge{border-radius:var(--r-card);font-weight:500;border-color:color-mix(in srgb,var(--partial) 40%,transparent)}
+#msg{border-radius:var(--r)}
+.dlg{border-radius:var(--r-card)}
+#menu h4{letter-spacing:.04em;margin:var(--sp5) 0 var(--sp1)}
+#menu a{border-radius:var(--r);border-inline-start:3px solid transparent}
+#menu a.on{border-inline-start-color:var(--acc)}
