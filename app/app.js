@@ -667,7 +667,7 @@ function personDialog(u) {
       ...(canCommittee ? [{ k: 'committee', label: 'חבר ועד (דורש אימייל)', type: 'check', value: !!cm, show: (v) => !!(v.email || '').trim() || !!cm }] : []),
     ],
     onSubmit: async (v) => {
-      const addTies = async () => {
+      const addTies = async (emit) => {
         if (!v.tenant && !v.owner) throw new Error('בחרו אם האדם דייר, בעל דירה או שניהם');
         const apt = +v.apt; const joins = !!curTen(v) && v.tmode !== 'replace';
         // check the tenancy before anything is saved, so a refused date does not leave the person half added
@@ -678,36 +678,38 @@ function personDialog(u) {
           if (calc.tenancies(DB).some((t) => t.apt === apt && t.resident !== prev && from <= t.to && t.from <= Infinity)) throw new Error('התאריכים חופפים לדיירות אחרת בדירה. סיימו קודם את הדיירות הקודמת.');
         }
         if (v.owner && !(oLock(v) && !v.oy) && !(+v.oy >= 2000 && +v.oy <= 2100)) throw new Error('שנת תחילת בעלות לא תקינה');
-        const who = { apt: v.apt, first: v.first, last: v.last, phone: v.phone };
+        const who = { apt: v.apt, first: v.first, last: v.last, phone: v.phone, ...(edit && u.id ? { userId: u.id } : {}) };   // an existing person is picked by id, not by name and phone
         // the owner goes first, so a login created here is the same person the tenancy then finds
-        if (v.owner) await api('POST', '/api/owner', { ...who, email: v.email, entryYear: v.oy, entryMonth: v.om, endPrevious: v.omode === 'replace' && curOwn(v).length > 0 });
+        if (v.owner) await emit('POST', '/api/owner', { ...who, email: v.email, entryYear: v.oy, entryMonth: v.om, endPrevious: v.omode === 'replace' && curOwn(v).length > 0 });
         const login = v.owner ? {} : { email: v.email };
         if (v.tenant) {
-          if (joins) await api('POST', '/api/household', { ...who, ...login });
-          else await api('POST', '/api/tenancy', { ...who, ...login, role: v.owner ? 'בעלים' : 'שוכר', entryMonth: v.tm, entryYear: v.ty, exitMonth: '', exitYear: '', endPrevious: !!curTen(v) });
+          if (joins) await emit('POST', '/api/household', { ...who, ...login });
+          else await emit('POST', '/api/tenancy', { ...who, ...login, role: v.owner ? 'בעלים' : 'שוכר', entryMonth: v.tm, entryYear: v.ty, exitMonth: '', exitYear: '', endPrevious: !!curTen(v) });
         }
       };
       if (!edit) {
-        if (v.apt) await addTies();
+        if (v.apt) await addTies(api);
         else { if (!ME.isSuper) throw new Error('בחרו דירה'); await api('POST', '/api/user', v); }
       } else {
         const patch = {};   // only what changed, so an untouched old-format phone is not rewritten
         for (const k of ['first', 'last', 'phone', 'email', 'account']) if ((v[k] || '').trim() !== val(k)) patch[k] = v[k];
         const gone = recs.filter((x, i) => v['r' + i + '_del']);
         if (gone.length && !(await Vaad.ask({ ok: 'הסר', text: `להסיר ${gone.length === 1 ? 'את הרשומה' : gone.length + ' רשומות'} לצמיתות? הסרה היא לרשומה שנוספה בטעות; אם האדם עבר או מכר, סמנו חודש סיום.` }))) throw new Error('לא נשמר');
-        if (Object.keys(patch).length) await api('PUT', '/api/user', { id: u.id, patch });
+        const steps = []; const emit = (method, url, body) => { steps.push({ method, url, body }); };   // everything is sent as one batch: all or nothing
+        if (Object.keys(patch).length) emit('PUT', '/api/user', { id: u.id, patch });
         for (const [i, x] of recs.entries()) {
           const p = 'r' + i + '_'; const rec = x.rec;
-          if (v[p + 'del']) { if (x.t) await api('POST', '/api/tenancy/remove', { key: rec.key }); else await api('DELETE', '/api/owner/' + rec.id); continue; }
+          if (v[p + 'del']) { if (x.t) emit('POST', '/api/tenancy/remove', { key: rec.key }); else emit('DELETE', '/api/owner/' + rec.id); continue; }
           const was = { apt: String(rec.apt), role: rec.role === 'בעלים' ? 'בעלים' : 'שוכר', sm: String(rec.entryMonth || ''), sy: String(rec.entryYear || ''), xm: String(rec.exitYear ? rec.exitMonth || '' : ''), xy: String(rec.exitYear || '') };
           const now1 = { apt: String(v[p + 'apt']), role: x.t ? v[p + 'role'] : '', sm: String(v[p + 'sm'] || ''), sy: String(v[p + 'sy'] || ''), xm: String(v[p + 'xm'] || ''), xy: String(v[p + 'xy'] || '') };
           if (!x.t) was.role = '';
           if (Object.keys(was).every((k) => was[k] === now1[k])) continue;
           const dates = { entryMonth: now1.sm, entryYear: now1.sy, exitMonth: now1.xm, exitYear: now1.xy };
-          if (x.t) await api('PUT', '/api/tenancy', { key: rec.key, apt: now1.apt, role: now1.role, ...dates });
-          else await api('PUT', '/api/owner', { id: rec.id, apt: now1.apt, ...dates });
+          if (x.t) emit('PUT', '/api/tenancy', { key: rec.key, apt: now1.apt, role: now1.role, ...dates });
+          else emit('PUT', '/api/owner', { id: rec.id, apt: now1.apt, ...dates });
         }
-        if (v.apt) await addTies();
+        if (v.apt) await addTies(async (m, url, body) => emit(m, url, body));
+        if (steps.length) await api('POST', '/api/batch', { steps });
       }
       const em = (v.email || '').trim();
       if (canCommittee && v.committee && em && !cm) await api('POST', '/api/member', { email: em, role: 'committee', apt: '' });
@@ -823,59 +825,6 @@ const household = (r) => [
   ...(r.others || []),
 ];
 const pname = (p) => `${p.first || ''} ${p.last || ''}`.trim();
-const curTenancy = (apt) => (APTS ? APTS.residents.find((r) => r.apt === apt && r.status !== 'עזב') : null);
-// The people of the apartments are added and edited in a dialog (Vaad.form); the table only shows them.
-// A person is added to an apartment as a tenant, an owner or both; an email gives them a login (as the owner when they are one, otherwise as a tenant).
-const monthOptions = MF.map((m, i) => ({ v: String(i + 1), t: m }));
-function addPersonDialog(preApt) {
-  const aptOpts = [{ v: '', t: 'בחרו דירה' }, ...APTS.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) }))];
-  const curOf = (v) => (v.apt ? curTenancy(+v.apt) : null);
-  return Vaad.form({
-    title: preApt ? `הוספת אדם לדירה ${preApt}` : 'הוספת אדם לדירה',
-    ok: 'הוסף',
-    fields: [
-      { k: 'apt', label: 'דירה', type: 'select', options: aptOpts, value: preApt ? String(preApt) : '' },
-      { k: 'first', label: 'שם פרטי', width: 110, row: 'name' },
-      { k: 'last', label: 'שם משפחה', width: 120, row: 'name' },
-      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, row: 'contact' },
-      { k: 'email', label: 'אימייל לכניסה לאפליקציה (לא חובה)', type: 'email', width: 240, ltr: true, row: 'contact' },
-      { k: 'tenant', label: 'דייר', type: 'check', value: true, row: 'kind' },
-      { k: 'owner', label: 'בעל דירה', type: 'check', value: false, row: 'kind' },
-      { k: 'info', type: 'note', text: (v) => { const cur = curOf(v); return !v.apt ? '' : cur ? `גרים כאן: ${household(cur).map(pname).join(', ')} (${cur.role}). אדם חדש יצטרף אליהם.` : 'אין דיירים בדירה.'; } },
-      { k: 'em', label: 'חודש כניסה', type: 'select', options: monthOptions, value: String(now.m), show: (v) => v.apt && v.tenant && !curOf(v), row: 'entry' },
-      { k: 'ey', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => v.apt && v.tenant && !curOf(v), row: 'entry' },
-    ],
-    onSubmit: async (v) => {
-      if (!v.apt) throw new Error('בחרו דירה');
-      if (!v.tenant && !v.owner) throw new Error('בחרו אם האדם דייר, בעל דירה או שניהם');
-      const who = { apt: v.apt, first: v.first, last: v.last, phone: v.phone };
-      // the owner goes first, so a login created here is the same person the tenancy then finds
-      if (v.owner) await api('POST', '/api/owner', { ...who, email: v.email });
-      const login = v.owner ? {} : { email: v.email };
-      if (v.tenant) {
-        if (curTenancy(+v.apt)) await api('POST', '/api/household', { ...who, ...login });
-        else await api('POST', '/api/tenancy', { ...who, ...login, role: v.owner ? 'בעלים' : 'שוכר', entryMonth: v.em, entryYear: v.ey, exitMonth: '', exitYear: '' });
-      }
-    },
-  });
-}
-// one person of the table: the name and phone (and, for the super user, the bank account of the tenancy)
-function editPersonDialog(p) {
-  return Vaad.form({
-    title: `עריכת ${pname(p) || 'אדם'}`,
-    fields: [
-      { k: 'first', label: 'שם פרטי', width: 110, value: p.first, row: 'name' },
-      { k: 'last', label: 'שם משפחה', width: 120, value: p.last, row: 'name' },
-      { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: p.phone },
-      ...(ME.isSuper && p.resIndex !== undefined ? [{ k: 'account', label: 'חשבון בנק של הדיירות', width: 140, ltr: true, value: p.account, hint: 'לזיהוי תשלומים' }] : []),
-      { k: 'note', type: 'note', text: () => 'אימייל וכניסה: במסך ״אנשים״.' },
-    ],
-    onSubmit: async (v) => {
-      await api('PUT', '/api/person', { userId: p.userId, first: v.first, last: v.last, phone: v.phone });
-      if (ME.isSuper && p.resIndex !== undefined && v.account !== (p.account || '')) await api('PUT', '/api/resident', { index: p.resIndex, patch: { account: v.account } });
-    },
-  });
-}
 function editAptDialog(a) {
   return Vaad.form({
     title: `פרטי דירה ${a.apt}`,

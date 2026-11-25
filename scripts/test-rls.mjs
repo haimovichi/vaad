@@ -893,6 +893,37 @@ if (process.argv[1].endsWith('test-rls.mjs')) {
     const rmPaid = await as('super@x.com', async (q) => { await db.exec('reset role'); await db.exec("insert into payments(building_id, key, apt, y, m, amount) values (1, '30-כהן', 30, 2026, 2, 100)"); await db.exec('set local role authenticated'); return q("select public.remove_tenancy(1, '30-כהן')"); });
     report(rmPaid === 'ERR', 'super', 'a tenancy with payments cannot be removed', 'ERR', rmPaid === 'ERR' ? rmPaid : 'ok');
 
+    // a person picked by id (p_uid): no matching by name and phone, so no second account
+    const dav = "(select id from users where phone = '050-30')";
+    const byId = await as('c1@x.com', async (q) => {
+      const before = (await q('select count(*)::int n from users')).rows[0].n;
+      const dv = (await q(`select ${dav} id`)).rows[0].id;
+      const k = await q('select public.add_tenancy(1, 31, null, null, null, $1, 2026, 1, null, null, null, $2) as k', ['שוכר', dv]).then((r) => r.rows[0].k);
+      return { k, same: (await q('select count(*)::int n from users')).rows[0].n === before, uid: (await q('select user_id from residents where key = $1', [k])).rows[0].user_id === dv };
+    });
+    report(byId !== 'ERR' && byId.k === '31-כהן' && byId.same && byId.uid, 'committee1', 'add_tenancy with a person id uses that person and creates no account', '31-כהן, same person', byId === 'ERR' ? byId : JSON.stringify(byId));
+    const byIdOther = await as('c1@x.com', async (q) => { const o = (await q("select id from users where phone = '050-99'")).rows[0].id; return q('select public.add_tenancy(1, 31, null, null, null, $1, 2026, 1, null, null, null, $2)', ['שוכר', o]); });
+    report(byIdOther === 'ERR', 'committee1', 'a person tied only to another building cannot be picked by id', 'ERR', byIdOther === 'ERR' ? byIdOther : 'ok');
+    const byIdFree = await as('c1@x.com', async (q) => { await db.exec('reset role'); const o = (await db.query("insert into users(first_name, last_name, phone) values ('חופשי','ללא קשר','050-77') returning id")).rows[0].id; await db.exec('set local role authenticated'); return q('select public.add_tenancy(1, 31, null, null, null, $1, 2026, 1, null, null, null, $2) as k', ['שוכר', o]).then((r) => r.rows[0].k); });
+    report(byIdFree === '31-ללא קשר', 'committee1', 'a person tied to no building can be picked by id', '31-ללא קשר', byIdFree);
+    const byIdOwner = await as('c1@x.com', async (q) => {
+      const dv = (await q(`select ${dav} id`)).rows[0].id; const before = (await q('select count(*)::int n from users')).rows[0].n;
+      const oid = await q('select public.add_owner(1, 31, null, null, null, null, 2026, 2, $1) as id', [dv]).then((r) => r.rows[0].id);
+      return { who: (await q('select user_id from owners where id = $1', [oid])).rows[0].user_id === dv, same: (await q('select count(*)::int n from users')).rows[0].n === before };
+    });
+    report(byIdOwner !== 'ERR' && byIdOwner.who && byIdOwner.same, 'committee1', 'add_owner with a person id uses that person', 'same person', byIdOwner === 'ERR' ? byIdOwner : JSON.stringify(byIdOwner));
+    const byIdHouse = await as('c1@x.com', async (q) => {
+      await add(q, 31, 'רונית', 'שמש', '052-31', 'שוכר', 2026, 3);
+      const dv = (await q(`select ${dav} id`)).rows[0].id;
+      await q("select public.add_household_member(1, '31-שמש', null, null, null, null, $1)", [dv]);
+      return (await q("select user2_id from residents where key = '31-שמש'")).rows[0].user2_id === dv;
+    });
+    report(byIdHouse === true, 'committee1', 'add_household_member with a person id adds that person', true, byIdHouse);
+    for (const [who, email] of [['committee2', 'c2@x.com'], ['tenant8', 't8@x.com'], ['anon', null]]) {
+      const r = await as(email, (q) => q('select public.add_tenancy(1, 31, null, null, null, $1, 2026, 1, null, null, null, 1)', ['שוכר']));
+      report(r === 'ERR', who, 'add_tenancy by person id is refused', 'ERR', r === 'ERR' ? r : 'ok');
+    }
+
     const edit = await as('c1@x.com', async (q) => {
       const uid = (await q("select user_id from residents where key = '30-כהן'")).rows[0].user_id;
       await q("select public.edit_person(1, $1, 'דוד', 'כהן-לוי', '050-77')", [uid]);

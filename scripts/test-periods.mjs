@@ -127,5 +127,29 @@ const ten = (apt, y, m, extra = {}) => ({ apt, first: 'א', last: 'ב', phone: '
   check('but the committee can correct an ownership', db.owners[0].exitYear === 2026);
 }
 
+// one step: a list of steps is tried first on a copy; if one fails, none is done
+{
+  const { db, log, svc } = make();
+  await svc.call('POST', '/api/tenancy', ten(1, 2020, 3));
+  await svc.call('POST', '/api/tenancy', ten(2, 2020, 3));
+  const [a, b2] = db.residents; const before = JSON.stringify(db); log.length = 0;
+  const ok = await fails(svc.call('POST', '/api/batch', { steps: [
+    { method: 'PUT', url: '/api/tenancy', body: { key: a.key, apt: 1, role: 'שוכר', entryYear: 2020, entryMonth: 5, exitYear: '', exitMonth: '' } },
+    { method: 'PUT', url: '/api/tenancy', body: { key: b2.key, apt: 1, role: 'שוכר', entryYear: 2020, entryMonth: 3, exitYear: '', exitMonth: '' } },   // overlaps apartment 1's tenancy: refused
+  ] }), 'חופפים');
+  check('a step that fails stops the whole batch', ok);
+  check('and nothing was done: no store call, the data is as it was', log.length === 0 && JSON.stringify(db) === before);
+  await svc.call('POST', '/api/batch', { steps: [
+    { method: 'PUT', url: '/api/tenancy', body: { key: a.key, apt: 1, role: 'שוכר', entryYear: 2020, entryMonth: 5, exitYear: 2026, exitMonth: 3 } },
+    { method: 'POST', url: '/api/tenancy', body: ten(1, 2026, 4) },   // only free because the first step ended the old tenancy
+    { method: 'POST', url: '/api/owner', body: { apt: 1, first: 'א', last: 'חדש', entryYear: 2026, entryMonth: 4 } },
+  ] });
+  check('a list of steps is done in order, later steps seeing the earlier ones', a.status === 'עזב' && a.entryMonth === 5 && db.residents.length === 3 && db.owners.length === 1);
+  check('a step that is not allowed in a batch is refused', await fails(svc.call('POST', '/api/batch', { steps: [{ method: 'POST', url: '/api/payment', body: {} }] }), 'לא מותרת'));
+  check('a person picked by id needs no name', (await svc.call('POST', '/api/tenancy', ten(2, 2018, 1, { last: '', userId: 7, exitYear: 2019, exitMonth: 12 }))).key === 'k');
+  check('a person picked by id needs no name as an owner', !!(await svc.call('POST', '/api/owner', { apt: 2, userId: 7, entryYear: 2030, entryMonth: 1 })).id);
+  check('a tenancy with payments does not move to another apartment', await (async () => { db.payments.push({ key: b2.key, apt: 2, y: 2020, m: 5, amount: 1 }); return fails(svc.call('PUT', '/api/tenancy', { key: b2.key, apt: 1, role: 'שוכר', entryYear: 2010, entryMonth: 1, exitYear: 2010, exitMonth: 2 }), 'תשלומים'); })());
+}
+
 console.log(bad ? `${bad} FAILED` : 'all ok');
 process.exit(bad ? 1 : 0);
