@@ -35,35 +35,36 @@ const api = (m, u, b) => SVC.call(m, u, b);
 
 /* ---------- header ---------- */
 document.body.classList.toggle('staff', STAFF);
-$('#banner').innerHTML = '📍 ' + esc(BLD.name);
+const ic = Vaad.ic;
+$('#banner').innerHTML = ic('pin') + esc(BLD.name);
 $('#banner').href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(BLD.name);
 document.title = BLD.name;
 $('#updated').textContent = STAFF ? '' : 'עודכן ' + SNAP.updated.split('-').reverse().join('/');
 
 /* ---------- menu and routing: one flat list of screens, ← בית on every screen but home ---------- */
 const SCREENS = [
-  ['home', 'בית', '🏠', '', 'home'],
-  ['summary', 'גבייה מול הוצאות', '📊', 'כספים', 'summary', () => STAFF],
-  ['bank', 'תנועות בנק', '🏦', 'כספים', 'bank', () => STAFF],
-  ['expenses', 'הוצאות', '🧾', 'כספים', 'expenses', () => STAFF],
-  ['tariffs', 'תעריפים', '💰', 'כספים', 'tariffs', () => STAFF],
-  ['apts', 'דירות', '🏘️', 'ניהול', 'people', () => STAFF],
-  ['everyone', 'אנשים', '👥', 'ניהול', 'people', () => STAFF],
-  ['share', 'מה הדיירים רואים', '📢', 'ניהול', 'more', () => STAFF],
-  ['backup', 'גיבוי נתונים', '💾', 'ניהול', 'more', () => STAFF],
+  ['home', 'בית', 'home', '', 'home'],
+  ['summary', 'גבייה מול הוצאות', 'chart', 'כספים', 'summary', () => STAFF],
+  ['bank', 'תנועות בנק', 'bank', 'כספים', 'bank', () => STAFF],
+  ['expenses', 'הוצאות', 'receipt', 'כספים', 'expenses', () => STAFF],
+  ['tariffs', 'תעריפים', 'banknote', 'כספים', 'tariffs', () => STAFF],
+  ['apts', 'דירות', 'apartments', 'ניהול', 'people', () => STAFF],
+  ['everyone', 'אנשים', 'users', 'ניהול', 'people', () => STAFF],
+  ['share', 'מה הדיירים רואים', 'megaphone', 'ניהול', 'more', () => STAFF],
+  ['backup', 'גיבוי נתונים', 'database', 'ניהול', 'more', () => STAFF],
 ];
 const PANE = { apts: 'p-apts', everyone: 'p-everyone', share: 'm-share', backup: 'm-backup' };
 const LEGACY = { people: 'everyone', more: 'share' };   // old #people/users style addresses
 const ALIAS = { users: 'everyone' };                                          // the old roles list is now the one people table
 const screens = SCREENS.filter((x) => !x[5] || x[5]());
 const LOAD = { home: () => renderHome(), tariffs: () => loadTariffs(), expenses: () => loadExpenses(), bank: () => loadBank(), summary: () => renderSummary(), apts: () => loadApts(), everyone: () => loadPeople(), share: () => loadShare(), backup: () => showLastBackup() };
-let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">✕</button></div>'; let grp = null;
+let menuHtml = '<div class="mh"><span>תפריט</span><button id="mclose" aria-label="סגור">' + ic('x') + '</button></div>'; let grp = null;
 for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
-  menuHtml += `<a href="#${x[0]}" data-k="${x[0]}"><b>${x[2]}</b> ${x[1]}</a>`;
+  menuHtml += `<a href="#${x[0]}" data-k="${x[0]}">${ic(x[2])} ${x[1]}</a>`;
 }
 // inside a building there is no switching; only the super user leaves it, for the platform page
-menuHtml += '<h4>חשבון</h4><div class="who"><span dir="ltr">' + esc(ME.email) + '</span><br><span class="mute">' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ') + '</span></div>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '"><b>🏢</b> בניינים</a><a href="#" id="mview"><b>👁️</b> צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend"><b>↩</b> חזרה למנהל על</a>' : '') + '<a href="#" id="mout"><b>🚪</b> יציאה</a>';
+menuHtml += '<h4>חשבון</h4><div class="who"><span dir="ltr">' + esc(ME.email) + '</span><br><span class="mute">' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ') + '</span></div>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '">' + ic('building') + ' בניינים</a><a href="#" id="mview">' + ic('eye') + ' צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend">' + ic('undo') + ' חזרה למנהל על</a>' : '') + '<a href="#" id="mout">' + ic('logout') + ' יציאה</a>';
 $('#menu').innerHTML = menuHtml;
 const setMenu = (on) => document.body.classList.toggle('mopen', on);
 $('#mbtn').onclick = () => setMenu(true);
@@ -81,7 +82,7 @@ $('#menu').onclick = (e) => {
 if (ME.viewAs) {
   const bar = document.createElement('div');
   bar.style.cssText = 'position:sticky;top:0;z-index:50;background:#7c3aed;color:#fff;padding:8px 12px;font-size:14px;text-align:center';
-  bar.innerHTML = `👁️ אתם צופים כ<b>${esc(ME.viewAs.label)}</b> · פעולות נשמרות באמת · <a href="#" id="vaEnd" style="color:#fff;text-decoration:underline">חזרה למנהל על</a>`;
+  bar.innerHTML = `${ic('eye')} אתם צופים כ<b>${esc(ME.viewAs.label)}</b> · פעולות נשמרות באמת · <a href="#" id="vaEnd" style="color:#fff;text-decoration:underline">חזרה למנהל על</a>`;
   document.body.prepend(bar);
   $('#vaEnd').onclick = (e) => { e.preventDefault(); Vaad.setViewAs(null); location.href = 'app.html' + Vaad.keep; };
 }
@@ -195,7 +196,7 @@ function detailPanel(r) {
       cells.map((c) => `<tr><td>${MF[c.m - 1]}</td><td class="n">${fmt(c.due)} ₪</td><td class="n">${fmt(c.paid)} ₪</td><td>${STATUS_TXT[c.status]}</td></tr>`).join('') + '</table>' : '') +
     `<h3>תשלומים ב-${year}</h3>` + (list.length
       ? '<table class="p"><tr><th>תאריך</th><th>עבור</th><th>סכום</th><th>אמצעי</th><th></th></tr>' +
-        list.map((p) => `<tr><td>${fdate(p.date)}</td><td>${MN[p.m - 1]}</td><td class="n">${fmt(p.amount)} ₪</td><td title="${esc(p.note || '')}">${esc(p.method || '')}${p.src === 'bank' ? ' 🏦' : ''}</td><td><button class="g" data-delpay="${p.id}" aria-label="מחק">✕</button></td></tr>`).join('') +
+        list.map((p) => `<tr><td>${fdate(p.date)}</td><td>${MN[p.m - 1]}</td><td class="n">${fmt(p.amount)} ₪</td><td title="${esc(p.note || '')}">${esc(p.method || '')}${p.src === 'bank' ? ' ' + ic('bank') : ''}</td><td><button class="g" data-delpay="${p.id}" aria-label="מחק">${ic('x')}</button></td></tr>`).join('') +
         `<tr class="tot"><td colspan="2">סה״כ שולם</td><td class="n">${fmt(total)} ₪</td><td colspan="2"></td></tr></table>` +
         (list.some((p) => !p.date) ? '<div class="foot">תשלומים ישנים מוצגים בלי תאריך.</div>' : '')
       : `<div class="foot">אין תשלומים רשומים בשנת ${year}.</div>`) +
@@ -250,7 +251,7 @@ function renderChecklist() {
   box.classList.toggle('hide', !steps.length || steps.every((x) => x[1]));
   box.classList.add('checklist');
   box.innerHTML = '<h3>להתחיל להפעיל את הבניין</h3><div class="mute">שלושה צעדים ראשונים:</div><ul style="padding-inline-start:20px;margin:8px 0 0">' +
-    steps.map((x) => `<li class="${x[1] ? 'done' : ''}">${x[1] ? '✅' : '⬜'} <a href="${x[2]}">${x[0]}</a></li>`).join('') + '</ul>';
+    steps.map((x) => `<li class="${x[1] ? 'done' : ''}">${x[1] ? ic('checkCircle', 'ok') : ic('circle')} <a href="${x[2]}">${x[0]}</a></li>`).join('') + '</ul>';
 }
 async function renderHome() {
   updatePend();
@@ -290,7 +291,7 @@ async function renderHome() {
   }
   if (tab === 'debt') {
     const owe = all.filter(isOwing).sort((a, b) => (b.debt || 0) - (a.debt || 0) || a.apt - b.apt);
-    $('#list').innerHTML = owe.map((r) => card(r, true)).join('') || '<div class="empty">אין חייבים. כולם שילמו 🎉</div>';
+    $('#list').innerHTML = owe.map((r) => card(r, true)).join('') || '<div class="empty">אין חייבים. כולם שילמו</div>';
     return;
   }
   const q = $('#q').value.trim();
@@ -349,9 +350,9 @@ function parseAlloc(t) { return t.split(',').map((s) => s.trim()).filter(Boolean
 function renderImp() {
   $('#impCard').classList.toggle('hide', !IMP.items.length); $('#impActions').classList.toggle('hide', !IMP.items.length && !IMP.expenses.length);
   $('#expCard').classList.toggle('hide', !IMP.expenses.length);
-  $('#expTable').innerHTML = '<tr><th>✓</th><th>תאריך</th><th class="l">תיאור בבנק</th><th>סכום</th></tr>' +
+  $('#expTable').innerHTML = '<tr><th>' + ic('check') + '</th><th>תאריך</th><th class="l">תיאור בבנק</th><th>סכום</th></tr>' +
     IMP.expenses.map((x, i) => `<tr data-x="${i}"><td><input type="checkbox" class="xsel" checked></td><td>${fdate(x.date)}</td><td class="l">${esc(x.desc.slice(0, 90))}</td><td class="n">${fmt(x.amount)} ₪</td></tr>`).join('');
-  $('#impTable').innerHTML = '<tr><th>✓</th><th>תאריך</th><th class="l">תיאור</th><th>סכום</th><th>דירה</th><th class="l">חלוקה לחודשים</th><th>זכור</th></tr>' +
+  $('#impTable').innerHTML = '<tr><th>' + ic('check') + '</th><th>תאריך</th><th class="l">תיאור</th><th>סכום</th><th>דירה</th><th class="l">חלוקה לחודשים</th><th>זכור</th></tr>' +
     IMP.items.map((it, i) => `<tr class="${it.sure ? '' : 'warn'}" data-i="${i}">
     <td><input type="checkbox" class="sel" checked></td>
     <td>${it.date.split('-').reverse().join('/')}</td>
@@ -405,7 +406,7 @@ function renderSummary() {
   const tot = rows.reduce((t, r) => ({ collected: t.collected + r.collected, spent: t.spent + r.spent }), { collected: 0, spent: 0 });
   const bal = (n) => `<b class="${n < 0 ? 'bad' : 'good'}">${n < 0 ? '−' : ''}${fmt(Math.abs(n))} ₪</b>`;
   $('#sumTable').innerHTML = '<tr><th>שנה</th><th>נגבה</th><th>הוצא</th><th>הפרש</th></tr>' +
-    (rows.length ? rows.map((r) => `<tr><td>${r.y}${r.y > now.y ? ' <span class="mute" title="שנה עתידית: כנראה טעות הקלדה בתשלום">⚠️</span>' : ''}</td><td class="n">${fmt(r.collected)} ₪</td><td class="n">${fmt(r.spent)} ₪</td><td class="n">${bal(r.collected - r.spent)}</td></tr>`).join('') +
+    (rows.length ? rows.map((r) => `<tr><td>${r.y}${r.y > now.y ? ' <span class="mute" title="שנה עתידית: כנראה טעות הקלדה בתשלום">' + ic('alert') + '</span>' : ''}</td><td class="n">${fmt(r.collected)} ₪</td><td class="n">${fmt(r.spent)} ₪</td><td class="n">${bal(r.collected - r.spent)}</td></tr>`).join('') +
       `<tr class="tot"><td>סה״כ</td><td class="n">${fmt(tot.collected)} ₪</td><td class="n">${fmt(tot.spent)} ₪</td><td class="n">${bal(tot.collected - tot.spent)}</td></tr>`
       : '<tr><td colspan="4" class="empty">עוד אין תשלומים או הוצאות.</td></tr>');
   const n = DB.pending.length;
@@ -449,7 +450,7 @@ function renderBank() {
     if (s.kind === 'payment') return `${B_KIND.payment}: דירה ${s.apts.join(', ')} <span class="mute">(${s.months.join(', ')})</span>`;
     if (s.kind === 'pending') return `<b class="bad">${B_KIND.pending}</b>`;
     if (s.kind === 'expense') return `<a href="#expenses">${B_KIND.expense}</a>`;
-    if (s.kind === 'cancelled') return `${B_KIND.cancelled} <span class="mute">(${s.deposit ? 'ההפקדה בוטלה' : 'ביטול של הפקדה'} — לא הכנסה ולא הוצאה)</span>${s.warn ? ' <b class="bad">⚠ ההפקדה כבר נרשמה — יש לבטל את הרישום</b>' : ''}`;
+    if (s.kind === 'cancelled') return `${B_KIND.cancelled} <span class="mute">(${s.deposit ? 'ההפקדה בוטלה' : 'ביטול של הפקדה'} — לא הכנסה ולא הוצאה)</span>${s.warn ? ' <b class="bad">' + ic('alert') + ' ההפקדה כבר נרשמה — יש לבטל את הרישום</b>' : ''}`;
     if (s.kind === 'earlier' && s.expense) return `${B_KIND.earlier}: הוצאה${s.expense.category ? ' — ' + esc(s.expense.category) : ''}`;
     return s.kind === 'none' ? `<b class="bad">${B_KIND.none}</b>` : B_KIND[s.kind];
   };
@@ -527,7 +528,7 @@ function renderExpenses() {
   for (let m = 1; m <= 12; m++) {
     const ms = rows.filter((e) => e.m === m); if (!ms.length) continue;
     h += `<tr><td colspan="6" class="l"><b>${MF[m - 1]}</b> <span class="mute">· ${fmt(sum(ms))} ₪</span></td></tr>`;
-    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l">${esc(e.category)}</td><td class="l">${esc(e.desc)}${e.source === 'bank' ? ' 🏦' : ''}</td><td class="n">${fmt(e.amount)} ₪</td><td>${esc(e.method)}</td><td class="l"><input class="xc" data-id="${e.id}" value="${esc(e.comment)}" placeholder="הערה" style="width:170px"></td></tr>`).join('');
+    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l">${esc(e.category)}</td><td class="l">${esc(e.desc)}${e.source === 'bank' ? ' ' + ic('bank') : ''}</td><td class="n">${fmt(e.amount)} ₪</td><td>${esc(e.method)}</td><td class="l"><input class="xc" data-id="${e.id}" value="${esc(e.comment)}" placeholder="הערה" style="width:170px"></td></tr>`).join('');
   }
   $('#xTable').innerHTML = rows.length ? h : '<tr><td class="empty">אין הוצאות בשנה ובקטגוריה שנבחרו.</td></tr>';
 }
@@ -578,7 +579,7 @@ async function loadTariffs() {
   TARIFFS = list;
   const rows = [...list].sort((a, b) => b.year - a.year || (a.month || 0) - (b.month || 0) || (a.apt || 0) - (b.apt || 0));
   $('#tTable').innerHTML = '<tr><th>שנה</th><th class="l">מה</th><th>סכום</th><th class="l">הערה</th><th></th></tr>' +
-    (rows.length ? rows.map((t) => `<tr><td>${t.year}</td><td class="l">${tariffWhat(t)}</td><td class="n">${fmt(t.amount)} ₪</td><td class="l mute">${esc(t.note)}</td><td><button class="g" data-edtr="${t.id}" aria-label="עריכה">✎ עריכה</button> <button class="g" data-deltar="${t.id}" aria-label="מחק">✕</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">עוד לא הוגדרו תעריפים.</td></tr>');
+    (rows.length ? rows.map((t) => `<tr><td>${t.year}</td><td class="l">${tariffWhat(t)}</td><td class="n">${fmt(t.amount)} ₪</td><td class="l mute">${esc(t.note)}</td><td><button class="g" data-edtr="${t.id}" aria-label="עריכה">${ic('pencil')} עריכה</button> <button class="g" data-deltar="${t.id}" aria-label="מחק">${ic('x')}</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">עוד לא הוגדרו תעריפים.</td></tr>');
 }
 let TARIFFS = [];
 $('#tNew').onclick = async () => { if (await tariffDialog(null)) { toast('התעריף נשמר'); loadTariffs(); } };
@@ -593,7 +594,7 @@ $('#tTable').onclick = async (e) => {
 function updatePend() {
   const n = DB ? DB.pending.length : 0; const b = $('#pendBadge');
   b.classList.toggle('hide', !n);
-  b.textContent = `⏳ ${n} ${n === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} לאישור`;
+  b.innerHTML = `${ic('clock')} ${n} ${n === 1 ? 'תשלום ממתין' : 'תשלומים ממתינים'} לאישור`;
 }
 
 /* ================= PEOPLE ================= */
@@ -769,12 +770,12 @@ function renderPeople() {
   const cell = (u, k, ltr) => `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`;
   const chip = (r, u) => {
     if (r.k === 'access') {
-      const rm = r.b === BLD.id && BLD.grantable.includes(r.role) && u.email !== ME.email ? ` <a href="#" data-rm="${r.id}" title="הסר הרשאה" style="text-decoration:none">✕</a>` : '';
+      const rm = r.b === BLD.id && BLD.grantable.includes(r.role) && u.email !== ME.email ? ` <a href="#" data-rm="${r.id}" title="הסר הרשאה" style="text-decoration:none">${ic('x')}</a>` : '';
       return `<span class="chip">${r.b === BLD.id ? '' : esc(names[r.b] || 'בניין ' + r.b) + ': '}${esc(r.t)}${rm}</span>`;
     }
     return `<span class="chip${r.k === 'old' ? ' mute' : ''}">${esc(r.t)}</span>`;
   };
-  const arrow = (k) => (PSORT.k === k ? ` <span class="mute">${PSORT.dir > 0 ? '▲' : '▼'}</span>` : '');
+  const arrow = (k) => (PSORT.k === k ? ` <span class="mute">${PSORT.dir > 0 ? ic('up') : ic('down')}</span>` : '');
   const aptsOf = (list) => [...new Set(list.map((r) => r.apt))].sort((x, y) => x - y);
   // apartment numbers of one kind: the current ones, then the previous ones in grey (hover: when)
   const nums = (rs, k) => {
@@ -790,12 +791,12 @@ function renderPeople() {
       field('אימייל', cell(u, 'email', true)) + (ME.isSuper ? field('חשבונות בנק', cell(u, 'account', true)) : '') +
       (acc.length ? field('כניסה לאפליקציה', acc.map((r) => chip(r, u)).join(' ')) : u.email ? field('כניסה לאפליקציה', '<span class="mute">אין (לאימייל אין דירה או תפקיד)</span>') : '') +
       (old.length ? field('דיירים לשעבר', old.map((r) => chip(r, u)).join(' ')) : '') +
-      '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">✎ עריכה</button> ` : '') + '</div></div></td></tr>';
+      '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">${ic('pencil')} עריכה</button> ` : '') + '</div></div></td></tr>';
   };
-  $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">▲ ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l">מנהל</th></tr>` + (list.map(({ u, rs }) => {
+  $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">${ic('up')} ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l">מנהל</th></tr>` + (list.map(({ u, rs }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
     const name = (u.first + ' ' + u.last).trim();
-    return `<tr class="pr${isPast(rs) ? ' past' : ''}" data-x="${key}"><td>${open ? '▾' : '◂'}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
+    return `<tr class="pr${isPast(rs) ? ' past' : ''}" data-x="${key}"><td>${open ? ic('down') : ic('left')}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
@@ -867,10 +868,10 @@ function renderApts() {
       ...mine.filter((r) => r.status === 'עזב').map((r) => ({ t: joinNames(household(r)).join(', ') || '—', own: false, when: period(r), e: endMi(r.exitYear, r.exitMonth), ppl: household(r).map((p) => ({ ...p, role: r.role })) })),
       ...d.owners.filter((o) => o.apt === a.apt && o.exitYear).map((o) => ({ t: pname(o) || '—', own: true, when: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth), e: endMi(o.exitYear, o.exitMonth), ppl: [o] })),
     ].sort((x, y) => y.e - x.e);
-    const goneRows = gone.map((g, n) => { const k = a.apt + ':' + n; const op = AEXP.has(k); const who = esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : ''); return `<tr class="past" data-x="${k}"><td>${op ? '▾' : '◂'}</td><td>${a.apt}</td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${g.own ? '' : who}</td><td class="l">${g.own ? who : ''}</td><td></td></tr>` + (op ? `<tr class="xr past"><td></td><td colspan="7" class="l"><div class="xd">${group(g.own ? 'בעלים' : 'דיירים', g.ppl.map((p) => line(p, g.own ? g.when : [p.role, g.when].filter(Boolean).join(', '))).join(''))}</div></td></tr>` : ''); }).join('');
+    const goneRows = gone.map((g, n) => { const k = a.apt + ':' + n; const op = AEXP.has(k); const who = esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : ''); return `<tr class="past" data-x="${k}"><td>${op ? ic('down') : ic('left')}</td><td>${a.apt}</td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${g.own ? '' : who}</td><td class="l">${g.own ? who : ''}</td><td></td></tr>` + (op ? `<tr class="xr past"><td></td><td colspan="7" class="l"><div class="xd">${group(g.own ? 'בעלים' : 'דיירים', g.ppl.map((p) => line(p, g.own ? g.when : [p.role, g.when].filter(Boolean).join(', '))).join(''))}</div></td></tr>` : ''); }).join('');
     if (who === 'past' && !gone.length) continue;   // only the apartments that have previous people
     const open = AEXP.has(String(a.apt));
-    h += `<tr class="pr" data-x="${String(a.apt)}"><td>${open ? '▾' : '◂'}</td><td><b>${a.apt}</b></td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
+    h += `<tr class="pr" data-x="${String(a.apt)}"><td>${open ? ic('down') : ic('left')}</td><td><b>${a.apt}</b></td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
       (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', curP.map((p) => line(p, [p.role, p.period].filter(Boolean).join(', '))).join(''))}${group('בעלים', curO.map((o) => line(o, o.period)).join(''))}</div></td></tr>` : '') + goneRows;
   }
   $('#aptTable').innerHTML = h;

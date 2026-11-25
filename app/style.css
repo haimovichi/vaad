@@ -153,3 +153,16 @@ table.t tr.xr td{background:rgba(127,127,127,.07);text-align:start}
 table.t th{position:sticky;top:0;z-index:2;background:var(--card);box-shadow:0 1px 0 var(--line)}
 table.t th.sortable{cursor:pointer;user-select:none}
 table.t th.sortable:hover{color:var(--ink)}
+
+/* line icons (Vaad.ic): sized by the text around them, drawn in its color */
+.ic{width:1.15em;height:1.15em;vertical-align:-.22em;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.ic.ok{color:var(--paid)}
+#menu a .ic{width:20px;height:20px;color:var(--mute)}
+#menu a.on .ic{color:inherit}
+#menu .mh button .ic{width:22px;height:22px}
+#bar .mb .ic{width:22px;height:22px;vertical-align:middle}
+#bar a.home{display:inline-flex;align-items:center;gap:6px}
+#banner .ic{width:1em;height:1em;vertical-align:-.12em;margin-inline-end:4px;color:var(--mute)}
+table.t td .ic,table.t th .ic{width:1em;height:1em}
+button.g{display:inline-flex;align-items:center;gap:5px}
+.checklist li .ic{margin-inline-end:4px}.checklist .done .ic{color:var(--paid)}
