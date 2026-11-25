@@ -11,19 +11,11 @@
   <div class="head"><h2 style="margin:0"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/></svg> בניינים</h2></div>
   <div class="sub" style="margin-bottom:8px"><span id="who"></span> · <a href="#" id="logout">יציאה</a></div>
 
-  <div class="box pad">
-    <h3>הבניינים</h3>
-    <div class="mute">בחרו בניין להיכנס אליו. רק מנהל העל יוצר, משנה כתובת ומוחק.</div>
-    <div class="row"><button class="b" id="bNew">+ בניין חדש</button></div>
+  <div class="head" style="margin:8px 0">
+    <input id="bSearch" class="hide" placeholder="חיפוש בניין" style="width:170px">
+    <button class="b" id="bNew">+ בניין חדש</button>
   </div>
   <div class="box"><table class="t" id="bTable"></table></div>
-
-  <div class="box pad">
-    <h3>מנהלי בניינים</h3>
-    <div class="mute">רק מנהל העל ממנה מנהלי בניינים.</div>
-    <div class="row"><button class="b" id="mNew">+ מנהל בניינים</button></div>
-  </div>
-  <div class="box"><table class="t" id="mTable"></table></div>
 </div>
 <div id="msg"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>

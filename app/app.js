@@ -612,6 +612,11 @@ function personDialog(u) {
   const edit = !!u; const val = (k) => (edit ? u[k] || '' : '');
   const canCommittee = BLD.grantable.includes('committee');   // whoever may give the committee role
   const cm = edit && u.id ? PEOPLE.members.find((m) => m.building_id === BLD.id && m.user_id === u.id && m.role === 'committee') : null;
+  // buildings manager of this building: only the super user gives it; it needs an email (the login) and works for a person with no apartment
+  const lc = (x) => String(x || '').trim().toLowerCase();
+  const mgrOf = (email) => (email && PEOPLE.managers ? PEOPLE.managers.find((x) => lc(x.email) === lc(email)) : null);
+  const mgNow = edit ? mgrOf(u.email) : null;
+  const isMgr = !!(mgNow && mgNow.buildings.includes(BLD.id));
   // A new person can be tied to an apartment right away: as a tenant, an owner or both, each with its own start month (this month
   // unless changed). Tenants of an apartment that already has some either join them, or replace them (they then moved out the month
   // before); owners may be added next to the current ones (co-owners) or after they sold (their ownership then ends the month before).
@@ -674,6 +679,7 @@ function personDialog(u) {
       ...(edit ? [{ k: 'addHead', type: 'note', text: () => 'הוספת דירה (עבר לדירה אחרת, קנה דירה, נוספה דירה)' }] : []),
       ...tie,
       ...(ME.isSuper ? [{ k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account'), show: (v) => edit || !v.apt }] : []),
+      ...(ME.isSuper ? [{ k: 'mgr', label: 'מנהל בניינים של הבניין הזה (דורש אימייל)', type: 'check', value: isMgr, show: (v) => !!(v.email || '').trim() || isMgr }] : []),
       ...(canCommittee ? [{ k: 'committee', label: 'חבר ועד (דורש אימייל)', type: 'check', value: !!cm, show: (v) => !!(v.email || '').trim() || !!cm }] : []),
     ],
     onSubmit: async (v) => {
@@ -722,6 +728,12 @@ function personDialog(u) {
         if (steps.length) await api('POST', '/api/batch', { steps });
       }
       const em = (v.email || '').trim();
+      if (ME.isSuper) {
+        const mg = mgrOf(em);
+        const has = !!(mg && mg.buildings.includes(BLD.id));
+        if (v.mgr && em && !has) { if (!mg) await api('POST', '/api/manager', { email: em }); await api('POST', '/api/manager-building', { email: em, building_id: BLD.id }); }
+        else if (!v.mgr && has) await api('DELETE', '/api/manager-building/' + encodeURIComponent(mg.email) + '~' + BLD.id);
+      }
       if (canCommittee && v.committee && em && !cm) await api('POST', '/api/member', { email: em, role: 'committee', apt: '' });
       else if (canCommittee && !v.committee && cm) await api('DELETE', '/api/member/' + cm.id);
     },

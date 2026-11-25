@@ -217,3 +217,7 @@ table.t tr:last-child td{border-bottom:0}
   table.t.fold tr.fo .opt::before{content:attr(data-l);color:var(--mute);font-size:12px;flex:none}
   table.t.fold tr.fo .opt input.xc,table.t.fold tr.fo .opt input.al{flex:1;min-width:0;width:auto!important}
 }
+
+/* ---- buildings table: manager chips with a remove cross ---- */
+.chip .cx{display:inline-flex;vertical-align:middle;border:0;background:none;padding:0 0 0 2px;min-height:0;color:var(--mute);cursor:pointer}
+.chip .cx .ic{width:12px;height:12px}
