@@ -36,6 +36,15 @@ const api = (m, u, b) => SVC.call(m, u, b);
 /* ---------- header ---------- */
 document.body.classList.toggle('staff', STAFF);
 const ic = Vaad.ic;
+/* ---------- narrow screens: the columns marked "opt" are hidden; a tap on the row shows them under it ---------- */
+const labelFold = (t) => { const th = t.rows[0] ? [...t.rows[0].cells] : []; for (const r of t.rows) { if (r.cells.length !== th.length) continue; r.querySelectorAll('td.opt').forEach((td) => { const l = ((th[td.cellIndex] || {}).textContent || '').trim(); td.dataset.l = l ? l + ':' : ''; }); } };
+document.querySelectorAll('table.t.fold').forEach((t) => new MutationObserver(() => labelFold(t)).observe(t, { childList: true, subtree: true }));
+document.addEventListener('click', (e) => {
+  if (!matchMedia('(max-width:600px)').matches) return;
+  const tr = e.target.closest('table.fold tr');
+  if (!tr || tr.querySelector('th') || !tr.querySelector('.opt') || e.target.closest('input,select,textarea,button,a,label')) return;
+  tr.classList.toggle('fo');
+});
 $('#banner').innerHTML = ic('pin') + esc(BLD.name);
 $('#banner').href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(BLD.name);
 document.title = BLD.name;
@@ -352,15 +361,15 @@ function renderImp() {
   $('#expCard').classList.toggle('hide', !IMP.expenses.length);
   $('#expTable').innerHTML = '<tr><th>' + ic('check') + '</th><th>תאריך</th><th class="l">תיאור בבנק</th><th>סכום</th></tr>' +
     IMP.expenses.map((x, i) => `<tr data-x="${i}"><td><input type="checkbox" class="xsel" checked></td><td>${fdate(x.date)}</td><td class="l">${esc(x.desc.slice(0, 90))}</td><td class="n">${fmt(x.amount)} ₪</td></tr>`).join('');
-  $('#impTable').innerHTML = '<tr><th>' + ic('check') + '</th><th>תאריך</th><th class="l">תיאור</th><th>סכום</th><th>דירה</th><th class="l">חלוקה לחודשים</th><th>זכור</th></tr>' +
+  $('#impTable').innerHTML = '<tr><th>' + ic('check') + '</th><th class="hn">תאריך</th><th class="l">תיאור</th><th>סכום</th><th>דירה</th><th class="l opt">חלוקה לחודשים</th><th class="opt">זכור</th></tr>' +
     IMP.items.map((it, i) => `<tr class="${it.sure ? '' : 'warn'}" data-i="${i}">
     <td><input type="checkbox" class="sel" checked></td>
-    <td>${it.date.split('-').reverse().join('/')}</td>
-    <td class="l">${esc(it.desc.slice(0, 70))}<div class="mute">${esc(it.how)}${it.sure ? '' : ' — ימתין לאישור הוועד' + (it.suggest ? ` · הצעה: דירה ${it.suggest}` : '') + (it.candidates.length ? ` · דירות אפשריות: ${it.candidates.join(', ')}` : '')}</div></td>
+    <td class="hn">${it.date.split('-').reverse().join('/')}</td>
+    <td class="l">${esc(it.desc.slice(0, 70))}<div class="nw mute">${it.date.split('-').reverse().join('/')}</div><div class="mute">${esc(it.how)}${it.sure ? '' : ' — ימתין לאישור הוועד' + (it.suggest ? ` · הצעה: דירה ${it.suggest}` : '') + (it.candidates.length ? ` · דירות אפשריות: ${it.candidates.join(', ')}` : '')}</div></td>
     <td>${fmt(it.amount)}</td>
     <td><select class="apt"><option value="">—</option><option value="ignore">התעלם</option>${IMP.apartments.map((a) => `<option ${a == it.apt ? 'selected' : ''}>${a}</option>`).join('')}</select><div class="mute who2">${esc(it.tenant || '')}</div></td>
-    <td class="l"><input class="al" style="width:230px" value="${allocText(it.allocations)}"></td>
-    <td><input type="checkbox" class="learn" title="זכור את הקישור הזה לפעם הבאה"></td></tr>`).join('');
+    <td class="l opt"><input class="al" style="width:230px" value="${allocText(it.allocations)}"></td>
+    <td class="opt"><input type="checkbox" class="learn" title="זכור את הקישור הזה לפעם הבאה"></td></tr>`).join('');
 }
 $('#impTable').onchange = async (e) => {
   const tr = e.target.closest('tr'); if (!tr || !tr.dataset.i) return; const it = IMP.items[tr.dataset.i];
@@ -455,8 +464,8 @@ function renderBank() {
     return s.kind === 'none' ? `<b class="bad">${B_KIND.none}</b>` : B_KIND[s.kind];
   };
   const dm = (d) => (d ? d.split('-').reverse().join('/') : '');
-  $('#bankTable').innerHTML = '<tr><th>תאריך</th><th>יום ערך</th><th class="l">תיאור</th><th>זכות/חובה</th><th>יתרה</th><th>אסמכתא</th><th>עמלה</th><th>ערוץ</th><th class="l">מה קרה</th></tr>' +
-    (rows.length ? rows.map((r) => `<tr data-k="${esc(r.key)}" title="הועלה ${esc((r.uploadedAt || '').slice(0, 10))} ${esc(r.uploadedBy || '')}"><td>${dm(r.date)}</td><td>${dm(r.valueDate)}</td><td class="l">${esc(r.desc)}</td><td class="n"><b class="${r.amount < 0 ? 'bad' : 'good'}">${r.amount < 0 ? '−' : ''}${fmt2(Math.abs(r.amount))}</b></td><td class="n">${r.balance === null || r.balance === undefined ? '' : fmt2(r.balance)}</td><td>${esc(r.ref)}</td><td>${esc(r.fee)}</td><td>${esc(r.channel)}</td><td class="l">${what(r.status)}</td></tr>${bankAct(r) ? `<tr data-k="${esc(r.key)}"><td colspan="9" class="l actrow">${bankAct(r)}</td></tr>` : ''}`).join('')
+  $('#bankTable').innerHTML = '<tr><th>תאריך</th><th class="opt">יום ערך</th><th class="l">תיאור</th><th>זכות/חובה</th><th class="opt">יתרה</th><th class="opt">אסמכתא</th><th class="opt">עמלה</th><th class="opt">ערוץ</th><th class="l">מה קרה</th></tr>' +
+    (rows.length ? rows.map((r) => `<tr data-k="${esc(r.key)}" title="הועלה ${esc((r.uploadedAt || '').slice(0, 10))} ${esc(r.uploadedBy || '')}"><td>${dm(r.date)}</td><td class="opt">${dm(r.valueDate)}</td><td class="l">${esc(r.desc)}</td><td class="n"><b class="${r.amount < 0 ? 'bad' : 'good'}">${r.amount < 0 ? '−' : ''}${fmt2(Math.abs(r.amount))}</b></td><td class="n opt">${r.balance === null || r.balance === undefined ? '' : fmt2(r.balance)}</td><td class="opt">${esc(r.ref)}</td><td class="opt">${esc(r.fee)}</td><td class="opt">${esc(r.channel)}</td><td class="l">${what(r.status)}</td></tr>${bankAct(r) ? `<tr data-k="${esc(r.key)}"><td colspan="9" class="l actrow">${bankAct(r)}</td></tr>` : ''}`).join('')
       : `<tr><td colspan="9" class="empty">${bList.length ? 'אין שורות שמתאימות לסינון.' : 'עוד לא הועלה קובץ בנק.'}</td></tr>`);
 }
 
@@ -524,11 +533,11 @@ function renderExpenses() {
     .sort((a, b) => a.m - b.m || (a.d || 0) - (b.d || 0) || a.id - b.id);
   const sum = (l) => l.reduce((s, e) => s + e.amount, 0);
   $('#xTotal').textContent = `סה״כ ${y}: ${fmt(sum(rows))} ₪ · ${rows.length} הוצאות`;
-  let h = '<tr><th>תאריך</th><th class="l">קטגוריה</th><th class="l">תיאור</th><th>סכום</th><th>אמצעי</th><th class="l">הערה</th></tr>';
+  let h = '<tr><th>תאריך</th><th class="l opt">קטגוריה</th><th class="l">תיאור</th><th>סכום</th><th class="opt">אמצעי</th><th class="l opt">הערה</th></tr>';
   for (let m = 1; m <= 12; m++) {
     const ms = rows.filter((e) => e.m === m); if (!ms.length) continue;
     h += `<tr><td colspan="6" class="l"><b>${MF[m - 1]}</b> <span class="mute">· ${fmt(sum(ms))} ₪</span></td></tr>`;
-    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l">${esc(e.category)}</td><td class="l">${esc(e.desc)}${e.source === 'bank' ? ' ' + ic('bank') : ''}</td><td class="n">${fmt(e.amount)} ₪</td><td>${esc(e.method)}</td><td class="l"><input class="xc" data-id="${e.id}" value="${esc(e.comment)}" placeholder="הערה" style="width:170px"></td></tr>`).join('');
+    h += ms.map((e) => `<tr><td>${e.d ? `${String(e.d).padStart(2, '0')}/${String(e.m).padStart(2, '0')}` : '—'}</td><td class="l opt">${esc(e.category)}</td><td class="l">${esc(e.desc)}${e.source === 'bank' ? ' ' + ic('bank') : ''}</td><td class="n">${fmt(e.amount)} ₪</td><td class="opt">${esc(e.method)}</td><td class="l opt"><input class="xc" data-id="${e.id}" value="${esc(e.comment)}" placeholder="הערה" style="width:170px"></td></tr>`).join('');
   }
   $('#xTable').innerHTML = rows.length ? h : '<tr><td class="empty">אין הוצאות בשנה ובקטגוריה שנבחרו.</td></tr>';
 }
@@ -578,8 +587,8 @@ async function loadTariffs() {
   const list = await api('GET', '/api/tariffs');
   TARIFFS = list;
   const rows = [...list].sort((a, b) => b.year - a.year || (a.month || 0) - (b.month || 0) || (a.apt || 0) - (b.apt || 0));
-  $('#tTable').innerHTML = '<tr><th>שנה</th><th class="l">מה</th><th>סכום</th><th class="l">הערה</th><th></th></tr>' +
-    (rows.length ? rows.map((t) => `<tr><td>${t.year}</td><td class="l">${tariffWhat(t)}</td><td class="n">${fmt(t.amount)} ₪</td><td class="l mute">${esc(t.note)}</td><td><button class="g" data-edtr="${t.id}" aria-label="עריכה">${ic('pencil')} עריכה</button> <button class="g" data-deltar="${t.id}" aria-label="מחק">${ic('x')}</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">עוד לא הוגדרו תעריפים.</td></tr>');
+  $('#tTable').innerHTML = '<tr><th>שנה</th><th class="l">מה</th><th>סכום</th><th class="l opt">הערה</th><th class="opt"></th></tr>' +
+    (rows.length ? rows.map((t) => `<tr><td>${t.year}</td><td class="l">${tariffWhat(t)}</td><td class="n">${fmt(t.amount)} ₪</td><td class="l mute opt">${esc(t.note)}</td><td class="opt"><button class="g" data-edtr="${t.id}" aria-label="עריכה">${ic('pencil')} עריכה</button> <button class="g" data-deltar="${t.id}" aria-label="מחק">${ic('x')}</button></td></tr>`).join('') : '<tr><td colspan="5" class="empty">עוד לא הוגדרו תעריפים.</td></tr>');
 }
 let TARIFFS = [];
 $('#tNew').onclick = async () => { if (await tariffDialog(null)) { toast('התעריף נשמר'); loadTariffs(); } };
@@ -785,18 +794,19 @@ function renderPeople() {
   };
   const roles = (rs) => rs.filter((r) => r.k === 'super' || r.k === 'manager' || (r.k === 'access' && r.role === 'committee')).map((r) => (r.k === 'super' ? 'מנהל על' : r.k === 'manager' ? 'מנהל בניינים' : 'ועד')).join(' · ') || '<span class="mute">—</span>';
   const field = (label, html) => `<div><span class="mute">${label}:</span> ${html}</div>`;
+  const nwf = (label, html) => field(label, html).replace('<div>', '<div class="nw">');   // shown on narrow screens only, where the table hides the column
   const detail = (u, rs) => {
     const acc = rs.filter((r) => r.k === 'access'); const old = rs.filter((r) => r.k === 'old');
     return '<tr class="xr"><td></td><td colspan="5" class="l"><div class="xd">' +
-      field('אימייל', cell(u, 'email', true)) + (ME.isSuper ? field('חשבונות בנק', cell(u, 'account', true)) : '') +
+      nwf('טלפון', u.phone ? telLink(u.phone) : '<span class="mute">—</span>') + nwf('תפקיד', roles(rs)) + field('אימייל', cell(u, 'email', true)) + (ME.isSuper ? field('חשבונות בנק', cell(u, 'account', true)) : '') +
       (acc.length ? field('כניסה לאפליקציה', acc.map((r) => chip(r, u)).join(' ')) : u.email ? field('כניסה לאפליקציה', '<span class="mute">אין (לאימייל אין דירה או תפקיד)</span>') : '') +
       (old.length ? field('דיירים לשעבר', old.map((r) => chip(r, u)).join(' ')) : '') +
       '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">${ic('pencil')} עריכה</button> ` : '') + '</div></div></td></tr>';
   };
-  $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">${ic('up')} ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l">מנהל</th></tr>` + (list.map(({ u, rs }) => {
+  $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">${ic('up')} ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l opt">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l opt">מנהל</th></tr>` + (list.map(({ u, rs }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
     const name = (u.first + ' ' + u.last).trim();
-    return `<tr class="pr${isPast(rs) ? ' past' : ''}" data-x="${key}"><td>${open ? ic('down') : ic('left')}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
+    return `<tr class="pr${isPast(rs) ? ' past' : ''}" data-x="${key}"><td>${open ? ic('down') : ic('left')}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l opt">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l opt">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
@@ -850,8 +860,9 @@ function renderApts() {
   const same = (p, q) => (p.userId && q.userId ? p.userId === q.userId : pname(p) === pname(q));
   const ph = (p) => (p.phone ? ` <span class="mute" dir="ltr">${esc(p.phone)}</span>` : '');
   const line = (p, extra) => `<div>${esc(pname(p)) || '—'}${ph(p)}${extra ? ` <span class="mute">(${esc(extra)})</span>` : ''}</div>`;
+  const facts = (a) => `<div class="nw mute">קומה ${esc(floorOf(a.floor)) || '—'} · חדרים ${a.rooms ?? '—'} · ${a.sqm ?? '—'} מ״ר</div>`;   // narrow screens only: the table hides these columns
   const group = (label, lines) => `<div><span class="mute">${label}:</span><div style="padding-inline-start:12px">${lines || '<span class="mute">—</span>'}</div></div>`;
-  let h = '<tr><th></th><th>דירה</th><th>קומה</th><th>חדרים</th><th>מ״ר</th><th class="l">דיירים</th><th class="l">בעלים</th><th></th></tr>';
+  let h = '<tr><th></th><th>דירה</th><th class="opt">קומה</th><th class="opt">חדרים</th><th class="opt">מ״ר</th><th class="l">דיירים</th><th class="l">בעלים</th><th class="opt"></th></tr>';
   for (const a of d.apartments) {
     const mine = d.residents.filter((r) => r.apt === a.apt);
     const period = (r) => periodOf(r.entryYear, r.entryMonth, r.status === 'עזב' ? r.exitYear : 0, r.exitMonth);
@@ -868,11 +879,11 @@ function renderApts() {
       ...mine.filter((r) => r.status === 'עזב').map((r) => ({ t: joinNames(household(r)).join(', ') || '—', own: false, when: period(r), e: endMi(r.exitYear, r.exitMonth), ppl: household(r).map((p) => ({ ...p, role: r.role })) })),
       ...d.owners.filter((o) => o.apt === a.apt && o.exitYear).map((o) => ({ t: pname(o) || '—', own: true, when: periodOf(o.entryYear, o.entryMonth, o.exitYear, o.exitMonth), e: endMi(o.exitYear, o.exitMonth), ppl: [o] })),
     ].sort((x, y) => y.e - x.e);
-    const goneRows = gone.map((g, n) => { const k = a.apt + ':' + n; const op = AEXP.has(k); const who = esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : ''); return `<tr class="past" data-x="${k}"><td>${op ? ic('down') : ic('left')}</td><td>${a.apt}</td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${g.own ? '' : who}</td><td class="l">${g.own ? who : ''}</td><td></td></tr>` + (op ? `<tr class="xr past"><td></td><td colspan="7" class="l"><div class="xd">${group(g.own ? 'בעלים' : 'דיירים', g.ppl.map((p) => line(p, g.own ? g.when : [p.role, g.when].filter(Boolean).join(', '))).join(''))}</div></td></tr>` : ''); }).join('');
+    const goneRows = gone.map((g, n) => { const k = a.apt + ':' + n; const op = AEXP.has(k); const who = esc(g.t) + (g.when ? ` <span class="mute">(${esc(g.when)})</span>` : ''); return `<tr class="past" data-x="${k}"><td>${op ? ic('down') : ic('left')}</td><td>${a.apt}</td><td class="opt">${esc(floorOf(a.floor))}</td><td class="opt">${a.rooms ?? ''}</td><td class="opt">${a.sqm ?? ''}</td><td class="l">${g.own ? '' : who}</td><td class="l">${g.own ? who : ''}</td><td class="opt"></td></tr>` + (op ? `<tr class="xr past"><td></td><td colspan="7" class="l"><div class="xd">${facts(a)}${group(g.own ? 'בעלים' : 'דיירים', g.ppl.map((p) => line(p, g.own ? g.when : [p.role, g.when].filter(Boolean).join(', '))).join(''))}</div></td></tr>` : ''); }).join('');
     if (who === 'past' && !gone.length) continue;   // only the apartments that have previous people
     const open = AEXP.has(String(a.apt));
-    h += `<tr class="pr" data-x="${String(a.apt)}"><td>${open ? ic('down') : ic('left')}</td><td><b>${a.apt}</b></td><td>${esc(floorOf(a.floor))}</td><td>${a.rooms ?? ''}</td><td>${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
-      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${group('דיירים', curP.map((p) => line(p, [p.role, p.period].filter(Boolean).join(', '))).join(''))}${group('בעלים', curO.map((o) => line(o, o.period)).join(''))}</div></td></tr>` : '') + goneRows;
+    h += `<tr class="pr" data-x="${String(a.apt)}"><td>${open ? ic('down') : ic('left')}</td><td><b>${a.apt}</b></td><td class="opt">${esc(floorOf(a.floor))}</td><td class="opt">${a.rooms ?? ''}</td><td class="opt">${a.sqm ?? ''}</td><td class="l">${tenantCell}</td><td class="l">${ownerCell}</td><td class="opt"><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">עריכה</button></td></tr>` +
+      (open ? `<tr class="xr"><td></td><td colspan="7" class="l"><div class="xd">${facts(a)}${group('דיירים', curP.map((p) => line(p, [p.role, p.period].filter(Boolean).join(', '))).join(''))}${group('בעלים', curO.map((o) => line(o, o.period)).join(''))}<div class="nw"><button class="g" data-ea="${a.apt}" aria-label="עריכת פרטי הדירה">${ic('pencil')} עריכה</button></div></div></td></tr>` : '') + goneRows;
   }
   $('#aptTable').innerHTML = h;
 }

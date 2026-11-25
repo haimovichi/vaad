@@ -195,3 +195,25 @@ table.t tr:last-child td{border-bottom:0}
 #menu h4{letter-spacing:.04em;margin:var(--sp5) 0 var(--sp1)}
 #menu a{border-radius:var(--r);border-inline-start:3px solid transparent}
 #menu a.on{border-inline-start-color:var(--acc)}
+
+/* ---- narrow screens (phones): fewer columns, the rest one tap away ---- */
+.nw{display:none}
+@media(max-width:600px){
+  .nw{display:block}
+  button.g.nw,.nw button.g{display:inline-flex}
+  .hn{display:none}
+  table.t .opt{display:none}   /* hidden columns; apts and people show them in their expanded row, the other tables below */
+  table.t.fold,table.t.fold tbody{display:block}
+  table.t.fold tr{display:flex;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--line)}
+  table.t.fold th,table.t.fold td{flex:1 1 0;min-width:0;border-bottom:0;overflow-wrap:anywhere;padding-inline:var(--sp1)}
+  table.t.fold th.l,table.t.fold td.l{flex:3 1 0}
+  table.t.fold td[colspan]{flex:1 1 100%}
+  table.t.fold tr:has(.opt)::after{content:"";flex:0 0 7px;height:7px;margin-inline:6px;border:solid var(--mute);border-width:0 0 2px 2px;transform:rotate(-45deg)}
+  table.t.fold tr:has(th)::after{border-color:transparent}
+  table.t.fold tr:has(.opt):not(:has(th)){cursor:pointer}
+  table.t.fold tr.fo{background:rgba(127,127,127,.07)}
+  table.t.fold tr.fo::after{transform:rotate(135deg)}
+  table.t.fold tr.fo .opt{display:flex;flex:1 0 100%;gap:6px;align-items:center;justify-content:flex-start;text-align:start;padding:var(--sp1) var(--sp2)}
+  table.t.fold tr.fo .opt::before{content:attr(data-l);color:var(--mute);font-size:12px;flex:none}
+  table.t.fold tr.fo .opt input.xc,table.t.fold tr.fo .opt input.al{flex:1;min-width:0;width:auto!important}
+}

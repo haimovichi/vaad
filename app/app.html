@@ -52,7 +52,7 @@
       </div>
       <div class="mute" id="impInfo">תשלומים נרשמים רק אחרי אישור. שורות שכבר נרשמו מדולגות.</div>
     </div>
-    <div class="box hide" id="impCard"><div class="pad"><b>הפקדות חדשות מהקובץ</b> </div><table class="t" id="impTable"></table></div>
+    <div class="box hide" id="impCard"><div class="pad"><b>הפקדות חדשות מהקובץ</b> </div><table class="t fold" id="impTable"></table></div>
     <div class="box hide" id="expCard"><div class="pad"><b>חיובים בבנק שיירשמו כהוצאות</b></div><table class="t" id="expTable"></table></div>
     <div class="row hide" id="impActions"><button class="b" id="commit">שמור את הנבחרות</button></div>
     <div class="box pad" id="bankFilters">
@@ -60,7 +60,7 @@
       <div id="bBal" style="margin-bottom:4px"></div>
       <div class="mute" id="bTotal"></div>
     </div>
-    <div class="box" id="bankBox" style="overflow:auto"><table class="t" id="bankTable"></table></div>
+    <div class="box" id="bankBox" style="overflow:auto"><table class="t fold" id="bankTable"></table></div>
   </section>
 
   <!-- ===== expenses: what the building spent (read-only: they come from the workbook and the bank report) ===== -->
@@ -69,7 +69,7 @@
       <div class="mute">ההוצאות נטענות מהבנק ומהאקסל; אי אפשר להוסיף או למחוק כאן.</div>
       <div class="row"><select id="xYear" aria-label="שנה"></select><select id="xCat" aria-label="קטגוריה"></select><span class="mute" id="xTotal"></span></div>
     </div>
-    <div class="box"><table class="t" id="xTable"></table></div>
+    <div class="box"><table class="t fold" id="xTable"></table></div>
   </section>
 
   <!-- ===== tariffs: what each apartment owes per month ===== -->
@@ -78,7 +78,7 @@
       <div class="mute">תשלום חודשי = תעריף בסיס של השנה (או תעריף מיוחד לדירה) + תוספות חד-פעמיות של אותו חודש.</div>
       <div class="row"><button class="b" id="tNew">+ תעריף</button></div>
     </div>
-    <div class="box"><table class="t" id="tTable"></table></div>
+    <div class="box"><table class="t fold" id="tTable"></table></div>
   </section>
 
   <!-- ===== people ===== -->
