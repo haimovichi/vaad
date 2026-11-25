@@ -892,16 +892,7 @@ const AEXP = new Set();   // records opened to show their people: an apartment n
 const periodOf = (y1, m1, y2, m2) => { const f = (y, m) => (y ? (m ? m + '/' : '') + y : ''); const a = f(y1, m1); const b = f(y2, m2); return a || b ? (a ? 'מ-' + a : '') + (a && b ? ' ' : '') + (b ? 'עד ' + b : '') : ''; };
 const floorOf = (f) => (String(f || '').trim() === 'קק' ? '0' : f);   // the ground floor is shown as 0
 // first names of people who share a last name are joined: "גיל ולינה מיארה"
-function joinNames(people) {
-  const groups = new Map();
-  for (const p of people) { const k = (p.last || '').trim(); if (!groups.has(k)) groups.set(k, []); groups.get(k).push((p.first || '').trim()); }
-  const vav = (n) => (/^[A-Za-z]/.test(n) ? 'ו-' : 'ו') + n;
-  return [...groups].map(([last, firsts]) => {
-    const f = firsts.filter(Boolean);
-    const first = f.length > 1 ? f.slice(0, -1).join(', ') + ' ' + vav(f[f.length - 1]) : f[0] || '';
-    return (first + ' ' + last).trim();
-  }).filter(Boolean);
-}
+const joinNames = calc.joinNames;   // shared with the home view (lib/calc.js)
 async function loadApts() { APTS = await api('GET', '/api/apartments'); renderApts(); }
 function renderApts() {
   const d = APTS; const who = $('#aWho').value;
