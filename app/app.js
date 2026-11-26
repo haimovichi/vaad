@@ -695,14 +695,14 @@ function personDialog(u) {
       { k: 'last', label: 'שם משפחה', width: 120, value: val('last'), row: 'name' },
       { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: val('phone'), row: 'contact' },
       { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email'), row: 'contact' },
-      { k: 'emailNote', type: 'note', text: () => 'אימייל נותן כניסה לדירות של האדם.' },
+      ...(canCommittee ? [{ k: 'committee', label: 'חבר ועד', type: 'check', value: !!cm, show: (v) => !!(v.email || '').trim() || !!cm, row: 'roles' }] : []),
+      ...(ME.isSuper ? [{ k: 'mgr', label: 'מנהל בניין', type: 'check', value: isMgr, show: (v) => !!(v.email || '').trim() || isMgr, row: 'roles' }] : []),
+      { k: 'emailNote', type: 'note', text: () => 'אימייל נותן כניסה לדירות של האדם, ומאפשר לתת תפקיד.' },
       ...(recs.length ? [{ k: 'recsHead', type: 'note', text: () => 'הדירות של האדם (תיקון בתוך הרשומה)' }] : []),
       ...recFields,
       ...(edit ? [{ k: 'addHead', type: 'note', text: () => 'הוספת דירה (עבר לדירה אחרת, קנה דירה, נוספה דירה)' }] : []),
       ...tie,
       ...(ME.isSuper ? [{ k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account'), show: (v) => edit || !v.apt }] : []),
-      ...(ME.isSuper ? [{ k: 'mgr', label: 'מנהל בניינים של הבניין הזה (דורש אימייל)', type: 'check', value: isMgr, show: (v) => !!(v.email || '').trim() || isMgr }] : []),
-      ...(canCommittee ? [{ k: 'committee', label: 'חבר ועד (דורש אימייל)', type: 'check', value: !!cm, show: (v) => !!(v.email || '').trim() || !!cm }] : []),
     ],
     onSubmit: async (v) => {
       const addTies = async (emit) => {
@@ -788,7 +788,7 @@ function renderPeople() {
   const chipsFor = (u) => {
     const rs = [...(here[u.id] || []), ...(access[u.id] || [])];
     const mg = u.email ? PEOPLE.managers.find((x) => x.email === u.email) : null;
-    if (mg) { if (!mg.buildings.length) rs.push({ b: null, t: 'מנהל בניינים (עדיין בלי בניין)', k: 'manager' }); for (const b of mg.buildings.filter((x) => x === BLD.id)) rs.push({ b, t: 'מנהל בניינים', k: 'manager' }); }
+    if (mg) { if (!mg.buildings.length) rs.push({ b: null, t: 'מנהל בניין (עדיין בלי בניין)', k: 'manager' }); for (const b of mg.buildings.filter((x) => x === BLD.id)) rs.push({ b, t: 'מנהל בניין', k: 'manager' }); }
     if (ME.isSuper && u.email && u.email === ME.email) rs.push({ b: null, t: 'מנהל על · כל הבניינים', k: 'super' });
     return rs;
   };
@@ -829,7 +829,7 @@ function renderPeople() {
     const parts = [...cur.map(String), ...aptsOf(pr).filter((a) => !cur.includes(a)).map((a) => { const when = pr.filter((r) => r.apt === a).map((r) => r.period).filter(Boolean).join(' · '); return `<span class="mute"${when ? ` title="${esc(when)}"` : ''}>${a}</span>`; })];
     return parts.length ? parts.join(', ') : '<span class="mute">—</span>';
   };
-  const roles = (rs) => rs.filter((r) => r.k === 'super' || r.k === 'manager' || (r.k === 'access' && r.role === 'committee')).map((r) => (r.k === 'super' ? 'מנהל על' : r.k === 'manager' ? 'מנהל בניינים' : 'ועד')).join(' · ') || '<span class="mute">—</span>';
+  const roles = (rs) => rs.filter((r) => r.k === 'super' || r.k === 'manager' || (r.k === 'access' && r.role === 'committee')).map((r) => (r.k === 'super' ? 'מנהל על' : r.k === 'manager' ? 'מנהל בניין' : 'ועד')).join(' · ') || '<span class="mute">—</span>';
   const field = (label, html) => `<div><span class="mute">${label}:</span> ${html}</div>`;
   const nwf = (label, html) => field(label, html).replace('<div>', '<div class="nw">');   // shown on narrow screens only, where the table hides the column
   const detail = (u, rs) => {

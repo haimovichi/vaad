@@ -125,7 +125,7 @@ $('#bSearch').oninput = (e) => { QUERY = e.target.value; renderBuildings(); };
 async function addManagerDialog(id) {
   const m = ME.memberships.find((x) => String(x.id) === String(id)); if (!m) return false;
   const free = MGRS.filter((x) => !x.buildings.includes(m.id));
-  if (!free.length) { toast('אין מנהל פנוי. הוסיפו אדם עם אימייל באנשים (בכל בניין) וסמנו ״מנהל בניינים״.'); return false; }
+  if (!free.length) { toast('אין מנהל פנוי. הוסיפו אדם עם אימייל באנשים (בכל בניין) וסמנו ״מנהל בניין״.'); return false; }
   return Vaad.form({
     title: 'מנהל לבניין ' + m.name,
     ok: 'הוסף מנהל',
@@ -143,7 +143,7 @@ $('#bTable').onclick = async (e) => {
     if (d.em) {
       const email = decodeURIComponent(d.em);
       if (d.rm) { if (await Vaad.ask({ ok: 'הסר', text: `להסיר את ${email} מניהול הבניין? האדם נשאר, בלי הבניין הזה.` })) { await api('DELETE', '/api/manager-building/' + enc(email) + '~' + d.rm); await loadBuildings(); } }
-      else if (await Vaad.ask({ ok: 'הסר', text: `להסיר את ${email} כמנהל בניינים? האדם נשאר באנשים.` })) { await api('DELETE', '/api/manager/' + d.em); await loadBuildings(); }
+      else if (await Vaad.ask({ ok: 'הסר', text: `להסיר את ${email} כמנהל בניין? האדם נשאר באנשים.` })) { await api('DELETE', '/api/manager/' + d.em); await loadBuildings(); }
       return;
     }
   } catch (err) { toast(err.message); return; }
