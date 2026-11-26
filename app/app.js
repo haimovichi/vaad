@@ -72,16 +72,38 @@ for (const x of screens) {
   if (x[3] !== grp) { grp = x[3]; if (grp) menuHtml += `<h4>${grp}</h4>`; }
   menuHtml += `<a href="#${x[0]}" data-k="${x[0]}">${ic(x[2])} ${x[1]}</a>`;
 }
-// inside a building there is no switching; only the super user leaves it, for the platform page
-menuHtml += '<h4>חשבון</h4><div class="who"><span dir="ltr">' + esc(ME.email) + '</span><br><span class="mute">' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ') + '</span></div>' + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '">' + ic('building') + ' בניינים</a><a href="#" id="mview">' + ic('eye') + ' צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend">' + ic('undo') + ' חזרה למנהל על</a>' : '') + '<a href="#" id="mout">' + ic('logout') + ' יציאה</a>';
+// whoever belongs to several buildings switches between them from the menu (not while viewing as another role); the super user also has the platform page
+const canSwitch = ME.memberships.length > 1 && !ME.viewAs;
+menuHtml += '<h4>חשבון</h4><div class="who"><span dir="ltr">' + esc(ME.email) + '</span><br><span class="mute">' + BLD.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ') + '</span></div>' + (canSwitch ? '<a href="#" id="mswitch">' + ic('building') + ' החלף בניין</a>' : '') + (ME.isSuper ? '<a href="platform.html' + Vaad.keep + '">' + ic('building') + ' בניינים</a><a href="#" id="mview">' + ic('eye') + ' צפייה כתפקיד אחר</a>' : '') + (ME.viewAs ? '<a href="#" id="mviewend">' + ic('undo') + ' חזרה למנהל על</a>' : '') + '<a href="#" id="mout">' + ic('logout') + ' יציאה</a>';
 $('#menu').innerHTML = menuHtml;
 const setMenu = (on) => document.body.classList.toggle('mopen', on);
 $('#mbtn').onclick = () => setMenu(true);
+// the list of the person's buildings: a tap opens that building on its home screen (a full load, so nothing of this one stays)
+function openSwitch() {
+  const bg = document.createElement('div'); bg.className = 'dlg-bg';
+  const many = ME.memberships.length > 8;
+  const list = [...ME.memberships].sort((a, b) => a.name.localeCompare(b.name, 'he'));
+  bg.innerHTML = '<div class="dlg" role="dialog" aria-label="החלף בניין"><p><b>החלף בניין</b></p>' + (many ? '<input class="swq" placeholder="חיפוש בניין">' : '') +
+    '<div class="swl">' + list.map((m) => `<button class="g${m.id === BLD.id ? ' cur' : ''}" data-b="${m.id}" data-n="${esc(m.name)}"${m.id === BLD.id ? ' aria-current="true"' : ''}><span>${esc(m.name)}</span><span class="mute">${[m.id === BLD.id ? 'הבניין הנוכחי' : '', ME.isSuper ? '' : m.roles.map((r) => Vaad.ROLE_LABEL[r]).join(', ')].filter(Boolean).join(' · ')}</span></button>`).join('') + '</div>' +
+    '<div class="acts"><button class="g" data-c>ביטול</button></div></div>';
+  const close = () => { bg.remove(); document.removeEventListener('keydown', key); };
+  const key = (e) => { if (e.key === 'Escape') close(); };
+  bg.onclick = (e) => {
+    if (e.target === bg || e.target.closest('[data-c]')) return close();
+    const b = e.target.closest('[data-b]'); if (!b) return;
+    if (+b.dataset.b === BLD.id) return close();
+    Vaad.choose(b.dataset.b); location.href = 'app.html' + Vaad.keep;
+  };
+  bg.oninput = (e) => { const q = e.target.value.trim(); bg.querySelectorAll('[data-b]').forEach((b) => b.classList.toggle('hide', !!q && !b.dataset.n.includes(q))); };
+  document.addEventListener('keydown', key);
+  document.body.appendChild(bg);
+}
 $('#menu').onclick = (e) => {
   const a = e.target.closest('a'); const c = e.target.closest('#mclose');
   if (c) return setMenu(false);
   if (!a) return;
   if (a.id === 'mout') { e.preventDefault(); return Vaad.signOut(); }
+  if (a.id === 'mswitch') { e.preventDefault(); setMenu(false); return openSwitch(); }
   if (a.id === 'mview') { e.preventDefault(); setMenu(false); return openViewAs(); }
   if (a.id === 'mviewend') { e.preventDefault(); Vaad.setViewAs(null); return (location.href = 'app.html' + Vaad.keep); }
   setMenu(false);
