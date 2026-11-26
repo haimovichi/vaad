@@ -151,5 +151,14 @@ const ten = (apt, y, m, extra = {}) => ({ apt, first: 'א', last: 'ב', phone: '
   check('a tenancy with payments does not move to another apartment', await (async () => { db.payments.push({ key: b2.key, apt: 2, y: 2020, m: 5, amount: 1 }); return fails(svc.call('PUT', '/api/tenancy', { key: b2.key, apt: 1, role: 'שוכר', entryYear: 2010, entryMonth: 1, exitYear: 2010, exitMonth: 2 }), 'תשלומים'); })());
 }
 
+{ // the buildings page status
+  const board = { showDebt: true, updated: '2026-11-11', now: { y: 2026, m: 11 }, grids: { 2025: [{ apt: 1, debt: 50 }], 2026: [{ apt: 1, debt: 50 }, { apt: 2, debt: 0 }, { apt: 3, debt: 10 }] } };
+  const store = { buildingStatus: async (ids) => ids.map((id) => ({ id, apts: 3, pending: 2, board: id === 1 ? board : id === 2 ? { ...board, showDebt: false } : null })) };
+  const r = await createService({}, store, { isSuper: true }).call('GET', '/api/building/status?ids=1,2,3');
+  check('building status counts each apartment in debt once', r[0].debt === 2 && r[0].pending === 2 && r[0].apts === 3 && r[0].saved === '2026-11-11');
+  check('building status has no debt when the board hides it or does not exist', r[1].debt === null && r[2].debt === null && r[2].saved === null);
+  check('only the super user reads the building status', await fails(createService({}, store, { manage: true }).call('GET', '/api/building/status?ids=1')));
+}
+
 console.log(bad ? `${bad} FAILED` : 'all ok');
 process.exit(bad ? 1 : 0);

@@ -508,6 +508,14 @@ window.Vaad = (function () {
       async createBuilding(name, acct, apts, bank) { return ok(await c.rpc('create_building', { nm: name, acct: acct || null, apts: apts || null, bank: bank || null })); },
       async renameBuilding(id, name) { ok(await c.from('buildings').update({ name }).eq('id', id)); },
       async buildingCounts(id) { return ok(await c.rpc('building_counts', { b: id })); },
+      // read only; counted per building, so no answer is cut at the 1000-row limit
+      async buildingStatus(ids) {
+        const count = async (table, id) => { const { count: n, error } = await c.from(table).select('*', { count: 'exact', head: true }).eq('building_id', id); if (error) throw new Error(error.message); return n || 0; };
+        return Promise.all(ids.map(async (id) => {
+          const [apts, pending, snap] = await Promise.all([count('apartments', id), count('pending_payments', id), c.from('snapshot').select('data').eq('building_id', id).maybeSingle()]);
+          return { id, apts, pending, board: (ok(snap) || {}).data || null };
+        }));
+      },
       async deleteBuilding(id, confirm) { ok(await c.rpc('delete_building', { b: id, confirm: confirm || null })); },
     };
   }
@@ -684,6 +692,10 @@ window.Vaad = (function () {
       async removeManagerBuilding(e, id) { managers = managers.map((x) => (x.email === e ? { ...x, buildings: x.buildings.filter((b) => b !== id) } : x)); },
       async renameBuilding(id, name) { buildings = buildings.map((b) => (b.id === id ? { ...b, name } : b)); },
       async buildingCounts() { return { payments: 0, pending: 0, expenses: 0, bank: 0 }; },
+      async buildingStatus(ids) {
+        const d = await this.load(); const board = snap || window.VaadLib.snapshot.snapshot(d);
+        return ids.map((id) => ({ id, apts: d.apartments.length, pending: (d.pending || []).length, board }));
+      },
       async deleteBuilding(id) { buildings = buildings.filter((b) => b.id !== id); },
       async createBuilding(name) { const id = Math.max(...buildings.map((b) => b.id)) + 1; buildings = buildings.concat({ id, name }); return id; },
     };

@@ -19,30 +19,52 @@ $('#logout').onclick = (e) => { e.preventDefault(); Vaad.signOut(); };
 let MGRS = [];            // the buildings managers: { email, buildings: [id] }
 const OPEN = new Set();    // buildings (by id) and 'none' (managers with no building) shown opened
 let QUERY = '';
+let STAT = {};             // building id -> { apts, pending, debt, saved, month }
+const today = new Date();
+// the tags of one building: what waits (counted now) and the debt of the saved board, grey with its month when it is from an earlier month
+function tags(st) {
+  if (!st) return '';
+  const old = !!st.month && (st.month.y !== today.getFullYear() || st.month.m !== today.getMonth() + 1);
+  const when = old ? ` (${st.month.m}/${st.month.y})` : '';
+  const t = [];
+  if (st.pending) t.push(`<span class="badge b-wait">${st.pending} ממתינים</span>`);
+  if (st.debt) t.push(`<span class="badge ${old ? 'b-old' : 'b-bad'}">${st.debt} בחוב${when}</span>`);
+  else if (st.debt === 0 && old) t.push(`<span class="badge b-old">אין חוב${when}</span>`);
+  else if (st.debt === 0 && !st.pending) t.push('<span class="badge b-ok">הכול מעודכן</span>');
+  return t.join(' ');
+}
+// buildings with payments waiting come first, then buildings with debt, then the rest by name
+const rank = (m) => { const st = STAT[m.id] || {}; return st.pending ? 0 : st.debt ? 1 : 2; };
+const day = (d) => d.split('-').reverse().join('/');
 const enc = encodeURIComponent;
 function renderBuildings() {
   const q = QUERY.trim();
-  const list = ME.memberships.filter((m) => !q || m.name.includes(q));
+  const list = ME.memberships.filter((m) => !q || m.name.includes(q)).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'he'));
   const mine = (id) => MGRS.filter((x) => x.buildings.includes(id));
   const chip = (x, id) => `<span class="chip">${esc(x.email)} <button class="cx" data-rm="${id}" data-em="${enc(x.email)}" aria-label="הסר מנהל">${ic('x')}</button></span>`;
-  let h = '<tr><th></th><th class="l">בניין</th><th class="l">מנהלים</th><th></th></tr>';
+  let h = '<tr><th></th><th class="l">בניין</th><th class="hn">דירות</th><th class="l">דורש טיפול</th><th class="l hn">מנהלים</th><th></th></tr>';
   for (const m of list) {
-    const ms = mine(m.id); const open = OPEN.has(String(m.id));
-    h += `<tr class="pr" data-x="${m.id}"><td>${open ? ic('down') : ic('left')}</td><td class="l"><b>${esc(m.name)}</b></td><td class="l mute">${ms.length ? ms.length + (ms.length === 1 ? ' מנהל' : ' מנהלים') : 'אין מנהל'}</td><td><button class="b" data-open="${m.id}">כניסה</button></td></tr>`;
-    if (open) h += `<tr class="xr"><td></td><td colspan="3" class="l"><div class="xd"><div>${ms.map((x) => chip(x, m.id)).join('') || '<span class="mute">אין מנהל לבניין</span>'} <button class="g" data-addm="${m.id}">+ הוסף מנהל</button></div><div><button class="g" data-edit="${m.id}">שנה כתובת</button> <button class="g" data-del="${m.id}">מחק בניין</button></div></div></td></tr>`;
+    const ms = mine(m.id); const open = OPEN.has(String(m.id)); const st = STAT[m.id];
+    const count = ms.length ? ms.length + (ms.length === 1 ? ' מנהל' : ' מנהלים') : 'אין מנהל';
+    h += `<tr class="pr" data-x="${m.id}"><td>${open ? ic('down') : ic('left')}</td><td class="l"><b>${esc(m.name)}</b></td><td class="hn">${st ? st.apts : ''}</td><td class="l">${tags(st)}</td><td class="l mute hn">${count}</td><td><button class="b" data-open="${m.id}">כניסה</button></td></tr>`;
+    if (open) h += `<tr class="xr"><td></td><td colspan="5" class="l"><div class="xd">${st ? `<div class="nw mute">${st.apts} דירות</div>` : ''}<div class="mute">${st && st.saved ? 'נתוני החוב נשמרו ב-' + day(st.saved) : 'אין עדיין נתוני חוב'}${st && st.saved && st.debt === null ? ' · הצגת החוב כבויה בבניין' : ''}</div><div>${ms.map((x) => chip(x, m.id)).join('') || '<span class="mute">אין מנהל לבניין</span>'} <button class="g" data-addm="${m.id}">+ הוסף מנהל</button></div><div><button class="g" data-edit="${m.id}">שנה כתובת</button> <button class="g" data-del="${m.id}">מחק בניין</button></div></div></td></tr>`;
   }
   const none = MGRS.filter((x) => !x.buildings.length);
   if (none.length && !q) {
     const open = OPEN.has('none');
-    h += `<tr class="pr" data-x="none"><td>${open ? ic('down') : ic('left')}</td><td class="l mute">ללא בניין</td><td class="l mute">${none.length} ${none.length === 1 ? 'מנהל' : 'מנהלים'}</td><td></td></tr>`;
-    if (open) h += `<tr class="xr"><td></td><td colspan="3" class="l"><div class="xd"><div>${none.map((x) => chip(x, '')).join('')}</div><div class="mute">מנהל בלי בניין נוסף מתוך הבניין, בכפתור ״הוסף מנהל״.</div></div></td></tr>`;
+    h += `<tr class="pr" data-x="none"><td>${open ? ic('down') : ic('left')}</td><td class="l mute">ללא בניין</td><td class="hn"></td><td></td><td class="l mute hn">${none.length} ${none.length === 1 ? 'מנהל' : 'מנהלים'}</td><td></td></tr>`;
+    if (open) h += `<tr class="xr"><td></td><td colspan="5" class="l"><div class="xd"><div>${none.map((x) => chip(x, '')).join('')}</div><div class="mute">מנהל בלי בניין נוסף מתוך הבניין, בכפתור ״הוסף מנהל״.</div></div></td></tr>`;
   }
-  if (!ME.memberships.length) h += '<tr><td colspan="4" class="empty">עוד אין בניינים. צרו את הראשון בכפתור ״בניין חדש״.</td></tr>';
-  else if (!list.length && !none.length) h += '<tr><td colspan="4" class="empty">לא נמצא בניין.</td></tr>';
+  if (!ME.memberships.length) h += '<tr><td colspan="6" class="empty">עוד אין בניינים. צרו את הראשון בכפתור ״בניין חדש״.</td></tr>';
+  else if (!list.length && !none.length) h += '<tr><td colspan="6" class="empty">לא נמצא בניין.</td></tr>';
   $('#bTable').innerHTML = h;
   $('#bSearch').classList.toggle('hide', ME.memberships.length <= 8);
 }
-async function loadBuildings() { MGRS = await api('GET', '/api/managers'); renderBuildings(); }
+async function loadBuildings() {
+  MGRS = await api('GET', '/api/managers'); renderBuildings();
+  // the tags come after the table, which works without them
+  try { STAT = Object.fromEntries((await api('GET', '/api/building/status?ids=' + ME.memberships.map((m) => m.id).join(','))).map((x) => [x.id, x])); renderBuildings(); } catch (err) { toast(err.message); }
+}
 const BANKS = [['12', 'הפועלים'], ['10', 'לאומי'], ['11', 'דיסקונט'], ['20', 'מזרחי טפחות'], ['31', 'הבינלאומי'], ['14', 'אוצר החייל'], ['13', 'איגוד'], ['17', 'מרכנתיל'], ['4', 'יהב'], ['9', 'הדואר'], ['46', 'מסד'], ['52', 'פועלי אגודת ישראל'], ['54', 'ירושלים']];
 // the address picker inside a dialog: the dialog gets the chosen address (or null) as the value of this field
 const addressField = (k) => ({ k, type: 'custom', row: 'address', build: (box, notify) => { let addr = null; Vaad.addressPicker(box, (a) => { addr = a; notify(); }); return () => addr; } });
