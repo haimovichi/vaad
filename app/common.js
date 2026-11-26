@@ -452,7 +452,17 @@ window.Vaad = (function () {
           if (data.length < 1000) break;
         }
         await refreshUsers();
-        return { members: members.map(memberOut), managers: await this.listManagers(), users: [...users.values()].map((u) => userOut(u, accts)) };
+        // everyone who owns or rents in any building, so a person with no tie anywhere can be told apart
+        const linked = new Set();
+        for (const [table, cols] of [['owners', 'user_id'], ['residents', 'user_id, user2_id']]) {
+          for (let from = 0; ; from += 1000) {
+            const { data, error } = await c.from(table).select(cols).order('id').range(from, from + 999);
+            if (error) throw new Error(error.message);
+            data.forEach((r) => Object.values(r).forEach((id) => { if (id) linked.add(id); }));
+            if (data.length < 1000) break;
+          }
+        }
+        return { members: members.map(memberOut), managers: await this.listManagers(), users: [...users.values()].map((u) => userOut(u, accts)), linked: [...linked] };
       },
       async addUser(u) { // the super user adds a person (with or without an email)
         const row = {}; for (const [k, col] of Object.entries(USER_COLS)) row[col] = String(u[k] || '').trim() || null;

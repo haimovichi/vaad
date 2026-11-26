@@ -792,8 +792,11 @@ function renderPeople() {
     if (ME.isSuper && u.email && u.email === ME.email) rs.push({ b: null, t: 'מנהל על · כל הבניינים', k: 'super' });
     return rs;
   };
+  // no apartment and no role in any building: only the super user sees these, so they can be edited and tied
+  const tied = new Set([...(PEOPLE.linked || []), ...PEOPLE.members.map((m) => m.user_id)]);
+  const isLoose = (u) => !!(ME.isSuper && u.id && u.email !== ME.email && !here[u.id] && !tied.has(u.id) && !PEOPLE.managers.some((x) => x.email === u.email && x.buildings.length));
   const byEmail = {};
-  const people = (PEOPLE.users || []).map((u) => { if (u.email) byEmail[u.email] = u; return { u, rs: chipsFor(u) }; });
+  const people = (PEOPLE.users || []).map((u) => { if (u.email) byEmail[u.email] = u; return { u, rs: chipsFor(u), loose: isLoose(u) }; });
   // logins that have no users row yet (a manager added by email, the super user): shown read-only
   for (const x of PEOPLE.managers) if (!byEmail[x.email]) { const u = { id: null, email: x.email, first: '', last: '', phone: '', account: '' }; byEmail[x.email] = u; people.push({ u, rs: chipsFor(u) }); }
   if (ME.isSuper && !byEmail[ME.email]) people.push({ u: { id: null, email: ME.email, first: '', last: '', phone: '', account: '' }, rs: [{ b: null, t: 'מנהל על · כל הבניינים', k: 'super' }] });
@@ -807,7 +810,7 @@ function renderPeople() {
   const unnamed = (p) => (p.u.first || p.u.last ? 0 : 1);   // people with no name go last
   const cmp = (a, c) => (sortBy === 'first' ? he(a.u.first + ' ' + a.u.last, c.u.first + ' ' + c.u.last) : sortBy === 'tenant' || sortBy === 'owner' ? ((x, y) => (x === y ? 0 : x === Infinity ? 1 : y === Infinity ? -1 : (x - y) * dir))(lowApt(a, sortBy), lowApt(c, sortBy)) : 0);
   const isPast = (rs) => rs.length > 0 && rs.every((r) => r.k === 'old' || (r.k === 'owner' && r.past));
-  const list = people.filter(({ u, rs }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (!fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (rs.length || !fb) && (who === 'all' || (who === 'past') === isPast(rs)))
+  const list = people.filter(({ u, rs, loose }) => (!q || [u.first, u.last, u.email, u.phone].join(' ').toLowerCase().includes(q)) && (loose || !fb || rs.some((r) => String(r.b) === fb || r.k === 'super')) && (loose || rs.length || !fb) && (who === 'all' || (who === 'past') === isPast(rs)))
     .sort((a, c) => (a.u.email === ME.email ? -1 : c.u.email === ME.email ? 1 : 0) || (sortBy === 'tenant' || sortBy === 'owner' ? 0 : unnamed(a) - unnamed(c)) || cmp(a, c) || byName(a, c) || (a.u.email || '').localeCompare(c.u.email || ''));
   $('#pCount').textContent = `${list.length} אנשים`;
   const cell = (u, k, ltr) => `<span${ltr ? ' dir="ltr"' : ''}>${esc(u[k]) || '<span class="mute">—</span>'}</span>`;
@@ -837,10 +840,10 @@ function renderPeople() {
       (old.length ? field('דיירים לשעבר', old.map((r) => chip(r, u)).join(' ')) : '') +
       '<div>' + (ME.isSuper && u.id ? `<button class="g" data-pe="${u.id}">${ic('pencil')} עריכה</button> ` : '') + '</div></div></td></tr>';
   };
-  $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">${ic('up')} ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l opt">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l opt">מנהל</th></tr>` + (list.map(({ u, rs }) => {
+  $('#pTable').innerHTML = `<tr><th></th><th class="l sortable" data-s="name">שם${PSORT.k === 'last' || PSORT.k === 'first' ? ` <span class="mute">${ic('up')} ${PSORT.k === 'last' ? 'משפחה' : 'פרטי'}</span>` : ''}</th><th class="l opt">טלפון</th><th class="l sortable" data-s="tenant">דייר${arrow('tenant')}</th><th class="l sortable" data-s="owner">בעלים${arrow('owner')}</th><th class="l opt">מנהל</th></tr>` + (list.map(({ u, rs, loose }) => {
     const key = esc(String(u.id || u.email)); const open = PEXP.has(String(u.id || u.email));
     const name = (u.first + ' ' + u.last).trim();
-    return `<tr class="pr${isPast(rs) ? ' past' : ''}" data-x="${key}"><td>${open ? ic('down') : ic('left')}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}</td><td class="l opt">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l opt">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
+    return `<tr class="pr${isPast(rs) ? ' past' : ''}" data-x="${key}"><td>${open ? ic('down') : ic('left')}</td><td class="l">${name ? esc(name) : u.email ? '<span dir="ltr">' + esc(u.email) + '</span>' : '<span class="mute">(ללא שם)</span>'}${u.email === ME.email ? ' <span class="mute">(אתם)</span>' : ''}${loose ? ' <span class="badge b-old">ללא שיוך</span>' : ''}</td><td class="l opt">${cell(u, 'phone', true)}</td><td class="l">${nums(rs, 'tenant')}</td><td class="l">${nums(rs, 'owner')}</td><td class="l opt">${roles(rs)}</td></tr>` + (open ? detail(u, rs) : '');
   }).join('') || '<tr><td class="mute">אין אנשים להצגה</td></tr>');
 }
 $('#pQ').oninput = () => PEOPLE && renderPeople();
