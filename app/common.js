@@ -114,6 +114,7 @@ window.Vaad = (function () {
   }
   // In-page form dialog for adding or editing one record. Vaad.form({ title, fields, ok, onSubmit }) -> true after a save, null when cancelled.
   // fields: { k, label, type: text | tel | email | number | select | check | note | custom, digits: n (digits only, at most n), build(box, notify) -> getter (custom), value, options: [{ v, t }], width, ltr, show(vals), lock(vals) + fill(vals) (disabled, showing fill), text(vals) (a note), hint }
+  // also: { type: 'section', label } (a heading); { k, type: 'fold', label (its button), text(vals) (the line beside it), once (the button goes away when pressed) } with fold: k on the fields it opens
   // onSubmit(vals) may throw: the message appears inside the dialog and the dialog stays open, so nothing typed is lost.
   function form(o) {
     return new Promise((res) => {
@@ -122,16 +123,21 @@ window.Vaad = (function () {
       const h = document.createElement('h3'); h.textContent = o.title || ''; d.appendChild(h);
       const body = document.createElement('div'); body.className = 'fm'; d.appendChild(body);
       const els = {};   // key -> { box, input | get }
-      const customs = []; const rowEls = []; let grp = null;
+      const customs = []; const rowEls = []; let grp = null; const open = new Set();
       for (const f of o.fields) {
-        let box = document.createElement(f.type === 'note' || f.type === 'custom' ? 'div' : 'label'); let input = null;
+        let box = document.createElement(['note', 'custom', 'section', 'fold'].includes(f.type) ? 'div' : 'label'); let input = null;
         if (f.type === 'note') { box.className = 'mute fm-note'; }
         else if (f.type === 'custom') { box.style.display = 'contents'; }
+        else if (f.type === 'section') { box.className = 'fm-sec'; box.textContent = f.label; }
+        else if (f.type === 'fold') {
+          box.className = 'fm-fold'; const t = document.createElement('span'); const b = document.createElement('button'); b.type = 'button'; b.className = 'g'; b.textContent = f.label; box.append(t, b);
+          b.onclick = () => { if (!open.delete(f.k)) open.add(f.k); b.textContent = open.has(f.k) ? 'סגור' : f.label; b.setAttribute('aria-expanded', open.has(f.k)); sync(); };
+        }
         else if (f.type === 'check') {
           box.className = 'fm-check'; input = document.createElement('input'); input.type = 'checkbox'; input.checked = !!f.value;
           box.append(input, ' ' + f.label);
         } else {
-          box.className = 'f'; const sp = document.createElement('span'); sp.textContent = f.label; box.appendChild(sp);
+          box.className = f.wide ? 'f wide' : 'f'; const sp = document.createElement('span'); sp.textContent = f.label; box.appendChild(sp);
           if (f.type === 'select') { input = document.createElement('select'); for (const op of f.options || []) { const e = document.createElement('option'); e.value = op.v; e.textContent = op.t; input.appendChild(e); } }
           else { input = document.createElement('input'); input.type = f.type || 'text'; if (f.type === 'tel') input.inputMode = 'tel'; }
           if (f.value != null || f.type !== 'select') input.value = f.value == null ? '' : f.value;   // a select without a default keeps its first option
@@ -149,18 +155,20 @@ window.Vaad = (function () {
         if (f.digits && input) { input.inputMode = 'numeric'; input.addEventListener('input', () => { input.value = input.value.replace(/\D/g, '').slice(0, f.digits); }); }
       }
       const vals = () => { const v = {}; for (const f of o.fields) { const e = els[f.k]; if (e.input) v[f.k] = f.type === 'check' ? e.input.checked : e.input.value; else if (e.get) v[f.k] = e.get(); } return v; };
-      const sync = () => { const v = vals(); for (const f of o.fields) { const e = els[f.k]; if (f.type !== 'custom') e.box.style.display = f.show && !f.show(v) ? 'none' : '';
-        if (f.lock && e.input) {   // lock(vals): shown but disabled, with fill(vals) as its value; the typed value comes back when it unlocks
+      const sync = () => { const v = vals(); for (const f of o.fields) { const e = els[f.k]; if (f.type !== 'custom') e.box.style.display = (f.show && !f.show(v)) || (f.fold && !open.has(f.fold)) || (f.once && open.has(f.k)) ? 'none' : '';
+        if (f.type === 'fold') e.box.firstChild.textContent = f.text ? f.text(v) : '';
+        if (f.lock && f.type === 'check') { e.input.disabled = !!f.lock(v); e.box.classList.toggle('off', e.input.disabled); }
+        else if (f.lock && e.input) {   // lock(vals): shown but disabled, with fill(vals) as its value; the typed value comes back when it unlocks
           const on = !!f.lock(v);
           if (on && !e.locked) e.saved = e.input.value;
           if (on) e.input.value = f.fill ? f.fill(v) : e.saved; else if (e.locked) e.input.value = e.saved;
           e.locked = on; e.input.disabled = on;
         } if (f.type === 'note') e.box.textContent = f.text ? f.text(v) : ''; } for (const r of rowEls) r.style.display = [...r.children].every((c) => c.style.display === 'none') ? 'none' : ''; };
-      const err = document.createElement('div'); err.className = 'fm-err'; err.setAttribute('role', 'alert'); d.appendChild(err);
+      const err = document.createElement('div'); err.className = 'fm-err'; err.setAttribute('role', 'alert');
       const acts = document.createElement('div'); acts.className = 'acts';
       const okB = document.createElement('button'); okB.className = 'b'; okB.textContent = o.ok || 'שמור';
       const noB = document.createElement('button'); noB.className = 'g'; noB.textContent = o.cancel || 'ביטול';
-      acts.append(okB, noB); d.appendChild(acts); bg.appendChild(d); document.body.appendChild(bg);
+      acts.append(okB, noB); const foot = document.createElement('div'); foot.className = 'fm-foot'; foot.append(err, acts); d.appendChild(foot); bg.appendChild(d); document.body.appendChild(bg);   // save and cancel stay in view while the fields scroll
       const done = (v) => { bg.remove(); document.removeEventListener('keydown', key, true); res(v); };
       let busy = false;
       const save = async () => {
@@ -173,7 +181,7 @@ window.Vaad = (function () {
       okB.onclick = save; noB.onclick = () => done(null); bg.onclick = (e) => { if (e.target === bg) done(null); };
       for (const f of customs) els[f.k].get = f.build(els[f.k].box, sync);
       sync();
-      const first = o.fields.find((f) => f.type !== 'note' && f.type !== 'check' && !f.noFocus && (!f.show || f.show(vals())));
+      const first = o.fields.find((f) => !['note', 'check', 'section', 'fold'].includes(f.type) && !f.fold && !f.noFocus && (!f.show || f.show(vals())));
       (first ? els[first.k].input : okB).focus();
     });
   }

@@ -654,16 +654,16 @@ function personDialog(u) {
   const monthOpts = MF.map((m, i) => ({ v: String(i + 1), t: m }));
   const aptOpts = [{ v: '', t: ME.isSuper || edit ? 'ללא דירה' : 'בחרו דירה' }, ...DB.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) }))];
   const tie = [
-    { k: 'apt', label: ME.isSuper || edit ? 'דירה (לא חובה)' : 'דירה', type: 'select', options: aptOpts, value: '' },
+    { k: 'apt', label: edit ? 'דירה חדשה' : ME.isSuper ? 'דירה (לא חובה)' : 'דירה', type: 'select', options: aptOpts, value: '' },
     { k: 'tenant', label: 'דייר', type: 'check', value: true, show: (v) => !!v.apt, row: 'ten' },
     { k: 'tmode', type: 'select', options: [{ v: 'join', t: 'מצטרף לדיירים הנוכחיים' }, { v: 'replace', t: 'מחליף את הדיירים הנוכחיים' }], value: 'join', show: (v) => !!(v.tenant && curTen(v)), row: 'ten' },
-    { k: 'tm', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.tenant), lock: tLock, fill: (v) => { const c = curTen(v); return c && c.entryMonth ? String(c.entryMonth) : ''; }, row: 'ten' },
-    { k: 'ty', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.tenant), lock: tLock, fill: (v) => { const c = curTen(v); return c && c.entryYear ? String(c.entryYear) : ''; }, row: 'ten' },
+    { k: 'tm', label: 'התחלה', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.tenant), lock: tLock, fill: (v) => { const c = curTen(v); return c && c.entryMonth ? String(c.entryMonth) : ''; }, row: 'tend' },
+    { k: 'ty', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.tenant), lock: tLock, fill: (v) => { const c = curTen(v); return c && c.entryYear ? String(c.entryYear) : ''; }, row: 'tend' },
     { k: 'tnote', type: 'note', text: (v) => { const c = v.tenant && curTen(v); if (!c) return ''; return replacing(v) ? `הדיירים הנוכחיים (${names(household(c))}) יסומנו כעזבו ב-${before(v.ty, v.tm)}.` : `גרים כאן: ${names(household(c))}. האדם יצטרף אליהם, בלי תאריך נפרד.`; } },
     { k: 'owner', label: 'בעלים', type: 'check', value: false, show: (v) => !!v.apt, row: 'own' },
     { k: 'omode', type: 'select', options: [{ v: 'add', t: 'שותף לבעלים הנוכחיים' }, { v: 'replace', t: 'מחליף את הבעלים הנוכחיים' }], value: 'add', show: (v) => !!(v.owner && curOwn(v).length), row: 'own' },
-    { k: 'om', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.owner), lock: oLock, fill: (v) => { const s = oStart(v); return s ? String(s.m) : ''; }, row: 'own' },
-    { k: 'oy', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.owner), lock: oLock, fill: (v) => { const s = oStart(v); return s ? String(s.y) : ''; }, row: 'own' },
+    { k: 'om', label: 'התחלה', type: 'select', options: monthOpts, value: String(now.m), show: (v) => !!(v.apt && v.owner), lock: oLock, fill: (v) => { const s = oStart(v); return s ? String(s.m) : ''; }, row: 'ownd' },
+    { k: 'oy', label: 'שנה', type: 'number', width: 80, value: now.y, show: (v) => !!(v.apt && v.owner), lock: oLock, fill: (v) => { const s = oStart(v); return s ? String(s.y) : ''; }, row: 'ownd' },
     { k: 'onote', type: 'note', text: (v) => { const c = v.owner ? curOwn(v) : []; return c.length ? `בעלים נוכחיים: ${names(c)}. "מחליף" יסיים את הבעלות שלהם ב-${before(v.oy, v.om)}; "שותף" משאיר אותם בעלים ביחד עם האדם החדש, והוא מתחיל באותו תאריך.` : ''; } },
   ];
   // The records of an existing person: each tenancy and ownership is corrected in place (apartment, kind, start, end), or removed (super user).
@@ -673,36 +673,47 @@ function personDialog(u) {
     ...DB.owners.filter((o) => o.userId === u.id).map((o) => ({ t: false, rec: o, gone: !!o.exitYear })),
   ].sort((a, c) => a.gone - c.gone || a.rec.apt - c.rec.apt) : [];
   const monthEmpty = [{ v: '', t: '—' }, ...monthOpts];
+  // one line per record (it follows what is typed in it); its fields open with the button
   const recFields = recs.flatMap((x, i) => {
     const p = 'r' + i + '_'; const rec = x.rec;
     const withThem = x.t ? household(rec).filter((h) => h.userId !== u.id).map(pname).filter(Boolean) : [];
+    const line = (v) => [`דירה ${v[p + 'apt']}`, !x.t ? 'בעלים' : v[p + 'role'] === 'בעלים' ? 'בעלים גר בדירה' : 'שוכר', periodOf(v[p + 'sy'], v[p + 'sm'], v[p + 'xy'], v[p + 'xm']), v[p + 'del'] ? 'תוסר בשמירה' : ''].filter(Boolean).join(' · ');
+    const inside = (f) => ({ ...f, fold: p + 'fold' });
     return [
-      { k: p + 'h', type: 'note', text: () => `${x.t ? 'דייר' : 'בעל דירה'}${x.gone ? ' (לשעבר)' : ''}${withThem.length ? ` · גר עם ${withThem.join(', ')}: השינוי חל גם עליהם` : ''}` },
-      { k: p + 'apt', label: 'דירה', type: 'select', options: DB.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) })), value: String(rec.apt), row: p },
-      ...(x.t ? [{ k: p + 'role', label: 'סוג', type: 'select', options: [{ v: 'שוכר', t: 'שוכר' }, { v: 'בעלים', t: 'בעלים גר בדירה' }], value: rec.role === 'בעלים' ? 'בעלים' : 'שוכר', row: p }] : []),
-      { k: p + 'sm', label: 'התחלה', type: 'select', options: monthEmpty, value: String(rec.entryMonth || ''), row: p },
-      { k: p + 'sy', type: 'number', width: 80, value: rec.entryYear || '', row: p },
-      { k: p + 'xm', label: 'סיום', type: 'select', options: monthEmpty, value: String(rec.exitYear ? rec.exitMonth || '' : ''), row: p },
-      { k: p + 'xy', type: 'number', width: 80, value: rec.exitYear || '', row: p },
-      ...(ME.isSuper ? [{ k: p + 'del', label: 'הסר רשומה', type: 'check', value: false, row: p }] : []),
+      { k: p + 'fold', type: 'fold', label: 'עריכה', text: line },
+      ...[
+        ...(withThem.length ? [{ k: p + 'h', type: 'note', text: () => `גר עם ${withThem.join(', ')}: השינוי חל גם עליהם` }] : []),
+        { k: p + 'apt', label: 'דירה', type: 'select', options: DB.apartments.map((a) => ({ v: String(a.apt), t: String(a.apt) })), value: String(rec.apt), row: p },
+        ...(x.t ? [{ k: p + 'role', label: 'סוג', type: 'select', options: [{ v: 'שוכר', t: 'שוכר' }, { v: 'בעלים', t: 'בעלים גר בדירה' }], value: rec.role === 'בעלים' ? 'בעלים' : 'שוכר', row: p }] : []),
+        { k: p + 'sm', label: 'התחלה', type: 'select', options: monthEmpty, value: String(rec.entryMonth || ''), row: p + 's' },
+        { k: p + 'sy', label: 'שנה', type: 'number', width: 80, value: rec.entryYear || '', row: p + 's' },
+        { k: p + 'xm', label: 'סיום', type: 'select', options: monthEmpty, value: String(rec.exitYear ? rec.exitMonth || '' : ''), row: p + 's' },
+        { k: p + 'xy', label: 'שנה', type: 'number', width: 80, value: rec.exitYear || '', row: p + 's' },
+        ...(ME.isSuper ? [{ k: p + 'del', label: 'הסר רשומה', type: 'check', value: false }] : []),
+      ].map(inside),
     ];
   });
+  // roles need an email (the login): without one the box is greyed out, except to untick a role already given
+  const noEmail = (v) => !(v.email || '').trim();
+  const roles = [
+    ...(canCommittee ? [{ k: 'committee', label: 'חבר ועד', type: 'check', value: !!cm, lock: (v) => noEmail(v) && !cm, row: 'roles' }] : []),
+    ...(ME.isSuper ? [{ k: 'mgr', label: 'מנהל בניין', type: 'check', value: isMgr, lock: (v) => noEmail(v) && !isMgr, row: 'roles' }] : []),
+  ];
   return Vaad.form({
     title: edit ? `עריכת ${(val('first') + ' ' + val('last')).trim() || val('email') || 'אדם'}` : 'הוספת אדם',
     ok: edit ? 'שמור' : 'הוסף',
     fields: [
+      { k: 'detSec', type: 'section', label: 'פרטים' },
       { k: 'first', label: 'שם פרטי', width: 110, value: val('first'), row: 'name' },
       { k: 'last', label: 'שם משפחה', width: 120, value: val('last'), row: 'name' },
       { k: 'phone', label: 'טלפון', type: 'tel', width: 120, ltr: true, value: val('phone'), row: 'contact' },
-      { k: 'email', label: 'אימייל (לא חובה)', type: 'email', width: 220, ltr: true, value: val('email'), row: 'contact' },
-      ...(canCommittee ? [{ k: 'committee', label: 'חבר ועד', type: 'check', value: !!cm, show: (v) => !!(v.email || '').trim() || !!cm, row: 'roles' }] : []),
-      ...(ME.isSuper ? [{ k: 'mgr', label: 'מנהל בניין', type: 'check', value: isMgr, show: (v) => !!(v.email || '').trim() || isMgr, row: 'roles' }] : []),
-      { k: 'emailNote', type: 'note', text: () => 'אימייל נותן כניסה לדירות של האדם, ומאפשר לתת תפקיד.' },
-      ...(recs.length ? [{ k: 'recsHead', type: 'note', text: () => 'הדירות של האדם (תיקון בתוך הרשומה)' }] : []),
+      ...(ME.isSuper ? [{ k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account'), show: (v) => edit || !v.apt, row: 'contact' }] : []),
+      { k: 'email', label: 'אימייל (לא חובה)', type: 'email', wide: true, ltr: true, value: val('email') },
+      ...(roles.length ? [{ k: 'roleSec', type: 'section', label: 'תפקידים' }, ...roles] : []),
+      { k: 'aptSec', type: 'section', label: 'דירות' },
       ...recFields,
-      ...(edit ? [{ k: 'addHead', type: 'note', text: () => 'הוספת דירה (עבר לדירה אחרת, קנה דירה, נוספה דירה)' }] : []),
-      ...tie,
-      ...(ME.isSuper ? [{ k: 'account', label: 'חשבונות בנק (מופרדים בפסיק)', width: 200, ltr: true, value: val('account'), show: (v) => edit || !v.apt }] : []),
+      // an existing person: the fields for another apartment (moved, bought, one more) open with a button; a new person has them open
+      ...(edit ? [{ k: 'add', type: 'fold', label: '+ הוספת דירה', once: true }, ...tie.map((f) => ({ ...f, fold: 'add' }))] : tie),
     ],
     onSubmit: async (v) => {
       const addTies = async (emit) => {

@@ -141,6 +141,13 @@ details.old summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 
 .dlg .fm .f input,.dlg .fm .f select{box-sizing:border-box}
 .dlg .fm-row{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-end;flex-basis:100%}
 .dlg .fm-row .fm-check{margin-bottom:6px}
+.dlg .fm-sec{flex-basis:100%;font-weight:600;font-size:15px;border-bottom:1px solid var(--line);padding-bottom:4px;margin-top:8px}
+.dlg .fm-sec:first-child{margin-top:0}
+.dlg .fm-fold{flex-basis:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
+.dlg .fm-fold span:empty{display:none}
+.dlg .fm-check.off{opacity:.5;cursor:default}
+.dlg .fm .f.wide,.dlg .fm .f.wide input{width:100%}
+.dlg-form .fm-foot{position:sticky;bottom:-18px;background:var(--card);margin:0 -18px -18px;padding:8px 18px 18px;border-top:1px solid var(--line)}
 
 table.t tr.pr{cursor:pointer}
 table.t tr.pr:hover{background:rgba(127,127,127,.07)}
